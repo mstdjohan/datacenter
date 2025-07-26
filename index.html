@@ -5,7 +5,17 @@
   <title>Monitor Harga CAKE & TON</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <style>
+    body { font-family: Arial; padding: 20px; text-align: center; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .pair-box { border: 1px solid #ccc; border-radius: 10px; padding: 15px; }
+    .price { font-size: 1.4em; margin: 10px 0; }
+    .trend { font-weight: bold; margin-bottom: 10px; }
+    .up { color: green; } .down { color: red; }
+    button { margin-top: 10px; }
+    @media(max-width: 768px){ .grid { grid-template-columns: 1fr; } }
+  </style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
