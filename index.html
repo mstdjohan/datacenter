@@ -47,7 +47,7 @@
   <audio id="alarm" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
 
   <script>
-    emailjs.init("mstdjohan"); // Ganti sesuai User ID kamu
+    emailjs.init("Gmail"); // Ganti sesuai User ID kamu
 
     const pairs = {
       usdt: {
@@ -82,7 +82,7 @@
     }
 
     function sendEmailAlert(pair, price) {
-      emailjs.send("service_u6rr0gq", "template_iq87egh", {
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
         message: `🚨 ${pair.name} harga ${price.toFixed(4)} USD sudah melewati batas!`
       }).then(() => console.log("✅ Email terkirim"));
     }
