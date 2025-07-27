@@ -1,7 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="id">
-  <head>
+<head>
   <meta charset="UTF-8" />
   <title>Monitor Harga CAKE & TON</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -73,23 +72,6 @@
     }
   </style>
 </head>
-<head>
-  <meta charset="UTF-8" />
-  <title>Monitor Harga CAKE & TON</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
-  <style>
-    body { font-family: Arial; padding: 20px; text-align: center; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .pair-box { border: 1px solid #ccc; border-radius: 10px; padding: 15px; }
-    .price { font-size: 1.4em; margin: 10px 0; }
-    .trend { font-weight: bold; margin-bottom: 10px; }
-    .up { color: green; } .down { color: red; }
-    button { margin-top: 10px; }
-    @media(max-width: 768px){ .grid { grid-template-columns: 1fr; } }
-  </style>
-</head>
 <body>
   <h1>📊 Monitor Harga CAKE & TON</h1>
   <div class="grid">
@@ -98,10 +80,10 @@
       <h3>CAKE/USDT</h3>
       <div id="price-usdt" class="price">Memuat...</div>
       <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.82"></label>
-      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.80"></label>
+      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.90" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.60" step="0.01" /></label>
       <button onclick="saveLimits('usdt')">Simpan</button>
-      <canvas id="chart-usdt" height="150"></canvas>
+      <canvas id="chart-usdt"></canvas>
     </div>
 
     <!-- TON/USDT -->
@@ -109,103 +91,71 @@
       <h3>TON/USDT</h3>
       <div id="price-ton" class="price">Memuat...</div>
       <div id="trend-ton" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-ton" value="3.50"></label>
-      <label>Batas Bawah: <input type="number" id="lower-ton" value="3.01"></label>
+      <label>Batas Atas: <input type="number" id="upper-ton" value="3.50" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-ton" value="3.00" step="0.01" /></label>
       <button onclick="saveLimits('ton')">Simpan</button>
-      <canvas id="chart-ton" height="150"></canvas>
+      <canvas id="chart-ton"></canvas>
     </div>
   </div>
 
   <audio id="alarm" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
 
   <script>
-    emailjs.init("Gmail"); // Ganti sesuai User ID kamu
+    const alarmSound = document.getElementById("alarm");
 
     const pairs = {
       usdt: {
         name: "CAKE/USDT",
         api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
+        canvas: "chart-usdt",
         priceEl: "price-usdt",
         trendEl: "trend-usdt",
-        canvas: "chart-usdt",
         upperId: "upper-usdt",
         lowerId: "lower-usdt",
-        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null,
-        upperLimit: 2.68, lowerLimit: 2.58, chart: null
+        priceHistory: [],
+        timeLabels: [],
+        lastPrice: null,
+        lastAlert: null,
+        chart: null,
+        upperLimit: 2.68,
+        lowerLimit: 2.58
       },
       ton: {
         name: "TON/USDT",
         api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a",
+        canvas: "chart-ton",
         priceEl: "price-ton",
         trendEl: "trend-ton",
-        canvas: "chart-ton",
         upperId: "upper-ton",
         lowerId: "lower-ton",
-        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null,
-        upperLimit: 8.0, lowerLimit: 7.5, chart: null
+        priceHistory: [],
+        timeLabels: [],
+        lastPrice: null,
+        lastAlert: null,
+        chart: null,
+        upperLimit: 8.0,
+        lowerLimit: 7.5
       }
     };
 
-    function saveLimits(key) {
-      const p = pairs[key];
-      p.upperLimit = parseFloat(document.getElementById(p.upperId).value);
-      p.lowerLimit = parseFloat(document.getElementById(p.lowerId).value);
-      alert(`✅ Alarm ${p.name} disimpan!`);
-    }
-
-    function sendEmailAlert(pair, price) {
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        message: `🚨 ${pair.name} harga ${price.toFixed(4)} USD sudah melewati batas!`
-      }).then(() => console.log("✅ Email terkirim"));
-    }
-
-    async function fetchPrices() {
-      const now = new Date().toLocaleTimeString();
-      for (const key in pairs) {
-        const p = pairs[key];
-        try {
-          const res = await fetch(p.api);
-          const data = await res.json();
-          const price = parseFloat(data.pair.priceUsd);
-          document.getElementById(p.priceEl).textContent = `$${price.toFixed(4)}`;
-          const trend = document.getElementById(p.trendEl);
-          if (p.lastPrice !== null) {
-            trend.textContent = price > p.lastPrice ? "Naik" : price < p.lastPrice ? "Turun" : "Stabil";
-            trend.className = "trend " + (price > p.lastPrice ? "up" : price < p.lastPrice ? "down" : "");
-          }
-          if (price >= p.upperLimit && p.lastAlert !== 'high') {
-            document.getElementById("alarm").play();
-            sendEmailAlert(p, price);
-            p.lastAlert = 'high';
-          } else if (price <= p.lowerLimit && p.lastAlert !== 'low') {
-            document.getElementById("alarm").play();
-            sendEmailAlert(p, price);
-            p.lastAlert = 'low';
-          } else if (price < p.upperLimit && price > p.lowerLimit) {
-            p.lastAlert = null;
-          }
-          p.priceHistory.push(price);
-          p.timeLabels.push(now);
-          if (p.priceHistory.length > 20) { p.priceHistory.shift(); p.timeLabels.shift(); }
-          if (p.chart) p.chart.update();
-          p.lastPrice = price;
-        } catch {
-          document.getElementById(p.priceEl).textContent = "❌ Error";
-        }
-      }
+    function saveLimits(pairKey) {
+      const pair = pairs[pairKey];
+      pair.upperLimit = parseFloat(document.getElementById(pair.upperId).value);
+      pair.lowerLimit = parseFloat(document.getElementById(pair.lowerId).value);
+      alert(`✅ Alarm ${pair.name} disimpan:\nAtas: $${pair.upperLimit}\nBawah: $${pair.lowerLimit}`);
     }
 
     function initCharts() {
       for (const key in pairs) {
-        const p = pairs[key];
-        const ctx = document.getElementById(p.canvas).getContext("2d");
-        p.chart = new Chart(ctx, {
+        const pair = pairs[key];
+        const ctx = document.getElementById(pair.canvas).getContext("2d");
+        pair.chart = new Chart(ctx, {
           type: "line",
           data: {
-            labels: p.timeLabels,
+            labels: pair.timeLabels,
             datasets: [{
-              label: `Harga ${p.name}`,
-              data: p.priceHistory,
+              label: `Harga ${pair.name}`,
+              data: pair.priceHistory,
               borderColor: "blue",
               backgroundColor: "rgba(0,0,255,0.1)",
               fill: true,
@@ -213,10 +163,63 @@
             }]
           },
           options: {
-            scales: { x: { display: false }, y: { title: { display: true, text: "USD" } } },
+            scales: {
+              x: { display: false },
+              y: { title: { display: true, text: "USD" } }
+            },
             plugins: { legend: { display: false } }
           }
         });
+      }
+    }
+
+    async function fetchPrices() {
+      const now = new Date().toLocaleTimeString();
+      for (const key in pairs) {
+        const pair = pairs[key];
+        try {
+          const res = await fetch(pair.api);
+          const data = await res.json();
+          const price = parseFloat(data.pair.priceUsd);
+
+          document.getElementById(pair.priceEl).textContent = `$${price.toFixed(4)}`;
+          const trendEl = document.getElementById(pair.trendEl);
+          if (pair.lastPrice !== null) {
+            if (price > pair.lastPrice) {
+              trendEl.textContent = "Naik";
+              trendEl.className = "trend up";
+            } else if (price < pair.lastPrice) {
+              trendEl.textContent = "Turun";
+              trendEl.className = "trend down";
+            } else {
+              trendEl.textContent = "Stabil";
+              trendEl.className = "trend";
+            }
+          }
+
+          if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
+            alarmSound.play();
+            pair.lastAlert = 'high';
+          } else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
+            alarmSound.play();
+            pair.lastAlert = 'low';
+          } else if (price < pair.upperLimit && price > pair.lowerLimit) {
+            pair.lastAlert = null;
+          }
+
+          pair.priceHistory.push(price);
+          pair.timeLabels.push(now);
+          if (pair.priceHistory.length > 20) {
+            pair.priceHistory.shift();
+            pair.timeLabels.shift();
+          }
+          pair.chart.update();
+          pair.lastPrice = price;
+
+        } catch (err) {
+          document.getElementById(pair.priceEl).textContent = "❌ Error";
+          console.error(`Gagal ambil harga ${pair.name}:`, err);
+        }
       }
     }
 
