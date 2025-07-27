@@ -140,16 +140,18 @@ function testEmail() {
       alert(`✅ Alarm ${pair.name} disimpan:\nAtas: $${pair.upperLimit}\nBawah: $${pair.lowerLimit}`);
     }
 
+
     function sendEmailNotification(pairName, price) {
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        pair: pairName,
-        price: price,
+    emailjs.send("service_5hxo1hk", "template_iq87egh", {
+    to_name: "OGH12a8LlCboHPVz8",
+    from_name: "Crypto Tracker",
         message: `Harga ${pairName} telah mencapai $${price}`
-      }).then(() => {
-        console.log("📧 Email terkirim");
+      })..then(function(response) {
+    alert("✅ Email berhasil dikirim!");
       }).catch((err) => {
-        console.error("❌ Gagal kirim email:", err);
-      });
+        console.error("❌ Gagal mengirim email:", error);
+    alert("❌ Gagal mengirim email:\n" + JSON.stringify(error));
+  });
     }
 
     function initCharts() {
