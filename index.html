@@ -145,14 +145,16 @@ function testEmail() {
     emailjs.send("service_5hxo1hk", "template_iq87egh", {
     to_name: "OGH12a8LlCboHPVz8",
     from_name: "Crypto Tracker",
+    pair: pairName,
+    price: price,
     message: `Harga ${pairName} telah mencapai $${price}`
-      })..then(function(response) {
-    alert("✅ Email berhasil dikirim!");
+      }).then(() => {
+        console.log("📧 Email terkirim");
       }).catch((err) => {
-        console.error("❌ Gagal mengirim email:", error);
-    alert("❌ Gagal mengirim email:\n" + JSON.stringify(error));
-  });
+        console.error("❌ Gagal kirim email:", err);
+      });
     }
+    
 
     function initCharts() {
       for (const key in pairs) {
