@@ -145,7 +145,7 @@ function testEmail() {
     emailjs.send("service_5hxo1hk", "template_iq87egh", {
     to_name: "OGH12a8LlCboHPVz8",
     from_name: "Crypto Tracker",
-        message: `Harga ${pairName} telah mencapai $${price}`
+    message: `Harga ${pairName} telah mencapai $${price}`
       })..then(function(response) {
     alert("✅ Email berhasil dikirim!");
       }).catch((err) => {
