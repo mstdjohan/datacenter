@@ -94,7 +94,7 @@ function testEmail() {
 
 
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
+    emailjs.init("OGH12a8LlCboHPVz8"); // ← user ID ini didapat dari https://dashboard.emailjs.com/admin/account
 
     const alarmSound = document.getElementById("alarm");
 
@@ -143,7 +143,7 @@ function testEmail() {
 
     function sendEmailNotification(pairName, price) {
     emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    to_name: "OGH12a8LlCboHPVz8",
+    to_name: "DATA CENTER OTOMATIS",
     from_name: "Crypto Tracker",
     pair: pairName,
     price: price,
