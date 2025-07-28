@@ -145,6 +145,7 @@ function testKirimEmail() {
     from_name: "Crypto Tracker",
     pair: pairName,
     price: price,
+    time: new Date().toLocaleTimeString()
     message: `Harga ${pairName} telah mencapai $${price}`
       }).then(() => {
         console.log("📧 Email terkirim");
