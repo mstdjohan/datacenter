@@ -90,24 +90,6 @@ function testKirimEmail() {
 }
 </script>
 
-  
-<button onclick="testEmail()">Kirim Email Test</button>
-<script>
-function testEmail() {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    to_name: "OGH12a8LlCboHPVz8",
-    from_name: "Crypto Tracker",
-    message: "Tes kirim email ketika harga tercapai."
-  })
-  .then(function(response) {
-    alert("✅ Email berhasil dikirim!");
-  }, function(error) {
-    console.error("❌ Gagal mengirim email:", error);
-    alert("❌ Gagal mengirim email:\n" + JSON.stringify(error));
-  });
-}
-</script>
-
 
   <script>
     emailjs.init("OGH12a8LlCboHPVz8"); // ← user ID ini didapat dari https://dashboard.emailjs.com/admin/account
