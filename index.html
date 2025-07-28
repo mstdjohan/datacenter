@@ -74,6 +74,22 @@
   </div>
 
   <audio id="alarm" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
+
+  <button onclick="testKirimEmail()">Tes Email Manual</button>
+<script>
+function testKirimEmail() {
+  emailjs.send("service_5hxo1hk", "template_iq87egh", {
+    pair: "CAKE/USDT",
+    price: "2.5432",
+    time: new Date().toLocaleTimeString()
+  }).then(() => {
+    alert("✅ Email test berhasil dikirim");
+  }).catch(err => {
+    console.error("❌ Gagal:", err);
+  });
+}
+</script>
+
   
 <button onclick="testEmail()">Kirim Email Test</button>
 <script>
