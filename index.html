@@ -57,7 +57,7 @@
       <h3>CAKE/USDT</h3>
       <div id="price-usdt" class="price">Memuat...</div>
       <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.90" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-usdt" value="3.50" step="0.01" /></label>
       <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.60" step="0.01" /></label>
       <button onclick="saveLimits('usdt')">Simpan</button>
       <canvas id="chart-usdt"></canvas>
@@ -66,7 +66,7 @@
       <h3>TON/USDT</h3>
       <div id="price-ton" class="price">Memuat...</div>
       <div id="trend-ton" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-ton" value="3.50" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-ton" value="3.70" step="0.01" /></label>
       <label>Batas Bawah: <input type="number" id="lower-ton" value="3.01" step="0.01" /></label>
       <button onclick="saveLimits('ton')">Simpan</button>
       <canvas id="chart-ton"></canvas>
@@ -112,7 +112,7 @@ function testEmail() {
         lastPrice: null,
         lastAlert: null,
         chart: null,
-        upperLimit: 2.90,
+        upperLimit: 3.50,
         lowerLimit: 2.60
       },
       ton: {
@@ -128,7 +128,7 @@ function testEmail() {
         lastPrice: null,
         lastAlert: null,
         chart: null,
-        upperLimit: 3.50,
+        upperLimit: 3.80,
         lowerLimit: 3.01
       }
     };
