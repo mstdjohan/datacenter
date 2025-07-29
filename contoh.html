@@ -7,7 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <script>
-    emailjs.init("YOUR_PUBLIC_KEY"); // ?? Ganti dengan Public Key EmailJS kamu
+    emailjs.init("OGH12a8LlCboHPVz8"); // ?? Ganti dengan Public Key EmailJS kamu
   </script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
@@ -104,7 +104,7 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
 }
 
 function sendEmail(subject, body) {
-  emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
+  emailjs.send("service_5hxo1hk", "template_mj9du0b", {
     subject: subject,
     body: body
   }).then(() => {
