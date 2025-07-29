@@ -152,6 +152,25 @@ function testKirimEmail() {
   }).catch((err) => {
     console.error("❌ Gagal kirim email:", err);
   });
+
+  if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
+  alarmSound.play();
+  pair.lastAlert = 'high';
+  sendEmailNotification(pair.name, price); // jika ingin pakai email
+} else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
+  alarmSound.play();
+  pair.lastAlert = 'low';
+  sendEmailNotification(pair.name, price); // jika ingin pakai email
+} else if (price < pair.upperLimit && price > pair.lowerLimit) {
+  pair.lastAlert = null;
+}
+
+// 🔥 Tambahan sinyal scalping
+if (price <= pair.lowerLimit) {
+  console.log(`📈 Sinyal BUY untuk ${pair.name} di harga $${price}`);
+} else if (price >= pair.upperLimit) {
+  console.log(`📉 Sinyal SELL untuk ${pair.name} di harga $${price}`);
+}
 }
     
 
