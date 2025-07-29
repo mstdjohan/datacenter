@@ -11,12 +11,23 @@
     h1 { text-align: center; }
     .log { background: #eee; padding: 10px; margin-top: 20px; white-space: pre-line; height: 200px; overflow-y: auto; font-family: monospace; border-radius: 5px; }
     canvas { margin-top: 20px; max-width: 100%; }
+    .summary { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+    .summary input { width: 100px; padding: 5px; margin-right: 10px; }
+    .summary label { font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>🔁 Strategi Otomatis CAKE/USDT</h1>
     <div id="livePrice">Harga: Memuat...</div>
+
+    <div class="summary">
+      <label>💰 Modal Awal ($):</label>
+      <input type="number" id="initialCapitalInput" value="1000" />
+      <label>📈 Modal Saat Ini: </label>
+      <span id="currentCapitalDisplay">$1000.00</span>
+    </div>
+
     <canvas id="chartCanvas" width="600" height="250"></canvas>
     <div class="log" id="logBox">📝 Log strategi...</div>
   </div>
@@ -29,6 +40,23 @@
     let priceData = [], timeLabels = [];
     const logBox = document.getElementById("logBox");
     const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+    // Modal & Simulasi
+    let capital = parseFloat(document.getElementById("initialCapitalInput").value);
+    let currentCapital = capital;
+    const qtyPerTrade = 100; // Uang yang digunakan per trade (bisa disesuaikan)
+    let currentPositionAmount = 0;
+
+    // Update tampilan modal saat ini
+    function updateCapitalDisplay() {
+      document.getElementById("currentCapitalDisplay").textContent = `$${currentCapital.toFixed(2)}`;
+    }
+
+    document.getElementById("initialCapitalInput").addEventListener("change", () => {
+      capital = parseFloat(document.getElementById("initialCapitalInput").value);
+      currentCapital = capital;
+      updateCapitalDisplay();
+    });
 
     const chart = new Chart(ctx, {
       type: "line",
@@ -76,7 +104,6 @@
         const price = parseFloat(data.pair.priceUsd);
         document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
-        // Update chart
         const now = new Date().toLocaleTimeString();
         priceData.push(price);
         timeLabels.push(now);
@@ -88,9 +115,12 @@
 
         // === Strategi ===
         if (!lastBuy) {
+          // Buy baru
           lastBuy = price;
           highestSinceBuy = price;
-          log(`📥 BUY di $${price.toFixed(4)}`);
+          currentPositionAmount = qtyPerTrade / price;
+          currentCapital -= qtyPerTrade;
+          log(`📥 BUY di $${price.toFixed(4)} (${currentPositionAmount.toFixed(4)} CAKE)`);
           sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)}`);
         } else {
           if (price > highestSinceBuy) highestSinceBuy = price;
@@ -99,17 +129,25 @@
           const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
 
           if (dropFromPeak > 1.0) {
-            log(`📤 SELL via trailing stop: dari puncak turun ${dropFromPeak.toFixed(2)}%`);
-            sendEmail("SELL (Trailing Profit)", `Jual CAKE di harga $${price.toFixed(4)} setelah naik ke $${highestSinceBuy.toFixed(4)}`);
+            const sellValue = price * currentPositionAmount;
+            currentCapital += sellValue;
+            updateCapitalDisplay();
+            log(`📤 SELL (trailing) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
+            sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Saldo: $${currentCapital.toFixed(2)}`);
             lastBuy = null;
             highestSinceBuy = null;
+            currentPositionAmount = 0;
           } else if (lossFromBuy > 1.5) {
-            log(`📤 SELL via cut loss: turun ${lossFromBuy.toFixed(2)}% dari beli`);
-            sendEmail("SELL (Cut Loss)", `Jual CAKE di harga $${price.toFixed(4)} karena rugi lebih dari 1.5%`);
+            const sellValue = price * currentPositionAmount;
+            currentCapital += sellValue;
+            updateCapitalDisplay();
+            log(`📤 SELL (cut loss) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
+            sendEmail("SELL (Cut Loss)", `Jual CAKE rugi di $${price.toFixed(4)}. Saldo: $${currentCapital.toFixed(2)}`);
             lastBuy = null;
             highestSinceBuy = null;
+            currentPositionAmount = 0;
           } else {
-            log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Naik tertinggi: $${highestSinceBuy.toFixed(4)}`);
+            log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
           }
         }
 
@@ -119,9 +157,9 @@
       }
     }
 
-    // Inisialisasi
+    // Start
     fetchAndEvaluate();
-    setInterval(fetchAndEvaluate, 30000); // Setiap 30 detik
+    setInterval(fetchAndEvaluate, 30000);
   </script>
 </body>
 </html>
