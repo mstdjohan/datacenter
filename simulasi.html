@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulasi Trading CAKE/USDT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #000000;
+      --card: #f9f9f9;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121212;
+        --text: #ffffff;
+        --card: #1e1e1e;
+      }
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 650px;
+      margin: auto;
+      background: var(--card);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-weight: bold;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      background-color: #008CBA;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #007bb5;
+    }
+    .log {
+      margin-top: 20px;
+      background: #eee;
+      color: #333;
+      padding: 10px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+      border-radius: 5px;
+    }
+    .price-display {
+      font-size: 1.6em;
+      margin: 10px 0;
+      text-align: center;
+    }
+    canvas {
+      margin-top: 20px;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Simulasi Trading CAKE/USDT</h1>
+
+    <div class="price-display" id="livePrice">Harga: Memuat...</div>
+    <canvas id="chartCanvas" width="600" height="250"></canvas>
+
+    <label for="modal">💵 Modal Awal (USDT):</label>
+    <input type="number" id="modal" value="100" step="0.01" />
+
+    <button onclick="ujiStrategi()">🔍 Uji Strategi</button>
+    <button onclick="resetLog()">🗑️ Reset Log</button>
+
+    <div class="log" id="logBox">📝 Log strategi akan muncul di sini...</div>
+  </div>
+
+  <script>
+    let lastBuy = null;
+    let livePrice = 0;
+    const priceData = [];
+    const timeLabels = [];
+    const logBox = document.getElementById("logBox");
+
+    const ctx = document.getElementById("chartCanvas").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          label: "Harga CAKE/USDT",
+          data: priceData,
+          borderColor: "blue",
+          backgroundColor: "rgba(0,0,255,0.1)",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Waktu" } },
+          y: { title: { display: true, text: "USD" } }
+        }
+      }
+    });
+
+    function log(msg) {
+      const now = new Date().toLocaleTimeString();
+      logBox.textContent += `[${now}] ${msg}\n`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function resetLog() {
+      lastBuy = null;
+      logBox.textContent = "📝 Log strategi telah direset...\n";
+    }
+
+    function ujiStrategi() {
+      const modal = parseFloat(document.getElementById("modal").value);
+      const harga = livePrice;
+
+      if (!modal || harga === 0) {
+        log("⚠️ Data tidak lengkap.");
+        return;
+      }
+
+      if (!lastBuy) {
+        lastBuy = harga;
+        log(`Strategi: BUY 🟢 di harga $${harga.toFixed(4)} dengan modal $${modal}`);
+      } else {
+        const selisih = harga - lastBuy;
+        const profit = selisih * (modal / lastBuy);
+        const persen = (profit / modal) * 100;
+
+        if (selisih > 0.01) {
+          log(`Strategi: SELL 🔴 di harga $${harga.toFixed(4)} | Profit: $${profit.toFixed(2)} (${persen.toFixed(2)}%)`);
+          lastBuy = null;
+        } else {
+          log(`Strategi: WAIT ⏳ di harga $${harga.toFixed(4)} | Belum cukup untung`);
+        }
+      }
+    }
+
+    async function fetchLivePrice() {
+      try {
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+        const data = await res.json();
+        livePrice = parseFloat(data.pair.priceUsd);
+        document.getElementById("livePrice").textContent = `Harga: $${livePrice.toFixed(4)}`;
+
+        const now = new Date().toLocaleTimeString();
+        priceData.push(livePrice);
+        timeLabels.push(now);
+        if (priceData.length > 20) {
+          priceData.shift();
+          timeLabels.shift();
+        }
+        chart.update();
+      } catch (err) {
+        document.getElementById("livePrice").textContent = "❌ Gagal ambil harga";
+        console.error("Gagal ambil harga:", err);
+      }
+    }
+
+    fetchLivePrice();
+    setInterval(fetchLivePrice, 30000); // Update per 30 detik
+  </script>
+</body>
+</html>
