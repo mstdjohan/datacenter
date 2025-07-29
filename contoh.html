@@ -106,11 +106,12 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
 function sendEmail(subject, body) {
   emailjs.send("service_5hxo1hk", "template_mj9du0b", {
     subject: subject,
-    body: body
+    body: body,
+    time: new Date().toLocaleString()
   }).then(() => {
-    log(`?? Email terkirim: ${subject}`);
+    log(`📧 Email terkirim: ${subject}`);
   }).catch(err => {
-    log("? Gagal kirim email: " + err.text);
+    log("⚠️ Gagal kirim email: " + err.text);
   });
 }
 
