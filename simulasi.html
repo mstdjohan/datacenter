@@ -102,83 +102,82 @@
       });
     }
 
-    async function fetchAndEvaluate() {
-      try {
-        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
-        const data = await res.json();
-        const price = parseFloat(data.pair.priceUsd);
-        document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+    const data = await res.json();
+    const price = parseFloat(data.pair.priceUsd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
-        const now = new Date().toLocaleTimeString();
-        priceData.push(price);
-        timeLabels.push(now);
-        if (priceData.length > 20) {
-          priceData.shift();
-          timeLabels.shift();
-        }
-        chart.update();
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 20) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    chart.update();
 
-        if (!lastBuy) {
-          // BUY pertama
+    // === STRATEGI ===
+
+    // --- JIKA TIDAK ADA POSISI (cari waktu TERBAIK untuk beli) ---
+    if (!lastBuy) {
+      if (priceData.length >= 10) {
+        const lowestInWindow = Math.min(...priceData.slice(-10));
+        if (price <= lowestInWindow) {
+          // BUY karena harga menyentuh titik terendah
           lastBuy = price;
           highestSinceBuy = price;
           currentPositionAmount = qtyPerTrade / price;
           currentCapital -= qtyPerTrade;
-
-          // Simpan ke storage
-          localStorage.setItem("lastBuy", lastBuy);
-          localStorage.setItem("highestSinceBuy", highestSinceBuy);
-          localStorage.setItem("currentPositionAmount", currentPositionAmount);
-          localStorage.setItem("capital", currentCapital);
-
           updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (${currentPositionAmount.toFixed(4)} CAKE)`);
-          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)}`);
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 10 candle)`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah dari 10 candle terakhir)`);
         } else {
-          if (price > highestSinceBuy) highestSinceBuy = price;
-          localStorage.setItem("highestSinceBuy", highestSinceBuy);
-
-          const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-          const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
-
-          if (dropFromPeak > 1.0) {
-            const sellValue = price * currentPositionAmount;
-            currentCapital += sellValue;
-            updateCapitalDisplay();
-            log(`📤 SELL (Trailing) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
-            sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Saldo: $${currentCapital.toFixed(2)}`);
-
-            // Reset posisi
-            lastBuy = null;
-            highestSinceBuy = null;
-            currentPositionAmount = 0;
-            localStorage.removeItem("lastBuy");
-            localStorage.removeItem("highestSinceBuy");
-            localStorage.removeItem("currentPositionAmount");
-          } else if (lossFromBuy > 1.5) {
-            const sellValue = price * currentPositionAmount;
-            currentCapital += sellValue;
-            updateCapitalDisplay();
-            log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
-            sendEmail("SELL (Cut Loss)", `Jual CAKE rugi di $${price.toFixed(4)}. Saldo: $${currentCapital.toFixed(2)}`);
-
-            // Reset posisi
-            lastBuy = null;
-            highestSinceBuy = null;
-            currentPositionAmount = 0;
-            localStorage.removeItem("lastBuy");
-            localStorage.removeItem("highestSinceBuy");
-            localStorage.removeItem("currentPositionAmount");
-          } else {
-            log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
-          }
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah (10 data): $${lowestInWindow.toFixed(4)}`);
         }
+      } else {
+        log(`⌛ Mengumpulkan data... (${priceData.length}/10)`);
+      }
 
-      } catch (err) {
-        log("❌ Gagal ambil harga");
-        console.error(err);
+    // --- JIKA SUDAH ADA POSISI (tunggu sinyal JUAL) ---
+    } else {
+      if (price > highestSinceBuy) highestSinceBuy = price;
+
+      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
+
+      if (dropFromPeak > 1.0) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
+        sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null;
+        highestSinceBuy = null;
+        currentPositionAmount = 0;
+
+      } else if (lossFromBuy > 1.5) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}% | Modal: $${currentCapital.toFixed(2)}`);
+        sendEmail("SELL (Cut Loss)", `Cut loss CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null;
+        highestSinceBuy = null;
+        currentPositionAmount = 0;
+
+      } else {
+        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
       }
     }
+
+  } catch (err) {
+    log("❌ Gagal ambil harga");
+    console.error(err);
+  }
+}
+
 
     // Start
     fetchAndEvaluate();
