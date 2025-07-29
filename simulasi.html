@@ -5,6 +5,10 @@
   <title>Simulasi Trading CAKE/USDT</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script>
+    emailjs.init("OGH12a8LlCboHPVz8"); // Public key kamu
+  </script>
   <style>
     :root {
       --bg: #ffffff;
@@ -142,6 +146,17 @@
       logBox.textContent = "📝 Log strategi telah direset...\n";
     }
 
+    function kirimEmail(subject, message) {
+      const templateParams = {
+        subject: subject,
+        message: message
+      };
+
+      emailjs.send("service_5hxo1hk", "template_iq87egh", templateParams)
+        .then(() => log("📧 Email terkirim!"),
+              (error) => log("❌ Gagal kirim email: " + error.text));
+    }
+
     function ujiStrategi() {
       const modal = parseFloat(document.getElementById("modal").value);
       const harga = livePrice;
@@ -153,14 +168,18 @@
 
       if (!lastBuy) {
         lastBuy = harga;
-        log(`Strategi: BUY 🟢 di harga $${harga.toFixed(4)} dengan modal $${modal}`);
+        const pesan = `BUY 🟢 di harga $${harga.toFixed(4)} dengan modal $${modal}`;
+        log(`Strategi: ${pesan}`);
+        kirimEmail("Sinyal BUY CAKE/USDT", pesan);
       } else {
         const selisih = harga - lastBuy;
         const profit = selisih * (modal / lastBuy);
         const persen = (profit / modal) * 100;
 
         if (selisih > 0.01) {
-          log(`Strategi: SELL 🔴 di harga $${harga.toFixed(4)} | Profit: $${profit.toFixed(2)} (${persen.toFixed(2)}%)`);
+          const pesan = `SELL 🔴 di harga $${harga.toFixed(4)} | Profit: $${profit.toFixed(2)} (${persen.toFixed(2)}%)`;
+          log(`Strategi: ${pesan}`);
+          kirimEmail("Sinyal SELL CAKE/USDT", pesan);
           lastBuy = null;
         } else {
           log(`Strategi: WAIT ⏳ di harga $${harga.toFixed(4)} | Belum cukup untung`);
@@ -190,7 +209,7 @@
     }
 
     fetchLivePrice();
-    setInterval(fetchLivePrice, 30000); // Update per 30 detik
+    setInterval(fetchLivePrice, 30000); // Update harga tiap 30 detik
   </script>
 </body>
 </html>
