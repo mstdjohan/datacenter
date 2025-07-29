@@ -3,8 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <title>Auto Scalping CAKE/USDT</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
     .log { background: #fff; padding: 10px; border-radius: 5px; height: 300px; overflow-y: auto; }
@@ -16,13 +14,16 @@
   <div class="price" id="livePrice">Harga: Memuat...</div>
   <div class="log" id="logBox">Log strategi akan muncul di sini...</div>
 
-  <script>
-    // Inisialisasi EmailJS
-    emailjs.init("OGH12a8LlCboHPVz8"); // Public Key kamu
+  <!-- Versi SDK EmailJS v3 -->
+  <script type="module">
+    import emailjs from 'https://cdn.emailjs.com/sdk/3.11.0/email.min.js';
 
+    emailjs.init("OGH12a8LlCboHPVz8");
+
+    const logBox = document.getElementById("logBox");
+    const priceEl = document.getElementById("livePrice");
     let lastBuy = null;
     let modal = 100;
-    const logBox = document.getElementById("logBox");
 
     function log(msg) {
       const time = new Date().toLocaleTimeString();
@@ -46,7 +47,7 @@
         const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
         const data = await res.json();
         const harga = parseFloat(data.pair.priceUsd);
-        document.getElementById("livePrice").textContent = `Harga: $${harga.toFixed(4)}`;
+        priceEl.textContent = `Harga: $${harga.toFixed(4)}`;
         return harga;
       } catch (err) {
         log("❌ Gagal ambil harga: " + err.message);
