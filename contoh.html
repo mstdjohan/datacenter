@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Strategi Trading CAKE</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+  <script>
+    emailjs.init("YOUR_PUBLIC_KEY"); // ?? Ganti dengan Public Key EmailJS kamu
+  </script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<h2>?? Harga CAKE & Indikator (Real-time + Historis)</h2>
+<div>?? <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>?? Modal: <span id="capital">$1000.00</span></div>
+
+<div id="log"></div>
+
+<script>
+let priceData = [];
+let timeLabels = [];
+let currentCapital = 1000;
+let qtyPerTrade = 100;
+let lastBuy = null;
+let highestSinceBuy = null;
+let currentPositionAmount = 0;
+const chartCtx = document.getElementById('chart').getContext('2d');
+
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+    ]
+  },
+  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
+});
+
+function log(msg) {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+}
+
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
+
+function calculateSMA(data, period) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      result.push(null);
+    } else {
+      const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
+  }
+  return result;
+}
+
+function calculateEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let emaPrev = data[0];
+  result.push(emaPrev);
+  for (let i = 1; i < data.length; i++) {
+    const ema = data[i] * k + emaPrev * (1 - k);
+    result.push(ema);
+    emaPrev = ema;
+  }
+  return result;
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
+    }
+  }
+  return { upper, lower };
+}
+
+function sendEmail(subject, body) {
+  emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
+    subject: subject,
+    body: body
+  }).then(() => {
+    log(`?? Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("? Gagal kirim email: " + err.text);
+  });
+}
+
+async function fetchInitialData() {
+  const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=30");
+  const data = await res.json();
+  data.prices.forEach(p => {
+    priceData.push(p[1]);
+    const date = new Date(p[0]);
+    timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+  });
+  updateIndicators();
+  chart.update();
+}
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData, 20, 2);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
+}
+
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+    const data = await res.json();
+    const price = parseFloat(data.pair.priceUsd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 100) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
+    chart.update();
+
+    // === STRATEGI ===
+    if (!lastBuy) {
+      if (priceData.length >= 10) {
+        const lowest = Math.min(...priceData.slice(-10));
+        if (price <= lowest) {
+          lastBuy = price;
+          highestSinceBuy = price;
+          currentPositionAmount = qtyPerTrade / price;
+          currentCapital -= qtyPerTrade;
+          updateCapitalDisplay();
+          log(`?? BUY di $${price.toFixed(4)} (terendah dari 10 candle)`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 10 candle terakhir)`);
+        } else {
+          log(`? Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 10 data: $${lowest.toFixed(4)}`);
+        }
+      } else {
+        log(`? Mengumpulkan data... (${priceData.length}/10)`);
+      }
+    } else {
+      if (price > highestSinceBuy) highestSinceBuy = price;
+
+      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
+
+      if (dropFromPeak > 1.0) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`?? SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)}`);
+        sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+      } else if (lossFromBuy > 1.5) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`?? SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}%`);
+        sendEmail("SELL (Cut Loss)", `Cut loss CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+      } else {
+        log(`? HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+      }
+    }
+
+  } catch (err) {
+    log("? Gagal ambil harga");
+    console.error(err);
+  }
+}
+
+(async () => {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 15000);
+})();
+</script>
+</body>
+</html>
