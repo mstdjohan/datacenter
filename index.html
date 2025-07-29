@@ -226,6 +226,26 @@ if (price <= pair.lowerLimit) {
             }
           }
 
+          // Alarm harga dan email
+          if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
+            alarmSound.play();
+            sendEmailNotification(pair.name, price);
+            pair.lastAlert = 'high';
+          } else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
+            alarmSound.play();
+            sendEmailNotification(pair.name, price);
+            pair.lastAlert = 'low';
+          } else if (price < pair.upperLimit && price > pair.lowerLimit) {
+            pair.lastAlert = null;
+          }
+
+          // 🔥 Sinyal scalping ke console
+          if (price <= pair.lowerLimit) {
+            console.log(`📈 Sinyal BUY untuk ${pair.name} di harga $${price}`);
+          } else if (price >= pair.upperLimit) {
+            console.log(`📉 Sinyal SELL untuk ${pair.name} di harga $${price}`);
+          }
+          
           if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
             alarmSound.play();
             sendEmailNotification(pair.name, price);
