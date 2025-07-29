@@ -1,0 +1,181 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Strategi Trading CAKE - Konservatif</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script>
+    emailjs.init("OGH12a8LlCboHPVz8");
+  </script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<h2>📈 Harga CAKE & Indikator (Real-time + Historis)</h2>
+<div>💰 <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>🪙 Modal: <span id="capital">$1000.00</span></div>
+
+<div id="log"></div>
+
+<script>
+let priceData = [];
+let timeLabels = [];
+let currentCapital = 1000;
+let qtyPerTrade = 100;
+let lastBuy = null;
+let highestSinceBuy = null;
+let currentPositionAmount = 0;
+const chartCtx = document.getElementById('chart').getContext('2d');
+
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+      { label: 'RSI', data: [], borderColor: 'brown', fill: false, yAxisID: 'y1' },
+      { label: 'MACD', data: [], borderColor: 'teal', fill: false, yAxisID: 'y1' },
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      x: { display: true },
+      y: { display: true, position: 'left' },
+      y1: { display: true, position: 'right', grid: { drawOnChartArea: false } }
+    }
+  }
+});
+
+function log(msg) {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}
+` + logDiv.textContent;
+}
+
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
+
+function calculateSMA(data, period) {
+  return data.map((_, i) => i < period - 1 ? null :
+    data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+}
+
+function calculateEMA(data, period) {
+  const k = 2 / (period + 1);
+  let ema = data[0];
+  return data.map((price, i) => {
+    if (i === 0) return ema;
+    ema = price * k + ema * (1 - k);
+    return ema;
+  });
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const std = Math.sqrt(slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * std);
+      lower.push(mean - multiplier * std);
+    }
+  }
+  return { upper, lower };
+}
+
+function calculateRSI(data, period = 14) {
+  let gains = 0, losses = 0, rsi = [];
+  for (let i = 1; i < data.length; i++) {
+    let diff = data[i] - data[i - 1];
+    if (i <= period) {
+      if (diff >= 0) gains += diff; else losses -= diff;
+      rsi.push(null);
+    } else {
+      let avgGain = gains / period;
+      let avgLoss = losses / period;
+      let rs = avgGain / (avgLoss || 1);
+      rsi.push(100 - (100 / (1 + rs)));
+
+      // slide window
+      let delta = data[i] - data[i - 1];
+      if (delta >= 0) { gains = (gains * (period - 1) + delta) / period; losses = (losses * (period - 1)) / period; }
+      else { gains = (gains * (period - 1)) / period; losses = (losses * (period - 1) - delta) / period; }
+    }
+  }
+  return rsi;
+}
+
+function calculateMACD(data, fast = 12, slow = 26, signal = 9) {
+  const emaFast = calculateEMA(data, fast);
+  const emaSlow = calculateEMA(data, slow);
+  const macd = emaFast.map((val, i) => val - emaSlow[i]);
+  const signalLine = calculateEMA(macd, signal);
+  return { macd, signal: signalLine };
+}
+
+function sendEmail(subject, body) {
+  emailjs.send("service_5hxo1hk", "template_iq87egh", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
+  }).then(() => {
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
+  });
+}
+
+async function fetchInitialData() {
+  const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=30");
+  const data = await res.json();
+  data.prices.forEach(p => {
+    priceData.push(p[1]);
+    timeLabels.push(new Date(p[0]).toLocaleDateString());
+  });
+  updateIndicators();
+  chart.update();
+}
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData, 20, 2);
+  const rsi = calculateRSI(priceData, 14);
+  const macd = calculateMACD(priceData);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = sma10;
+  chart.data.datasets[4].data = bb.upper;
+  chart.data.datasets[5].data = bb.lower;
+  chart.data.datasets[6].data = rsi;
+  chart.data.datasets[7].data = macd.macd;
+}
+
+(async () => {
+  await fetchInitialData();
+})();
+</script>
+</body>
+</html>
