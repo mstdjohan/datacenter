@@ -2,85 +2,126 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Auto Scalping CAKE/USDT</title>
+  <title>Strategi Otomatis CAKE/USDT</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    .log { background: #fff; padding: 10px; border-radius: 5px; height: 300px; overflow-y: auto; }
-    .price { font-size: 1.5em; margin-bottom: 10px; }
+    body { font-family: Arial; padding: 20px; background: #f4f4f4; color: #333; }
+    .container { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h1 { text-align: center; }
+    .log { background: #eee; padding: 10px; margin-top: 20px; white-space: pre-line; height: 200px; overflow-y: auto; font-family: monospace; border-radius: 5px; }
+    canvas { margin-top: 20px; max-width: 100%; }
   </style>
 </head>
 <body>
-  <h2>🚀 Auto Scalping CAKE/USDT</h2>
-  <div class="price" id="livePrice">Harga: Memuat...</div>
-  <div class="log" id="logBox">Log strategi akan muncul di sini...</div>
+  <div class="container">
+    <h1>🔁 Strategi Otomatis CAKE/USDT</h1>
+    <div id="livePrice">Harga: Memuat...</div>
+    <canvas id="chartCanvas" width="600" height="250"></canvas>
+    <div class="log" id="logBox">📝 Log strategi...</div>
+  </div>
 
-  <!-- Versi SDK EmailJS v3 -->
-  <script type="module">
-    import emailjs from 'https://cdn.emailjs.com/sdk/3.11.0/email.min.js';
-
+  <script>
     emailjs.init("OGH12a8LlCboHPVz8");
 
-    const logBox = document.getElementById("logBox");
-    const priceEl = document.getElementById("livePrice");
     let lastBuy = null;
-    let modal = 100;
+    let highestSinceBuy = null;
+    let priceData = [], timeLabels = [];
+    const logBox = document.getElementById("logBox");
+    const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          label: "Harga CAKE/USDT",
+          data: priceData,
+          borderColor: "blue",
+          backgroundColor: "rgba(0,0,255,0.1)",
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Waktu" }},
+          y: { title: { display: true, text: "USD" }}
+        }
+      }
+    });
 
     function log(msg) {
-      const time = new Date().toLocaleTimeString();
-      logBox.textContent += `[${time}] ${msg}\n`;
+      const now = new Date().toLocaleTimeString();
+      const text = `[${now}] ${msg}\n`;
+      logBox.textContent += text;
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    function kirimEmail(subject, pesan) {
+    function sendEmail(subject, message) {
       emailjs.send("service_5hxo1hk", "template_iq87egh", {
         subject: subject,
-        message: pesan
+        message: message,
       }).then(() => {
-        log("📩 Email notifikasi dikirim.");
+        log("📩 Notifikasi email dikirim.");
       }).catch((err) => {
         log("❌ Gagal kirim email: " + err.text);
       });
     }
 
-    async function ambilHarga() {
+    async function fetchAndEvaluate() {
       try {
         const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
         const data = await res.json();
-        const harga = parseFloat(data.pair.priceUsd);
-        priceEl.textContent = `Harga: $${harga.toFixed(4)}`;
-        return harga;
-      } catch (err) {
-        log("❌ Gagal ambil harga: " + err.message);
-        return 0;
-      }
-    }
+        const price = parseFloat(data.pair.priceUsd);
+        document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
-    async function strategiOtomatis() {
-      const harga = await ambilHarga();
-      if (harga === 0) return;
-
-      if (!lastBuy) {
-        lastBuy = harga;
-        log(`Strategi: BUY 🟢 di $${harga.toFixed(4)}`);
-        kirimEmail("Sinyal BUY - CAKE/USDT", `BUY di harga $${harga.toFixed(4)}`);
-      } else {
-        const selisih = harga - lastBuy;
-        const profit = selisih * (modal / lastBuy);
-        const persen = (profit / modal) * 100;
-
-        if (selisih > 0.01) {
-          log(`Strategi: SELL 🔴 di $${harga.toFixed(4)} | Profit $${profit.toFixed(2)} (${persen.toFixed(2)}%)`);
-          kirimEmail("Sinyal SELL - CAKE/USDT", `SELL di harga $${harga.toFixed(4)} | Profit: $${profit.toFixed(2)} (${persen.toFixed(2)}%)`);
-          lastBuy = null;
-        } else {
-          log(`WAIT ⏳ di $${harga.toFixed(4)} | Belum cukup untung`);
+        // Update chart
+        const now = new Date().toLocaleTimeString();
+        priceData.push(price);
+        timeLabels.push(now);
+        if (priceData.length > 20) {
+          priceData.shift();
+          timeLabels.shift();
         }
+        chart.update();
+
+        // === Strategi ===
+        if (!lastBuy) {
+          lastBuy = price;
+          highestSinceBuy = price;
+          log(`📥 BUY di $${price.toFixed(4)}`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)}`);
+        } else {
+          if (price > highestSinceBuy) highestSinceBuy = price;
+
+          const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+          const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
+
+          if (dropFromPeak > 1.0) {
+            log(`📤 SELL via trailing stop: dari puncak turun ${dropFromPeak.toFixed(2)}%`);
+            sendEmail("SELL (Trailing Profit)", `Jual CAKE di harga $${price.toFixed(4)} setelah naik ke $${highestSinceBuy.toFixed(4)}`);
+            lastBuy = null;
+            highestSinceBuy = null;
+          } else if (lossFromBuy > 1.5) {
+            log(`📤 SELL via cut loss: turun ${lossFromBuy.toFixed(2)}% dari beli`);
+            sendEmail("SELL (Cut Loss)", `Jual CAKE di harga $${price.toFixed(4)} karena rugi lebih dari 1.5%`);
+            lastBuy = null;
+            highestSinceBuy = null;
+          } else {
+            log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Naik tertinggi: $${highestSinceBuy.toFixed(4)}`);
+          }
+        }
+
+      } catch (err) {
+        log("❌ Gagal ambil harga");
+        console.error(err);
       }
     }
 
-    // Jalankan pertama kali dan setiap 30 detik
-    strategiOtomatis();
-    setInterval(strategiOtomatis, 30000);
+    // Inisialisasi
+    fetchAndEvaluate();
+    setInterval(fetchAndEvaluate, 30000); // Setiap 30 detik
   </script>
 </body>
 </html>
