@@ -54,25 +54,126 @@
 <body>
   <h1>📊 Monitor Harga CAKE & TON</h1>
   <div class="grid">
+    <!-- CAKE/USDT -->
     <div class="pair-box">
       <h3>CAKE/USDT</h3>
       <div id="price-usdt" class="price">Memuat...</div>
       <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="3.50" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.60" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.68" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.58" step="0.01" /></label>
       <button onclick="saveLimits('usdt')">Simpan</button>
+      <button onclick="testStrategy('usdt')">Uji Strategi</button>
+      <div id="log-usdt"></div>
       <canvas id="chart-usdt"></canvas>
     </div>
+
+    <!-- TON/USDT -->
     <div class="pair-box">
       <h3>TON/USDT</h3>
       <div id="price-ton" class="price">Memuat...</div>
       <div id="trend-ton" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-ton" value="3.70" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-ton" value="3.01" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-ton" value="8.0" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-ton" value="7.5" step="0.01" /></label>
       <button onclick="saveLimits('ton')">Simpan</button>
+      <button onclick="testStrategy('ton')">Uji Strategi</button>
+      <div id="log-ton"></div>
       <canvas id="chart-ton"></canvas>
     </div>
   </div>
+
+  <script>
+    const alarmSound = document.getElementById("alarm");
+    const pairs = {
+      usdt: {
+        name: "CAKE/USDT",
+        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
+        canvas: "chart-usdt", priceEl: "price-usdt", trendEl: "trend-usdt",
+        upperId: "upper-usdt", lowerId: "lower-usdt",
+        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
+        upperLimit: 2.68, lowerLimit: 2.58
+      },
+      ton: {
+        name: "TON/USDT",
+        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a",
+        canvas: "chart-ton", priceEl: "price-ton", trendEl: "trend-ton",
+        upperId: "upper-ton", lowerId: "lower-ton",
+        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
+        upperLimit: 8.0, lowerLimit: 7.5
+      }
+    };
+
+    function saveLimits(key) {
+      const p = pairs[key];
+      p.upperLimit = parseFloat(document.getElementById(p.upperId).value);
+      p.lowerLimit = parseFloat(document.getElementById(p.lowerId).value);
+      alert(`✅ Alarm ${p.name} disimpan:
+Atas: $${p.upperLimit}
+Bawah: $${p.lowerLimit}`);
+    }
+
+    function testStrategy(key) {
+      const p = pairs[key];
+      const price = p.lastPrice;
+      if (price === null) {
+        alert("Harga belum tersedia.");
+        return;
+      }
+      let action = "WAIT ⏳";
+      if (price <= p.lowerLimit) action = "BUY 💰";
+      else if (price >= p.upperLimit) action = "SELL 💵";
+      document.getElementById(`log-${key}`).textContent = `[${new Date().toLocaleTimeString()}] Strategi: ${action} di harga $${price.toFixed(4)}`;
+    }
+
+    function initCharts() {
+      for (const key in pairs) {
+        const p = pairs[key];
+        const ctx = document.getElementById(p.canvas).getContext("2d");
+        p.chart = new Chart(ctx, {
+          type: "line",
+          data: { labels: p.timeLabels, datasets: [{ label: p.name, data: p.priceHistory, borderColor: "blue", backgroundColor: "rgba(0,0,255,0.1)", fill: true }] },
+          options: { scales: { x: { display: false }, y: { title: { display: true, text: "USD" } } }, plugins: { legend: { display: false } } }
+        });
+      }
+    }
+
+    async function fetchPrices() {
+      const now = new Date().toLocaleTimeString();
+      for (const key in pairs) {
+        const p = pairs[key];
+        try {
+          const res = await fetch(p.api);
+          const data = await res.json();
+          const price = parseFloat(data.pair.priceUsd);
+          document.getElementById(p.priceEl).textContent = `$${price.toFixed(4)}`;
+          const trendEl = document.getElementById(p.trendEl);
+          if (p.lastPrice !== null) {
+            if (price > p.lastPrice) { trendEl.textContent = "Naik"; trendEl.className = "trend up"; }
+            else if (price < p.lastPrice) { trendEl.textContent = "Turun"; trendEl.className = "trend down"; }
+            else { trendEl.textContent = "Stabil"; trendEl.className = "trend"; }
+          }
+          if (price >= p.upperLimit && p.lastAlert !== 'high') {
+            alarmSound.play(); p.lastAlert = 'high';
+          } else if (price <= p.lowerLimit && p.lastAlert !== 'low') {
+            alarmSound.play(); p.lastAlert = 'low';
+          } else if (price < p.upperLimit && price > p.lowerLimit) {
+            p.lastAlert = null;
+          }
+          p.priceHistory.push(price);
+          p.timeLabels.push(now);
+          if (p.priceHistory.length > 20) { p.priceHistory.shift(); p.timeLabels.shift(); }
+          p.chart.update();
+          p.lastPrice = price;
+        } catch (err) {
+          document.getElementById(p.priceEl).textContent = "❌ Error";
+          console.error(`Gagal ambil harga ${p.name}:`, err);
+        }
+      }
+    }
+
+    initCharts();
+    fetchPrices();
+    setInterval(fetchPrices, 30000);
+  </script>
 
   <audio id="alarm" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
 
