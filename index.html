@@ -59,8 +59,8 @@
       <h3>CAKE/USDT</h3>
       <div id="price-usdt" class="price">Memuat...</div>
       <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.68" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.58" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-usdt" value="3.50" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.68" step="0.01" /></label>
       <button onclick="saveLimits('usdt')">Simpan</button>
       <button onclick="testStrategy('usdt')">Uji Strategi</button>
       <div id="log-usdt"></div>
@@ -72,8 +72,8 @@
       <h3>TON/USDT</h3>
       <div id="price-ton" class="price">Memuat...</div>
       <div id="trend-ton" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-ton" value="8.0" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-ton" value="7.5" step="0.01" /></label>
+      <label>Batas Atas: <input type="number" id="upper-ton" value="3.80" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-ton" value="2.90" step="0.01" /></label>
       <button onclick="saveLimits('ton')">Simpan</button>
       <button onclick="testStrategy('ton')">Uji Strategi</button>
       <div id="log-ton"></div>
@@ -90,7 +90,7 @@
         canvas: "chart-usdt", priceEl: "price-usdt", trendEl: "trend-usdt",
         upperId: "upper-usdt", lowerId: "lower-usdt",
         priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
-        upperLimit: 2.68, lowerLimit: 2.58
+        upperLimit: 3.50, lowerLimit: 2.60
       },
       ton: {
         name: "TON/USDT",
@@ -98,7 +98,7 @@
         canvas: "chart-ton", priceEl: "price-ton", trendEl: "trend-ton",
         upperId: "upper-ton", lowerId: "lower-ton",
         priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
-        upperLimit: 8.0, lowerLimit: 7.5
+        upperLimit: 3.80, lowerLimit: 2.90
       }
     };
 
