@@ -201,7 +201,7 @@ function updateIndicators() {
   chart.data.datasets[7].data = calculateEMA(priceData.map((v, i) => calculateEMA(priceData, 12)[i] - calculateEMA(priceData, 26)[i]), 9);
 }
 setInterval(async () => {
-  const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0eD7e52944161450477ee417DE9Cd3a859b14fD0");
+  const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=30");
   const data = await res.json();
   const price = parseFloat(data.pair.priceUsd);
   priceData.push(price);
