@@ -37,11 +37,15 @@
 </div>
 
 <script>
-let priceData = [], timeLabels = [];
-let currentCapital = 1000, qtyPerTrade = 100, lastBuy = null;
-let highestSinceBuy = null, currentPositionAmount = 0;
-
+let priceData = [];
+let timeLabels = [];
+let currentCapital = 1000;
+let qtyPerTrade = 100;
+let lastBuy = null;
+let highestSinceBuy = null;
+let currentPositionAmount = 0;
 const chartCtx = document.getElementById('chart').getContext('2d');
+
 const chart = new Chart(chartCtx, {
   type: 'line',
   data: {
@@ -50,26 +54,66 @@ const chart = new Chart(chartCtx, {
       { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
       { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
       { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
       { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
       { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'RSI', data: [], borderColor: 'brown', fill: false, yAxisID: 'y1' },
-      { label: 'MACD', data: [], borderColor: 'teal', fill: false, yAxisID: 'y1' },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
     ]
   },
-  options: {
-    responsive: true,
-    scales: {
-      x: { display: true },
-      y: { display: true, position: 'left' },
-      y1: { display: true, position: 'right', grid: { drawOnChartArea: false } }
-    }
-  }
+  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
 });
 
 function log(msg) {
   const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}
+` + logDiv.textContent;
+}
+
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
+
+function calculateSMA(data, period) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      result.push(null);
+    } else {
+      const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
+  }
+  return result;
+}
+
+function calculateEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let emaPrev = data[0];
+  result.push(emaPrev);
+  for (let i = 1; i < data.length; i++) {
+    const ema = data[i] * k + emaPrev * (1 - k);
+    result.push(ema);
+    emaPrev = ema;
+  }
+  return result;
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
+    }
+  }
+  return { upper, lower };
 }
 
 function updateCapitalDisplay() {
