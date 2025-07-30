@@ -130,10 +130,10 @@ async function fetchInitialData() {
 }
 
 function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData, 20, 2);
+  const sma10 = calculateSMA(priceData, 100);
+  const ema12 = calculateEMA(priceData, 120);
+  const ema26 = calculateEMA(priceData, 260);
+  const bb = calculateBollingerBands(priceData, 200, 2);
 
   chart.data.datasets[1].data = ema12;
   chart.data.datasets[2].data = ema26;
@@ -161,17 +161,17 @@ async function fetchAndEvaluate() {
 
     if (!lastBuy) {
       if (priceData.length >= 10) {
-        const lowest = Math.min(...priceData.slice(-100));
+        const lowest = Math.min(...priceData.slice(-10));
         if (price <= lowest) {
           lastBuy = price;
           highestSinceBuy = price;
           currentPositionAmount = qtyPerTrade / price;
           currentCapital -= qtyPerTrade;
           updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 100 candle)`);
-          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 10 candle terakhir)`);
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 300 candle)`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 300 candle terakhir)`);
         } else {
-          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 100 data: $${lowest.toFixed(4)}`);
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 300 data: $${lowest.toFixed(4)}`);
         }
       } else {
         log(`⌛ Mengumpulkan data... (${priceData.length}/100)`);
