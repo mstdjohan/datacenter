@@ -151,7 +151,7 @@ function sendEmail(subject, body) {
 
 async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x46e6b214b524310239732d51387075e0e70970bf");
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a");
     const data = await res.json();
     const price = parseFloat(data.pair.priceUsd);
     document.getElementById("livePrice").textContent = `$${price.toFixed(4)}`;
