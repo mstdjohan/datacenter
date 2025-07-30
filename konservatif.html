@@ -161,20 +161,20 @@ async function fetchAndEvaluate() {
 
     if (!lastBuy) {
       if (priceData.length >= 10) {
-        const lowest = Math.min(...priceData.slice(-1000));
+        const lowest = Math.min(...priceData.slice(-100));
         if (price <= lowest) {
           lastBuy = price;
           highestSinceBuy = price;
           currentPositionAmount = qtyPerTrade / price;
           currentCapital -= qtyPerTrade;
           updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 1000 candle)`);
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 100 candle)`);
           sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 10 candle terakhir)`);
         } else {
-          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 10 data: $${lowest.toFixed(4)}`);
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 100 data: $${lowest.toFixed(4)}`);
         }
       } else {
-        log(`⌛ Mengumpulkan data... (${priceData.length}/1000)`);
+        log(`⌛ Mengumpulkan data... (${priceData.length}/100)`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
