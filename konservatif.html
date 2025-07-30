@@ -162,7 +162,7 @@ function checkStrategy() {
   }
   if (lastBuy) {
     if (latest > highestSinceBuy) highestSinceBuy = latest;
-    const trailingStop = highestSinceBuy * 0.989;
+    const trailingStop = highestSinceBuy * 0.97;
     if (latest < trailingStop) {
       const sellValue = currentPositionAmount * latest;
       currentCapital += sellValue;
