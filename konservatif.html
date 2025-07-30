@@ -152,7 +152,7 @@ async function fetchAndEvaluate() {
     const now = new Date().toLocaleTimeString();
     priceData.push(price);
     timeLabels.push(now);
-    if (priceData.length > 100) {
+    if (priceData.length > 300) {
       priceData.shift();
       timeLabels.shift();
     }
@@ -160,8 +160,8 @@ async function fetchAndEvaluate() {
     chart.update();
 
     if (!lastBuy) {
-      if (priceData.length >= 10) {
-        const lowest = Math.min(...priceData.slice(-10));
+      if (priceData.length >= 300) {
+        const lowest = Math.min(...priceData.slice(-300));
         if (price <= lowest) {
           lastBuy = price;
           highestSinceBuy = price;
@@ -174,7 +174,7 @@ async function fetchAndEvaluate() {
           log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 300 data: $${lowest.toFixed(4)}`);
         }
       } else {
-        log(`⌛ Mengumpulkan data... (${priceData.length}/100)`);
+        log(`⌛ Mengumpulkan data... (${priceData.length}/300)`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
