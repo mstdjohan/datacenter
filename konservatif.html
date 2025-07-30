@@ -10,31 +10,19 @@
     emailjs.init("OGH12a8LlCboHPVz8");
   </script>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 10px; background: #f5f5f5; }
-    header { text-align: center; padding: 10px; }
-    canvas { width: 100% !important; height: auto !important; background: white; border: 1px solid #ccc; border-radius: 8px; }
-    .info, #log { background: #fff; padding: 12px; margin: 12px 0; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-    #log { white-space: pre-wrap; font-family: monospace; font-size: 13px; }
-    .label { font-weight: bold; }
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
   </style>
 </head>
 <body>
 
-<header>
-  <h2>📈 CAKE Real-time Strategi</h2>
-</header>
+<h2>📊 Harga CAKE & Indikator (Real-time + Historis)</h2>
+<div>💰 <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
 
-<div class="info">
-  <div>💰 Harga Live: <span id="livePrice">Memuat...</span></div>
-  <div>🪙 Modal: <span id="capital">$1000.00</span></div>
-</div>
-
-<canvas id="chart"></canvas>
-
-<div class="info">
-  <h4>Riwayat Log</h4>
-  <div id="log"></div>
-</div>
+<div id="log"></div>
 
 <script>
 let priceData = [];
@@ -116,10 +104,6 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
   return { upper, lower };
 }
 
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
 function sendEmail(subject, body) {
   emailjs.send("service_5hxo1hk", "template_iq87egh", {
     subject: subject,
@@ -132,133 +116,101 @@ function sendEmail(subject, body) {
   });
 }
 
-function calculateSMA(data, period) {
-  return data.map((_, i) => i < period - 1 ? null :
-    data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-}
-function calculateEMA(data, period) {
-  const k = 2 / (period + 1);
-  let ema = data[0];
-  return data.map((price, i) => {
-    if (i === 0) return ema;
-    ema = price * k + ema * (1 - k);
-    return ema;
-  });
-}
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) { upper.push(null); lower.push(null); }
-    else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const std = Math.sqrt(slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * std);
-      lower.push(mean - multiplier * std);
-    }
-  }
-  return { upper, lower };
-}
-function calculateRSI(data, period = 14) {
-  let gains = 0, losses = 0, rsi = [];
-  for (let i = 1; i < data.length; i++) {
-    let diff = data[i] - data[i - 1];
-    if (i <= period) {
-      if (diff >= 0) gains += diff; else losses -= diff;
-      rsi.push(null);
-    } else {
-      let avgGain = gains / period;
-      let avgLoss = losses / period;
-      let rs = avgGain / (avgLoss || 1);
-      rsi.push(100 - (100 / (1 + rs)));
-      let delta = data[i] - data[i - 1];
-      if (delta >= 0) {
-        gains = (gains * (period - 1) + delta) / period;
-        losses = (losses * (period - 1)) / period;
-      } else {
-        gains = (gains * (period - 1)) / period;
-        losses = (losses * (period - 1) - delta) / period;
-      }
-    }
-  }
-  return rsi;
-}
-
-function checkStrategy() {
-  if (priceData.length < 30) return; // avoid errors on first load
-  const latest = priceData[priceData.length - 1];
-  const bb = calculateBollingerBands(priceData);
-  const lowerBB = bb.lower[bb.lower.length - 1];
-  const rsi = calculateRSI(priceData);
-  const rsiLatest = rsi[rsi.length - 1];
-
-  document.getElementById("livePrice").textContent = `$${latest.toFixed(4)}`;
-
-  if (!lastBuy && latest < lowerBB && rsiLatest < 30) {
-    lastBuy = latest;
-    currentPositionAmount = qtyPerTrade / latest;
-    currentCapital -= qtyPerTrade;
-    highestSinceBuy = latest;
-    updateCapitalDisplay();
-    log(`BUY 🟢 di $${latest.toFixed(4)} (RSI: ${rsiLatest.toFixed(1)})`);
-    sendEmail("BUY Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nRSI: ${rsiLatest.toFixed(1)}\nWaktu: ${new Date().toLocaleTimeString()}`);
-  }
-  if (lastBuy) {
-    if (latest > highestSinceBuy) highestSinceBuy = latest;
-    const trailingStop = highestSinceBuy * 0.97;
-    if (latest < trailingStop) {
-      const sellValue = currentPositionAmount * latest;
-      currentCapital += sellValue;
-      log(`SELL 🔴 di $${latest.toFixed(4)} | Profit: $${(sellValue - qtyPerTrade).toFixed(2)}`);
-      sendEmail("SELL Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()}`);
-      lastBuy = null;
-      currentPositionAmount = 0;
-      updateCapitalDisplay();
-    }
-  }
-}
 
 async function fetchInitialData() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=2);
-    const data = await res.json();
-    const price = parseFloat(data.pair.priceUsd);
-    priceData.push(price);
-    timeLabels.push(new Date().toLocaleTimeString());
-    updateIndicators();
-    chart.update();
-    checkStrategy();
-  } catch (err) {
-    log("Gagal ambil data awal: " + err.message);
-  }
+  const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=30");
+  const data = await res.json();
+  data.prices.forEach(p => {
+    priceData.push(p[1]);
+    const date = new Date(p[0]);
+    timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+  });
+  updateIndicators();
+  chart.update();
 }
 
 function updateIndicators() {
-  chart.data.datasets[1].data = calculateEMA(priceData, 12);
-  chart.data.datasets[2].data = calculateEMA(priceData, 26);
-  chart.data.datasets[3].data = calculateSMA(priceData, 10);
-  const bb = calculateBollingerBands(priceData);
-  chart.data.datasets[4].data = bb.upper;
-  chart.data.datasets[5].data = bb.lower;
-  chart.data.datasets[6].data = calculateRSI(priceData);
-  chart.data.datasets[7].data = calculateEMA(priceData.map((v, i) => calculateEMA(priceData, 12)[i] - calculateEMA(priceData, 26)[i]), 9);
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData, 20, 2);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
 }
-setInterval(async () => {
-  const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0eD7e52944161450477ee417DE9Cd3a859b14fD0");
-  const data = await res.json();
-  const price = parseFloat(data.pair.priceUsd);
-  priceData.push(price);
-  timeLabels.push(new Date().toLocaleTimeString());
-  if (priceData.length > 200) {
-    priceData.shift();
-    timeLabels.shift();
+
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+    const data = await res.json();
+    const price = parseFloat(data.pair.priceUsd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 100) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
+    chart.update();
+
+    if (!lastBuy) {
+      if (priceData.length >= 10) {
+        const lowest = Math.min(...priceData.slice(-1000));
+        if (price <= lowest) {
+          lastBuy = price;
+          highestSinceBuy = price;
+          currentPositionAmount = qtyPerTrade / price;
+          currentCapital -= qtyPerTrade;
+          updateCapitalDisplay();
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 1000 candle)`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 10 candle terakhir)`);
+        } else {
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 10 data: $${lowest.toFixed(4)}`);
+        }
+      } else {
+        log(`⌛ Mengumpulkan data... (${priceData.length}/1000)`);
+      }
+    } else {
+      if (price > highestSinceBuy) highestSinceBuy = price;
+
+      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
+
+      if (dropFromPeak > 1.0) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)}`);
+        sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+      } else if (lossFromBuy > 1.5) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}%`);
+        sendEmail("SELL (Cut Loss)", `Cut loss CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+      } else {
+        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+      }
+    }
+
+  } catch (err) {
+    log("❌ Gagal ambil harga");
+    console.error(err);
   }
-  updateIndicators();
-  chart.update();
-  checkStrategy();
-}, 30000);
-fetchInitialData();
+}
+
+(async () => {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 15000);
+})();
 </script>
 </body>
 </html>
