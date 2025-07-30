@@ -152,7 +152,7 @@ async function fetchAndEvaluate() {
     const now = new Date().toLocaleTimeString();
     priceData.push(price);
     timeLabels.push(now);
-    if (priceData.length > 300) {
+    if (priceData.length > 200) {
       priceData.shift();
       timeLabels.shift();
     }
@@ -160,21 +160,21 @@ async function fetchAndEvaluate() {
     chart.update();
 
     if (!lastBuy) {
-      if (priceData.length >= 300) {
-        const lowest = Math.min(...priceData.slice(-300));
+      if (priceData.length >= 200) {
+        const lowest = Math.min(...priceData.slice(-200));
         if (price <= lowest) {
           lastBuy = price;
           highestSinceBuy = price;
           currentPositionAmount = qtyPerTrade / price;
           currentCapital -= qtyPerTrade;
           updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 300 candle)`);
-          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 300 candle terakhir)`);
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 200 candle)`);
+          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah 200 candle terakhir)`);
         } else {
-          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 300 data: $${lowest.toFixed(4)}`);
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 200 data: $${lowest.toFixed(4)}`);
         }
       } else {
-        log(`⌛ Mengumpulkan data... (${priceData.length}/300)`);
+        log(`⌛ Mengumpulkan data... (${priceData.length}/200)`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
