@@ -69,11 +69,11 @@ const chart = new Chart(chartCtx, {
 
 function log(msg) {
   const logDiv = document.getElementById("log");
-  logDiv.textContent = [${new Date().toLocaleTimeString()}] ${msg}\n + logDiv.textContent;
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
 }
 
 function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = $${currentCapital.toFixed(2)};
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
 }
 
 function sendEmail(subject, body) {
@@ -82,7 +82,7 @@ function sendEmail(subject, body) {
     body: body,
     time: new Date().toLocaleString()
   }).then(() => {
-    log(📧 Email terkirim: ${subject});
+    log(`📧 Email terkirim: ${subject}`);
   }).catch(err => {
     log("⚠️ Gagal kirim email: " + err.text);
   });
@@ -140,24 +140,54 @@ function calculateRSI(data, period = 14) {
   }
   return rsi;
 }
-function calculateMACD(data, fast = 12, slow = 26, signal = 9) {
-  const emaFast = calculateEMA(data, fast);
-  const emaSlow = calculateEMA(data, slow);
-  const macd = emaFast.map((val, i) => val - emaSlow[i]);
-  const signalLine = calculateEMA(macd, signal);
-  return { macd, signal: signalLine };
+
+function checkStrategy() {
+  if (priceData.length < 30) return; // avoid errors on first load
+  const latest = priceData[priceData.length - 1];
+  const bb = calculateBollingerBands(priceData);
+  const lowerBB = bb.lower[bb.lower.length - 1];
+  const rsi = calculateRSI(priceData);
+  const rsiLatest = rsi[rsi.length - 1];
+
+  document.getElementById("livePrice").textContent = `$${latest.toFixed(4)}`;
+
+  if (!lastBuy && latest < lowerBB && rsiLatest < 30) {
+    lastBuy = latest;
+    currentPositionAmount = qtyPerTrade / latest;
+    currentCapital -= qtyPerTrade;
+    highestSinceBuy = latest;
+    updateCapitalDisplay();
+    log(`BUY 🟢 di $${latest.toFixed(4)} (RSI: ${rsiLatest.toFixed(1)})`);
+    sendEmail("BUY Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nRSI: ${rsiLatest.toFixed(1)}\nWaktu: ${new Date().toLocaleTimeString()}`);
+  }
+  if (lastBuy) {
+    if (latest > highestSinceBuy) highestSinceBuy = latest;
+    const trailingStop = highestSinceBuy * 0.97;
+    if (latest < trailingStop) {
+      const sellValue = currentPositionAmount * latest;
+      currentCapital += sellValue;
+      log(`SELL 🔴 di $${latest.toFixed(4)} | Profit: $${(sellValue - qtyPerTrade).toFixed(2)}`);
+      sendEmail("SELL Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()}`);
+      lastBuy = null;
+      currentPositionAmount = 0;
+      updateCapitalDisplay();
+    }
+  }
 }
 
 async function fetchInitialData() {
-  const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=2");
-  const data = await res.json();
-  data.prices.forEach(p => {
-    priceData.push(p[1]);
-    timeLabels.push(new Date(p[0]).toLocaleTimeString());
-  });
-  updateIndicators();
-  chart.update();
-  checkStrategy();
+  try {
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0eD7e52944161450477ee417DE9Cd3a859b14fD0");
+    const data = await res.json();
+    const price = parseFloat(data.pair.priceUsd);
+    priceData.push(price);
+    timeLabels.push(new Date().toLocaleTimeString());
+    updateIndicators();
+    chart.update();
+    checkStrategy();
+  } catch (err) {
+    log("Gagal ambil data awal: " + err.message);
+  }
 }
 
 function updateIndicators() {
@@ -168,56 +198,10 @@ function updateIndicators() {
   chart.data.datasets[4].data = bb.upper;
   chart.data.datasets[5].data = bb.lower;
   chart.data.datasets[6].data = calculateRSI(priceData);
-  chart.data.datasets[7].data = calculateMACD(priceData).macd;
+  chart.data.datasets[7].data = calculateEMA(priceData.map((v, i) => calculateEMA(priceData, 12)[i] - calculateEMA(priceData, 26)[i]), 9);
 }
 
-function checkStrategy() {
-  const latest = priceData[priceData.length - 1];
-  const bb = calculateBollingerBands(priceData);
-  const lowerBB = bb.lower[bb.lower.length - 1];
-  const upperBB = bb.upper[bb.upper.length - 1];
-
-  document.getElementById("livePrice").textContent = $${latest.toFixed(4)};
-
-  if (!lastBuy && latest < lowerBB) {
-    lastBuy = latest;
-    currentPositionAmount = qtyPerTrade / latest;
-    currentCapital -= qtyPerTrade;
-    highestSinceBuy = latest;
-    updateCapitalDisplay();
-    log(BUY 🟢 di $${latest.toFixed(4)});
-    sendEmail("BUY Signal", Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()});
-  }
-  if (lastBuy) {
-    if (latest > highestSinceBuy) highestSinceBuy = latest;
-    const trailingStop = highestSinceBuy * 0.97;
-    if (latest < trailingStop) {
-      const sellValue = currentPositionAmount * latest;
-      currentCapital += sellValue;
-      log(SELL 🔴 di $${latest.toFixed(4)} | Profit: $${(sellValue - qtyPerTrade).toFixed(2)});
-      sendEmail("SELL Signal", Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()});
-      lastBuy = null;
-      currentPositionAmount = 0;
-      updateCapitalDisplay();
-    }
-  }
-}
-
-setInterval(async () => {
-  const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0eD7e52944161450477ee417DE9Cd3a859b14fD0");
-  const data = await res.json();
-  const price = parseFloat(data.pair.priceUsd);
-  priceData.push(price);
-  timeLabels.push(new Date().toLocaleTimeString());
-  if (priceData.length > 200) {
-    priceData.shift();
-    timeLabels.shift();
-  }
-  updateIndicators();
-  chart.update();
-  checkStrategy();
-}, 30000);
-
+setInterval(fetchInitialData, 30000);
 fetchInitialData();
 </script>
 </body>
