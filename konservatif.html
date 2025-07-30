@@ -140,12 +140,39 @@ function calculateRSI(data, period = 14) {
   }
   return rsi;
 }
-function calculateMACD(data, fast = 12, slow = 26, signal = 9) {
-  const emaFast = calculateEMA(data, fast);
-  const emaSlow = calculateEMA(data, slow);
-  const macd = emaFast.map((val, i) => val - emaSlow[i]);
-  const signalLine = calculateEMA(macd, signal);
-  return { macd, signal: signalLine };
+
+function checkStrategy() {
+  const latest = priceData[priceData.length - 1];
+  const bb = calculateBollingerBands(priceData);
+  const lowerBB = bb.lower[bb.lower.length - 1];
+  const upperBB = bb.upper[bb.upper.length - 1];
+  const rsi = calculateRSI(priceData);
+  const rsiLatest = rsi[rsi.length - 1];
+
+  document.getElementById("livePrice").textContent = `$${latest.toFixed(4)}`;
+
+  if (!lastBuy && latest < lowerBB && rsiLatest < 30) {
+    lastBuy = latest;
+    currentPositionAmount = qtyPerTrade / latest;
+    currentCapital -= qtyPerTrade;
+    highestSinceBuy = latest;
+    updateCapitalDisplay();
+    log(`BUY 🟢 di $${latest.toFixed(4)} (RSI: ${rsiLatest.toFixed(1)})`);
+    sendEmail("BUY Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nRSI: ${rsiLatest.toFixed(1)}\nWaktu: ${new Date().toLocaleTimeString()}`);
+  }
+  if (lastBuy) {
+    if (latest > highestSinceBuy) highestSinceBuy = latest;
+    const trailingStop = highestSinceBuy * 0.989;
+    if (latest < trailingStop) {
+      const sellValue = currentPositionAmount * latest;
+      currentCapital += sellValue;
+      log(`SELL 🔴 di $${latest.toFixed(4)} | Profit: $${(sellValue - qtyPerTrade).toFixed(2)}`);
+      sendEmail("SELL Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()}`);
+      lastBuy = null;
+      currentPositionAmount = 0;
+      updateCapitalDisplay();
+    }
+  }
 }
 
 async function fetchInitialData() {
@@ -169,38 +196,6 @@ function updateIndicators() {
   chart.data.datasets[5].data = bb.lower;
   chart.data.datasets[6].data = calculateRSI(priceData);
   chart.data.datasets[7].data = calculateMACD(priceData).macd;
-}
-
-function checkStrategy() {
-  const latest = priceData[priceData.length - 1];
-  const bb = calculateBollingerBands(priceData);
-  const lowerBB = bb.lower[bb.lower.length - 1];
-  const upperBB = bb.upper[bb.upper.length - 1];
-
-  document.getElementById("livePrice").textContent = `$${latest.toFixed(4)}`;
-
-  if (!lastBuy && latest < lowerBB) {
-    lastBuy = latest;
-    currentPositionAmount = qtyPerTrade / latest;
-    currentCapital -= qtyPerTrade;
-    highestSinceBuy = latest;
-    updateCapitalDisplay();
-    log(`BUY 🟢 di $${latest.toFixed(4)}`);
-    sendEmail("BUY Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()}`);
-  }
-  if (lastBuy) {
-    if (latest > highestSinceBuy) highestSinceBuy = latest;
-    const trailingStop = highestSinceBuy * 0.97;
-    if (latest < trailingStop) {
-      const sellValue = currentPositionAmount * latest;
-      currentCapital += sellValue;
-      log(`SELL 🔴 di $${latest.toFixed(4)} | Profit: $${(sellValue - qtyPerTrade).toFixed(2)}`);
-      sendEmail("SELL Signal", `Pair: CAKE/USDT\nHarga: $${latest.toFixed(4)}\nWaktu: ${new Date().toLocaleTimeString()}`);
-      lastBuy = null;
-      currentPositionAmount = 0;
-      updateCapitalDisplay();
-    }
-  }
 }
 
 setInterval(async () => {
