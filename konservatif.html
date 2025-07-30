@@ -221,7 +221,7 @@ function checkStrategy() {
 
 async function fetchInitialData() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=14");
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/market_chart?vs_currency=usd&days=2);
     const data = await res.json();
     const price = parseFloat(data.pair.priceUsd);
     priceData.push(price);
