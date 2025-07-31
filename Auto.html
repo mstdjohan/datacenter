@@ -27,7 +27,16 @@
     let sellThreshold = 99999;
 
     emailjs.init("OGH12a8LlCboHPVz8");
+    let priceHistory = []; // Simpan harga dalam 24 jam terakhir (maks 2880 titik per 30 detik)
+     // Simpan harga ke history
+     priceHistory.push(price);
+     if (priceHistory.length > 2880) priceHistory.shift(); // jaga agar hanya 24 jam data (30 detik × 2880 = 24 jam)
 
+// Hitung high dan low 24 jam manual
+const high = Math.max(...priceHistory);
+const low = Math.min(...priceHistory);
+
+    
     function log(msg) {
       const now = new Date().toLocaleTimeString();
       document.getElementById("log").textContent = `[${now}] ${msg}\n` + document.getElementById("log").textContent;
