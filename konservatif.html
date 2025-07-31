@@ -188,7 +188,8 @@ async function fetchAndEvaluate() {
         updateCapitalDisplay();
         log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)}`);
         sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+        priceData = priceData.slice(-100);  // hanya simpan 100 terakhir
+
       } else if (lossFromBuy > 1.5) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
