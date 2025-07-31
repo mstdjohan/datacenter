@@ -46,8 +46,8 @@
         const data = await res.json();
         const pair = data.pair;
         const price = parseFloat(pair.priceUsd);
-        const high = parseFloat(pair.price24h.high);
-        const low = parseFloat(pair.price24h.low);
+        const high = parseFloat(pair.priceChange.h24.highPrice);
+        const low = parseFloat(pair.priceChange.h24.lowPrice);
 
         if (high !== high24h || low !== low24h) {
           high24h = high;
