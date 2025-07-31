@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading XRP - Konservatif</title>
+  <title>Strategi Trading XRP - Mobile Friendly</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script>
@@ -16,18 +16,24 @@
   </style>
 </head>
 <body>
-<h2>💰 Strategi Trading XRP (Konservatif + RSI/MACD)</h2>
-<div>💵 Harga: <span id="livePrice">Memuat...</span></div>
+
+<h2>📊 Harga XRP & Indikator (Real-time + Historis)</h2>
+<div>💰 <span id="livePrice">Memuat...</span></div>
 <canvas id="chart" width="800" height="400"></canvas>
-<div>💸 Modal: <span id="capital">$1000.00</span></div>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
+
 <div id="log"></div>
 
 <script>
-let priceData = [], timeLabels = [];
-let currentCapital = 1000, qtyPerTrade = 100;
-let lastBuy = null, highestSinceBuy = null, currentPositionAmount = 0;
-
+let priceData = [];
+let timeLabels = [];
+let currentCapital = 1000;
+let qtyPerTrade = 100;
+let lastBuy = null;
+let highestSinceBuy = null;
+let currentPositionAmount = 0;
 const chartCtx = document.getElementById('chart').getContext('2d');
+
 const chart = new Chart(chartCtx, {
   type: 'line',
   data: {
@@ -46,7 +52,8 @@ const chart = new Chart(chartCtx, {
 
 function log(msg) {
   const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}
+` + logDiv.textContent;
 }
 
 function updateCapitalDisplay() {
@@ -56,8 +63,12 @@ function updateCapitalDisplay() {
 function calculateSMA(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+    if (i < period - 1) {
+      result.push(null);
+    } else {
+      const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
   }
   return result;
 }
@@ -65,140 +76,139 @@ function calculateSMA(data, period) {
 function calculateEMA(data, period) {
   const result = [];
   const k = 2 / (period + 1);
-  let ema = data[0];
-  result.push(ema);
+  let emaPrev = data[0];
+  result.push(emaPrev);
   for (let i = 1; i < data.length; i++) {
-    ema = data[i] * k + ema * (1 - k);
+    const ema = data[i] * k + emaPrev * (1 - k);
     result.push(ema);
+    emaPrev = ema;
   }
   return result;
 }
 
-function calculateRSI(data, period = 14) {
-  const rsi = [];
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses -= diff;
-  }
-  gains /= period;
-  losses /= period;
-  rsi[period] = 100 - (100 / (1 + gains / losses));
-
-  for (let i = period + 1; i < data.length; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) {
-      gains = (gains * (period - 1) + diff) / period;
-      losses = (losses * (period - 1)) / period;
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
     } else {
-      gains = (gains * (period - 1)) / period;
-      losses = (losses * (period - 1) - diff) / period;
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
     }
-    rsi[i] = 100 - (100 / (1 + gains / losses));
   }
-  return rsi;
-}
-
-function calculateMACD(data) {
-  const ema12 = calculateEMA(data, 12);
-  const ema26 = calculateEMA(data, 26);
-  const macdLine = ema12.map((val, i) => val - ema26[i]);
-  const signalLine = calculateEMA(macdLine.slice(26), 9);
-  return { macdLine, signalLine };
-}
-
-function checkBuySignal(data30, data7, data1) {
-  const current = data1.at(-1);
-  const low30 = Math.min(...data30);
-  const low7 = Math.min(...data7);
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossUp = macdLine.at(-2) < signalLine.at(-2) && macdLine.at(-1) > signalLine.at(-1);
-
-  return (
-    current <= low7 &&
-    current <= low30 * 1.05 &&
-    rsi30 < 30 && rsi7 < 30 && rsi1 < 30 &&
-    macdCrossUp
-  );
-}
-
-function checkSellSignal(current, highest, buyPrice, data30, data7, data1) {
-  const dropFromPeak = ((highest - current) / highest) * 100;
-  const lossFromBuy = ((buyPrice - current) / buyPrice) * 100;
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossDown = macdLine.at(-2) > signalLine.at(-2) && macdLine.at(-1) < signalLine.at(-1);
-
-  return (
-    (dropFromPeak > 1.5 || lossFromBuy > 1.5) &&
-    rsi30 > 70 && rsi7 > 70 && rsi1 > 70 &&
-    macdCrossDown
-  );
+  return { upper, lower };
 }
 
 function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_mj9du0b", {
-    subject, body, time: new Date().toLocaleString()
-  }).then(() => log(`📧 Email terkirim: ${subject}`))
-    .catch(err => log("⚠️ Gagal kirim email: " + err.text));
+  emailjs.send("service_5hxo1hk", "template_iq87egh", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
+  }).then(() => {
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
+  });
+}
+
+async function fetchInitialData() {
+  const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
+  const data = await res.json();
+  data.prices.forEach(p => {
+    priceData.push(p[1]);
+    const date = new Date(p[0]);
+    timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+  });
+  updateIndicators();
+  chart.update();
+}
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 100);
+  const ema12 = calculateEMA(priceData, 120);
+  const ema26 = calculateEMA(priceData, 260);
+  const bb = calculateBollingerBands(priceData, 200, 2);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
 }
 
 async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x71f5a8f7d448e59b1ede00a19fe59e05d125e742"); // XRP/USDT PancakeSwap v2
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0xf2cf16f2c1b1df92c54c4b04c37063e2fbfe5a36");
     const data = await res.json();
     const price = parseFloat(data.pair.priceUsd);
-    document.getElementById("livePrice").textContent = `$${price.toFixed(4)}`;
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
     const now = new Date().toLocaleTimeString();
     priceData.push(price);
     timeLabels.push(now);
-    if (priceData.length > 1000) { priceData.shift(); timeLabels.shift(); }
-
-    const data30 = priceData.slice(-200);
-    const data7 = priceData.slice(-70);
-    const data1 = priceData.slice(-20);
-
+    if (priceData.length > 100) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
     chart.update();
 
     if (!lastBuy) {
-      if (checkBuySignal(data30, data7, data1)) {
-        lastBuy = price;
-        highestSinceBuy = price;
-        currentPositionAmount = qtyPerTrade / price;
-        currentCapital -= qtyPerTrade;
-        updateCapitalDisplay();
-        log(`💵 BUY XRP di $${price.toFixed(4)}`);
-        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} berdasarkan konfirmasi RSI/MACD 3 timeframe.`);
+      if (priceData.length >= 100) {
+        const lowest = Math.min(...priceData.slice(-100));
+        if (price <= lowest) {
+          lastBuy = price;
+          highestSinceBuy = price;
+          currentPositionAmount = qtyPerTrade / price;
+          currentCapital -= qtyPerTrade;
+          updateCapitalDisplay();
+          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 100 candle)`);
+          sendEmail("BUY Signal", `Beli XRP di harga $${price.toFixed(4)} (terendah 100 candle terakhir)`);
+        } else {
+          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 100 data: $${lowest.toFixed(4)}`);
+        }
       } else {
-        log(`⏳ Menunggu sinyal beli...`);
+        log(`⌛ Mengumpulkan data... (${priceData.length}/100)`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
-      if (checkSellSignal(price, highestSinceBuy, lastBuy, data30, data7, data1)) {
+
+      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
+
+      if (dropFromPeak > 1.0) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
         updateCapitalDisplay();
-        log(`💸 SELL XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} berdasarkan RSI/MACD & trailing.`);
+        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)}`);
+        sendEmail("SELL (Trailing Profit)", `Jual XRP di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+        priceData = priceData.slice(-100);
+      } else if (lossFromBuy > 1.5) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}%`);
+        sendEmail("SELL (Cut Loss)", `Cut loss XRP di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
         lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
       } else {
-        log(`💱 HOLD XRP | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
       }
     }
+
   } catch (err) {
-    log("❌ Gagal ambil data harga!");
+    log("❌ Gagal ambil harga");
+    console.error(err);
   }
 }
 
 (async () => {
-  updateCapitalDisplay();
+  await fetchInitialData();
   setInterval(fetchAndEvaluate, 15000);
 })();
 </script>
