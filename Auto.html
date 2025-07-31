@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Auto Trader CAKE</title>
+</head>
+<body>
+  <h2>Auto Trading CAKE/USDT</h2>
+  <div id="log" style="white-space: pre-wrap; font-family: monospace;"></div>
+
+  <script>
+    let lastBuy = false;
+
+    async function fetchMonthlyData() {
+      try {
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0c7426143c6d46c7627e881ee5c8c5f8fa9d42f5");
+        const data = await res.json();
+        const history = data.pair.priceUsdHistory;
+        return history.map(p => parseFloat(p.price)).filter(p => !isNaN(p));
+      } catch (e) {
+        log("Error fetching monthly data: " + e.message);
+        return [];
+      }
+    }
+
+    function calculateATR(prices, period = 14) {
+      let trs = [];
+      for (let i = 1; i < prices.length; i++) {
+        const high = Math.max(prices[i], prices[i - 1]);
+        const low = Math.min(prices[i], prices[i - 1]);
+        trs.push(high - low);
+      }
+      return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+    }
+
+    async function fetchLivePrice() {
+      try {
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0c7426143c6d46c7627e881ee5c8c5f8fa9d42f5");
+        const data = await res.json();
+        return parseFloat(data.pair.priceUsd);
+      } catch (e) {
+        log("Error fetching live price: " + e.message);
+        return 0;
+      }
+    }
+
+    async function updateDynamicZones() {
+      const prices = await fetchMonthlyData();
+      if (prices.length === 0) return { dynamicBuy: 0, dynamicSell: 9999 };
+
+      const high = Math.max(...prices);
+      const low = Math.min(...prices);
+      const atr = calculateATR(prices);
+
+      const dynamicBuy = low + atr * 0.5;
+      const dynamicSell = high - atr * 0.5;
+
+      return { dynamicBuy, dynamicSell };
+    }
+
+    function log(message) {
+      const el = document.getElementById("log");
+      el.textContent = `[${new Date().toLocaleTimeString()}] ${message}\n` + el.textContent;
+    }
+
+    function buy(price) {
+      lastBuy = price;
+      log("BUY at $" + price.toFixed(4));
+    }
+
+    function sell(price) {
+      log("SELL at $" + price.toFixed(4) + " (profit: $" + (price - lastBuy).toFixed(4) + ")");
+      lastBuy = false;
+    }
+
+    async function runStrategy() {
+      const { dynamicBuy, dynamicSell } = await updateDynamicZones();
+      const price = await fetchLivePrice();
+
+      log(`Live: $${price.toFixed(4)} | Buy if < $${dynamicBuy.toFixed(4)} | Sell if > $${dynamicSell.toFixed(4)}`);
+
+      if (!lastBuy && price < dynamicBuy) {
+        buy(price);
+      } else if (lastBuy && price > dynamicSell) {
+        sell(price);
+      }
+    }
+
+    setInterval(runStrategy, 30000); // every 30 seconds
+    runStrategy();
+  </script>
+</body>
+</html>
