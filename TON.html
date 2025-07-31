@@ -143,7 +143,7 @@ function updateIndicators() {
 
 async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x89e9c1c85a6634ae4a10c10c3f29d19e2b9c92fd");
+    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a");
     const data = await res.json();
     const price = parseFloat(data.pair.priceUsd);
     document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
