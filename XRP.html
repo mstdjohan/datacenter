@@ -52,8 +52,7 @@ const chart = new Chart(chartCtx, {
 
 function log(msg) {
   const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}
-` + logDiv.textContent;
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
 }
 
 function updateCapitalDisplay() {
@@ -63,12 +62,8 @@ function updateCapitalDisplay() {
 function calculateSMA(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      result.push(null);
-    } else {
-      const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
-      result.push(sum / period);
-    }
+    if (i < period - 1) result.push(null);
+    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
   }
   return result;
 }
@@ -117,22 +112,26 @@ function sendEmail(subject, body) {
 }
 
 async function fetchInitialData() {
-  const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
-  const data = await res.json();
-  data.prices.forEach(p => {
-    priceData.push(p[1]);
-    const date = new Date(p[0]);
-    timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-  });
-  updateIndicators();
-  chart.update();
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
+    const data = await res.json();
+    data.prices.forEach(p => {
+      priceData.push(p[1]);
+      const date = new Date(p[0]);
+      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    });
+    updateIndicators();
+    chart.update();
+  } catch (err) {
+    log("❌ Gagal ambil data historis XRP dari CoinGecko");
+  }
 }
 
 function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 100);
-  const ema12 = calculateEMA(priceData, 120);
-  const ema26 = calculateEMA(priceData, 260);
-  const bb = calculateBollingerBands(priceData, 200, 2);
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData);
 
   chart.data.datasets[1].data = ema12;
   chart.data.datasets[2].data = ema26;
@@ -143,9 +142,9 @@ function updateIndicators() {
 
 async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x55d398326f99059fF775485246999027B3197955");
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
     const data = await res.json();
-    const price = parseFloat(data.pair.priceUsd);
+    const price = parseFloat(data.ripple.usd);
     document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
     const now = new Date().toLocaleTimeString();
@@ -159,42 +158,36 @@ async function fetchAndEvaluate() {
     chart.update();
 
     if (!lastBuy) {
-      if (priceData.length >= 100) {
-        const lowest = Math.min(...priceData.slice(-100));
-        if (price <= lowest) {
-          lastBuy = price;
-          highestSinceBuy = price;
-          currentPositionAmount = qtyPerTrade / price;
-          currentCapital -= qtyPerTrade;
-          updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 100 candle)`);
-          sendEmail("BUY Signal", `Beli XRP di harga $${price.toFixed(4)} (terendah 100 candle terakhir)`);
-        } else {
-          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah 100 data: $${lowest.toFixed(4)}`);
-        }
+      const lowest = Math.min(...priceData.slice(-100));
+      if (price <= lowest) {
+        lastBuy = price;
+        highestSinceBuy = price;
+        currentPositionAmount = qtyPerTrade / price;
+        currentCapital -= qtyPerTrade;
+        updateCapitalDisplay();
+        log(`📥 BUY di $${price.toFixed(4)} (terendah 100 data)`);
+        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 100 data)`);
       } else {
-        log(`⌛ Mengumpulkan data... (${priceData.length}/100)`);
+        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
+      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const loss = ((lastBuy - price) / lastBuy) * 100;
 
-      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
-
-      if (dropFromPeak > 1.0) {
+      if (drop > 1.0) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
         updateCapitalDisplay();
-        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)}`);
-        sendEmail("SELL (Trailing Profit)", `Jual XRP di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)}`);
+        sendEmail("SELL (Trailing Profit)", `Jual XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
         lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-        priceData = priceData.slice(-100);
-      } else if (lossFromBuy > 1.5) {
+      } else if (loss > 1.5) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
         updateCapitalDisplay();
-        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}%`);
-        sendEmail("SELL (Cut Loss)", `Cut loss XRP di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
+        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${loss.toFixed(2)}%`);
+        sendEmail("SELL (Cut Loss)", `Cut loss XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
         lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
       } else {
         log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
@@ -202,7 +195,7 @@ async function fetchAndEvaluate() {
     }
 
   } catch (err) {
-    log("❌ Gagal ambil harga");
+    log("❌ Gagal ambil harga XRP live");
     console.error(err);
   }
 }
