@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading ToN - Mobile Friendly</title>
+  <title>Strategi Trading TON - Mobile Friendly</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script>
@@ -18,7 +18,7 @@
 </head>
 <body>
 
-<h2>📊 Harga XRP & Indikator (Real-time + Historis)</h2>
+<h2>📊 Harga TON & Indikator (Real-time + Historis)</h2>
 <div>💰 <span id="livePrice">Memuat...</span></div>
 <canvas id="chart" width="800" height="400"></canvas>
 <div>💼 Modal: <span id="capital">$1000.00</span></div>
@@ -126,7 +126,7 @@ function sendEmail(subject, body) {
 
 async function fetchInitialData() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/toncoin/market_chart?vs_currency=usd&days=30");
     const data = await res.json();
     data.prices.forEach(p => {
       priceData.push(p[1]);
@@ -156,9 +156,9 @@ function updateIndicators() {
 
 async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=toncoin&vs_currencies=usd");
     const data = await res.json();
-    const price = parseFloat(data.ripple.usd);
+    const price = parseFloat(data.toncoin.usd);
     document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
     const now = new Date().toLocaleTimeString();
@@ -222,4 +222,4 @@ async function fetchAndEvaluate() {
 })();
 </script>
 </body>
-</html> 
+</html>
