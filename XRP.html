@@ -18,7 +18,7 @@
   <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
 
   <script>
-    const API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana/INSERT_YOUR_PAIR_ID";
+    const API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana/9xyRr3SufCL3gFfRZr6dN8hSScJreUeXzqThDLfyCFPb"; // GANTI DENGAN PAIR YANG VALID
     const priceData = [];
     const labels = [];
 
@@ -60,11 +60,15 @@
         checkSignals();
       } catch (e) {
         console.error("Gagal ambil data:", e);
+        document.getElementById('signalResult').textContent = "❌ Gagal ambil data. Cek koneksi atau Pair ID!";
       }
     }
 
     function checkSignals() {
-      if (priceData.length < 26) return; // Butuh data cukup
+      if (priceData.length < 26) {
+        document.getElementById('signalResult').textContent = "⏳ Menunggu cukup data...";
+        return;
+      }
 
       const rsi = technicalindicators.RSI.calculate({
         values: priceData,
@@ -80,6 +84,11 @@
         SimpleMASignal: false
       });
 
+      if (rsi.length === 0 || macd.length === 0) {
+        document.getElementById('signalResult').textContent = "⏳ Data indikator belum cukup...";
+        return;
+      }
+
       const lastRSI = rsi[rsi.length - 1];
       const lastMACD = macd[macd.length - 1];
 
@@ -92,6 +101,7 @@
       document.getElementById('signalResult').textContent = signalText;
     }
 
+    fetchPrice(); // Panggil pertama kali
     setInterval(fetchPrice, 30000); // setiap 30 detik
   </script>
 </body>
