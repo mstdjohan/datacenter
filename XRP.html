@@ -4,6 +4,7 @@
   <title>XRP/USDT Signal Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/technicalindicators@3.0.0/dist/browser.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #000; color: #fff; text-align: center; }
     #chart-container { width: 90vw; height: 60vh; margin: auto; }
@@ -11,16 +12,20 @@
   </style>
 </head>
 <body>
-  <h2>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h2>
+  <h2>XRP/USDT - Sinyal RSI + MACD (Persisten + Email)</h2>
   <div id="chart-container">
     <canvas id="priceChart"></canvas>
   </div>
   <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
 
   <script>
+    emailjs.init("aPZx0R9oxUbIQkLEv");
+
     const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
-    const priceData = [];
-    const labels = [];
+    const MAX_LENGTH = 50;
+    const priceData = JSON.parse(localStorage.getItem("priceData")) || [];
+    const labels = JSON.parse(localStorage.getItem("labels")) || [];
+    let lastSignalType = localStorage.getItem("lastSignalType") || "";
 
     const chart = new Chart(document.getElementById('priceChart'), {
       type: 'line',
@@ -51,10 +56,13 @@
         const now = new Date().toLocaleTimeString();
         labels.push(now);
         priceData.push(price);
-        if (labels.length > 50) {
+        if (labels.length > MAX_LENGTH) {
           labels.shift();
           priceData.shift();
         }
+
+        localStorage.setItem("priceData", JSON.stringify(priceData));
+        localStorage.setItem("labels", JSON.stringify(labels));
         chart.update();
 
         checkSignals();
@@ -62,6 +70,17 @@
         console.error("Gagal ambil data:", e);
         document.getElementById('signalResult').textContent = "⚠️ Gagal ambil data!";
       }
+    }
+
+    function sendEmail(signalText) {
+      emailjs.send("service_d48312b", "template_1ktk40q", {
+        name: "XRP/USDT Bot",
+        message: signalText,
+      }).then(() => {
+        console.log("✅ Email terkirim:", signalText);
+      }).catch(err => {
+        console.error("❌ Gagal kirim email:", err);
+      });
     }
 
     function checkSignals() {
@@ -83,17 +102,28 @@
 
       const lastRSI = rsi[rsi.length - 1];
       const lastMACD = macd[macd.length - 1];
-
       let signalText = "⏳ Menunggu sinyal...";
+      let newSignalType = "";
+
       if (lastRSI < 30 && lastMACD.histogram > 0) {
         signalText = "🟢 BUY signal - RSI rendah & MACD positif";
+        newSignalType = "BUY";
       } else if (lastRSI > 70 && lastMACD.histogram < 0) {
         signalText = "🔴 SELL signal - RSI tinggi & MACD negatif";
+        newSignalType = "SELL";
       }
+
       document.getElementById('signalResult').textContent = signalText;
+
+      if (newSignalType && newSignalType !== lastSignalType) {
+        sendEmail(signalText);
+        lastSignalType = newSignalType;
+        localStorage.setItem("lastSignalType", lastSignalType);
+      }
     }
 
-    setInterval(fetchPrice, 30000); // setiap 30 detik
+    setInterval(fetchPrice, 30000);
+    fetchPrice(); // jalankan langsung
   </script>
 </body>
 </html>
