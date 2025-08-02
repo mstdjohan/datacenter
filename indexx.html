@@ -45,13 +45,7 @@ const chart = new Chart(chartCtx, {
     labels: timeLabels,
     datasets: [
       { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-      { label: 'BUY', data: buyMarkers, pointBackgroundColor: 'green', pointRadius: 5, showLine: false },
-      { label: 'SELL', data: sellMarkers, pointBackgroundColor: 'red', pointRadius: 5, showLine: false }
+      
     ]
   },
   options: {
