@@ -2,111 +2,148 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>XRP Buy/Sell Chart</title>
+  <title>XRP Live + History Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    canvas { max-width: 100%; background: #111; }
+    body { background: #111; color: white; font-family: sans-serif; }
+    canvas { background: #222; }
   </style>
 </head>
 <body>
-  <h2 style="color:white">XRP/USDT Buy/Sell Signal</h2>
-  <canvas id="priceChart" width="900" height="400"></canvas>
+  <h2>Grafik XRP/USDT - 5 Hari + Real-time Update</h2>
+  <canvas id="chart" width="1000" height="450"></canvas>
 
   <script>
-    const ctx = document.getElementById('priceChart').getContext('2d');
+    const ctx = document.getElementById('chart').getContext('2d');
     let chart;
+    let fullData = []; // simpan semua data historis + live
 
-    const fetchPrices = async () => {
+    async function fetchHistoricalData() {
+      const now = Math.floor(Date.now() / 1000);
+      const from = now - (60 * 60 * 24 * 5); // 5 hari lalu
+      const url = `https://api.coingecko.com/api/v3/coins/ripple/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
+
       try {
-        const now = Math.floor(Date.now() / 1000);
-        const from = now - 60 * 60 * 2; // 2 jam terakhir
-        const url = `https://api.coingecko.com/api/v3/coins/ripple/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
         const res = await fetch(url);
         const data = await res.json();
-
-        const prices = data.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
-        return prices;
-      } catch (e) {
-        console.error("❌ Gagal fetch data:", e);
+        return data.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
+      } catch (err) {
+        console.error("❌ Gagal ambil data historis:", err);
         return [];
       }
-    };
+    }
 
-    const detectSignals = (prices) => {
-      const buySignals = [];
-      const sellSignals = [];
+    function detectSignals(data) {
+      const buy = [], sell = [];
+      for (let i = 5; i < data.length; i++) {
+        const old = data[i - 5].price;
+        const current = data[i].price;
+        const change = ((current - old) / old) * 100;
+        if (change <= -2) buy.push({ x: data[i].time, y: current });
+        if (change >= 2) sell.push({ x: data[i].time, y: current });
+      }
+      return { buy, sell };
+    }
 
-      for (let i = 5; i < prices.length; i++) {
-        const recent = prices.slice(i - 5, i);
-        const change = ((prices[i].price - recent[0].price) / recent[0].price) * 100;
+    async function fetchLivePrice() {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+        const data = await res.json();
+        return data.ripple.usd;
+      } catch (err) {
+        console.error("❌ Gagal ambil harga live:", err);
+        return null;
+      }
+    }
 
-        if (change <= -2) buySignals.push({ x: prices[i].time, y: prices[i].price });
-        if (change >= 2) sellSignals.push({ x: prices[i].time, y: prices[i].price });
+    function updateChart() {
+      const labels = fullData.map(p => p.time);
+      const prices = fullData.map(p => p.price);
+      const { buy, sell } = detectSignals(fullData);
+
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = prices;
+      chart.data.datasets[1].data = buy;
+      chart.data.datasets[2].data = sell;
+      chart.update();
+    }
+
+    async function addLivePriceToChart() {
+      const price = await fetchLivePrice();
+      if (!price) return;
+
+      const now = new Date();
+      fullData.push({ time: now, price: price });
+
+      // Batas maksimum data (misalnya hanya 7 hari terakhir ~ 168 jam)
+      if (fullData.length > 168) {
+        fullData.shift();
       }
 
-      return { buySignals, sellSignals };
-    };
+      updateChart();
+    }
 
-    const updateChart = async () => {
-      const prices = await fetchPrices();
-      if (prices.length < 6) return;
+    async function start() {
+      const historical = await fetchHistoricalData();
+      fullData = historical;
 
-      const labels = prices.map(p => p.time);
-      const priceData = prices.map(p => p.price);
-      const { buySignals, sellSignals } = detectSignals(prices);
+      const { buy, sell } = detectSignals(fullData);
 
-      const datasets = [
-        {
-          label: 'XRP/USDT',
-          data: priceData,
-          borderColor: 'white',
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: false,
-        },
-        {
-          label: 'Buy',
-          data: buySignals,
-          backgroundColor: 'green',
-          pointStyle: 'triangle',
-          pointRadius: 7,
-          showLine: false
-        },
-        {
-          label: 'Sell',
-          data: sellSignals,
-          backgroundColor: 'red',
-          pointStyle: 'rectRot',
-          pointRadius: 7,
-          showLine: false
-        }
-      ];
-
-      if (chart) {
-        chart.data.labels = labels;
-        chart.data.datasets = datasets;
-        chart.update();
-      } else {
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: { labels, datasets },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: { labels: { color: 'white' } }
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: fullData.map(p => p.time),
+          datasets: [
+            {
+              label: 'Harga XRP',
+              data: fullData.map(p => p.price),
+              borderColor: 'white',
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false
             },
-            scales: {
-              x: { ticks: { color: 'white' } },
-              y: { ticks: { color: 'white' } }
+            {
+              label: 'Buy',
+              data: buy,
+              pointStyle: 'triangle',
+              backgroundColor: 'lime',
+              borderColor: 'lime',
+              pointRadius: 6,
+              showLine: false
+            },
+            {
+              label: 'Sell',
+              data: sell,
+              pointStyle: 'rectRot',
+              backgroundColor: 'red',
+              borderColor: 'red',
+              pointRadius: 6,
+              showLine: false
+            }
+          ]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: 'white' } }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'hour' },
+              ticks: { color: 'white' }
+            },
+            y: {
+              ticks: { color: 'white' }
             }
           }
-        });
-      }
-    };
+        }
+      });
 
-    // Run first and refresh every 30 seconds
-    updateChart();
-    setInterval(updateChart, 30000);
+      // Update setiap 30 detik
+      setInterval(addLivePriceToChart, 30000);
+    }
+
+    start();
   </script>
 </body>
 </html>
