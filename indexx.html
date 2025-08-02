@@ -2,236 +2,111 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading XRP - Dengan Titik BUY/SELL</title>
+  <title>XRP Buy/Sell Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    canvas { max-width: 100%; background: #111; }
   </style>
 </head>
 <body>
+  <h2 style="color:white">XRP/USDT Buy/Sell Signal</h2>
+  <canvas id="priceChart" width="900" height="400"></canvas>
 
-<h2>📊 Harga XRP & Indikator (Real-time + Historis)</h2>
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
-<button id="resetBtn">🔁 Reset Simulasi</button>
-<div id="log"></div>
+  <script>
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    let chart;
 
-<script>
-let priceData = [];
-let timeLabels = [];
-let buyMarkers = [];
-let sellMarkers = [];
+    const fetchPrices = async () => {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const from = now - 60 * 60 * 2; // 2 jam terakhir
+        const url = `https://api.coingecko.com/api/v3/coins/ripple/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
+        const res = await fetch(url);
+        const data = await res.json();
 
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 100;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let highestSinceBuy = localStorage.getItem('highestSinceBuy') ? parseFloat(localStorage.getItem('highestSinceBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-
-const chartCtx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      
-    ]
-  },
-  options: {
-    responsive: true,
-    scales: {
-      x: { display: true },
-      y: { display: true }
-    }
-  }
-});
-
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  localStorage.clear();
-  currentCapital = 1000;
-  lastBuy = null;
-  highestSinceBuy = null;
-  currentPositionAmount = 0;
-  updateCapitalDisplay();
-  buyMarkers.length = 0;
-  sellMarkers.length = 0;
-  chart.update();
-  log("🔄 Simulasi telah direset.");
-});
-
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
-
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
-  }
-  return result;
-}
-
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
-    }
-  }
-  return { upper, lower };
-}
-
-function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
-
-async function fetchInitialData() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
-    const data = await res.json();
-    data.prices.forEach(p => {
-      priceData.push(p[1]);
-      const date = new Date(p[0]);
-      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-    });
-    updateIndicators();
-    chart.update();
-    updateCapitalDisplay();
-  } catch (err) {
-    log("❌ Gagal ambil data historis XRP dari CoinGecko");
-  }
-}
-
-function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
-
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
-
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data.ripple.usd);
-    const now = new Date().toLocaleTimeString();
-
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 100) {
-      priceData.shift();
-      timeLabels.shift();
-    }
-    updateIndicators();
-    chart.update();
-
-    if (!lastBuy) {
-      const lowest = Math.min(...priceData.slice(-100));
-      if (price <= lowest) {
-        lastBuy = price;
-        highestSinceBuy = price;
-        currentPositionAmount = qtyPerTrade / price;
-        currentCapital -= qtyPerTrade;
-        updateCapitalDisplay();
-        localStorage.setItem('capital', currentCapital);
-        localStorage.setItem('lastBuy', lastBuy);
-        localStorage.setItem('highestSinceBuy', highestSinceBuy);
-        localStorage.setItem('positionAmount', currentPositionAmount);
-        buyMarkers.push({ x: now, y: price });
-        log(`📥 BUY di $${price.toFixed(4)} (terendah 100 data)`);
-        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 100 data)`);
-      } else {
-        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
+        const prices = data.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
+        return prices;
+      } catch (e) {
+        console.error("❌ Gagal fetch data:", e);
+        return [];
       }
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const loss = ((lastBuy - price) / lastBuy) * 100;
+    };
 
-      if (drop > 1.0 || loss > 1.5) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        const reason = drop > 1.0 ? "Trailing Profit" : "Cut Loss";
-        sellMarkers.push({ x: now, y: price });
-        log(`📤 SELL (${reason}) di $${price.toFixed(4)}`);
-        sendEmail(`SELL (${reason})`, `Jual XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null;
-        highestSinceBuy = null;
-        currentPositionAmount = 0;
-        localStorage.setItem('capital', currentCapital);
-        localStorage.removeItem('lastBuy');
-        localStorage.removeItem('highestSinceBuy');
-        localStorage.removeItem('positionAmount');
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+    const detectSignals = (prices) => {
+      const buySignals = [];
+      const sellSignals = [];
+
+      for (let i = 5; i < prices.length; i++) {
+        const recent = prices.slice(i - 5, i);
+        const change = ((prices[i].price - recent[0].price) / recent[0].price) * 100;
+
+        if (change <= -2) buySignals.push({ x: prices[i].time, y: prices[i].price });
+        if (change >= 2) sellSignals.push({ x: prices[i].time, y: prices[i].price });
       }
-    }
 
-  } catch (err) {
-    log("❌ Gagal ambil harga XRP live");
-    console.error(err);
-  }
-}
+      return { buySignals, sellSignals };
+    };
 
-(async () => {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 15000);
-})();
-</script>
+    const updateChart = async () => {
+      const prices = await fetchPrices();
+      if (prices.length < 6) return;
+
+      const labels = prices.map(p => p.time);
+      const priceData = prices.map(p => p.price);
+      const { buySignals, sellSignals } = detectSignals(prices);
+
+      const datasets = [
+        {
+          label: 'XRP/USDT',
+          data: priceData,
+          borderColor: 'white',
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: 'Buy',
+          data: buySignals,
+          backgroundColor: 'green',
+          pointStyle: 'triangle',
+          pointRadius: 7,
+          showLine: false
+        },
+        {
+          label: 'Sell',
+          data: sellSignals,
+          backgroundColor: 'red',
+          pointStyle: 'rectRot',
+          pointRadius: 7,
+          showLine: false
+        }
+      ];
+
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets = datasets;
+        chart.update();
+      } else {
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: 'white' } }
+            },
+            scales: {
+              x: { ticks: { color: 'white' } },
+              y: { ticks: { color: 'white' } }
+            }
+          }
+        });
+      }
+    };
+
+    // Run first and refresh every 30 seconds
+    updateChart();
+    setInterval(updateChart, 30000);
+  </script>
 </body>
 </html>
