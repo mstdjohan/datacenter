@@ -18,7 +18,7 @@
   <script>
   emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan public key kamu
 
-  const API_URL = "https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30";
+  const API_URL = "https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days";
   const labels = JSON.parse(localStorage.getItem("labels") || "[]");
   const priceData = JSON.parse(localStorage.getItem("priceData") || "[]");
   const buySignals = JSON.parse(localStorage.getItem("buySignals") || "[]");
@@ -128,5 +128,10 @@
     }).then(res => res.text()).then(console.log).catch(console.error);
   }
 
-  setInterval(fetchPrice, 30000); // 30 detik
-</script>
+      // Mulai
+    trySendPendingLogs();
+    fetchPrice();
+    setInterval(fetchPrice, 30000); // tiap 30 detik
+  </script>
+</body>
+</html>
