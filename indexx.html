@@ -1,4 +1,21 @@
-<script>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>XRP/USDT Signal Chart</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/technicalindicators@3.0.0/dist/browser.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #000; color: #fff; text-align: center; }
+    #chart-container { width: 90vw; height: 60vh; margin: auto; }
+    .signal { font-size: 20px; margin-top: 10px; }
+  </style>
+  </head>
+<body>
+  <h2>XRP/USDT - Sinyal RSI + MACD</h2>
+  <div id="chart-container"><canvas id="priceChart"></canvas></div>
+  <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
+  <script>
   emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan public key kamu
 
   const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
