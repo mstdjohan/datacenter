@@ -1,1 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>XRP/USDT Sinyal RSI + MACD</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <style>
+    body {
+      background: black;
+      color: white;
+      font-family: system-ui, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    canvas {
+      margin-top: 20px;
+      background: #000;
+    }
+    #status {
+      color: orange;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h3>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h3>
+  <canvas id="chart" width="350" height="200"></canvas>
+  <div id="status">⏳ Menunggu sinyal...</div>
+
+  <script>
+    emailjs.init("OGH12a8LlCboHPVz8"); // Public Key EmailJS
+
+    const pair = 'ripple'; // CoinGecko ID untuk XRP
+    const vs_currency = 'usd';
+
+    const priceData = [];
+    const timeData = [];
+    const signalLog = [];
+
+    const chart = new Chart(document.getElementById("chart"), {
+      type: 'line',
+      data: {
+        labels: timeData,
+        datasets: [{
+          label: 'XRP/USDT',
+          data: priceData,
+          borderColor: 'lime',
+          pointStyle: [],
+          pointRadius: 6,
+          pointBackgroundColor: [],
+          tension: 0.3
+        }]
+      },
+      options: {
+        animation: false,
+        scales: {
+          x: { ticks: { color: 'white' } },
+          y: { ticks: { color: 'white' } }
+        },
+        plugins: {
+          legend: { labels: { color: 'white' } }
+        }
+      }
+    });
+
+    function sendEmail(signal, price) {
+      const templateParams = {
+        name: "Sinyal Bot XRP",
+        message: `Sinyal ${signal} pada harga ${price}`
+      };
+
+      emailjs.send("service_5hxo1hk", "template_iq87egh", templateParams)
+        .then(() => console.log("Email sent"))
+        .catch(error => console.error("Email error:", error));
+    }
+
+    async function fetchPrice() {
+      try {
+        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${pair}&vs_currencies=${vs_currency}`);
+        const json = await res.json();
+        const price = json[pair][vs_currency];
+
+        const now = new Date();
+        const time = now.toLocaleTimeString();
+
+        priceData.push(price);
+        timeData.push(time);
+
+        if (priceData.length > 50) {
+          priceData.shift();
+          timeData.shift();
+        }
+
+        // Deteksi sinyal sederhana (MACD & RSI bisa ditambah nanti)
+        let signal = "";
+        if (priceData.length > 2) {
+          const change = price - priceData[priceData.length - 2];
+          if (change > 0.001) {
+            signal = "BUY";
+            chart.data.datasets[0].pointBackgroundColor.push("lime");
+            chart.data.datasets[0].pointStyle.push("circle");
+          } else if (change < -0.001) {
+            signal = "SELL";
+            chart.data.datasets[0].pointBackgroundColor.push("red");
+            chart.data.datasets[0].pointStyle.push("circle");
+          } else {
+            chart.data.datasets[0].pointBackgroundColor.push("white");
+            chart.data.datasets[0].pointStyle.push("rect");
+          }
+        } else {
+          chart.data.datasets[0].pointBackgroundColor.push("white");
+          chart.data.datasets[0].pointStyle.push("rect");
+        }
+
+        chart.update();
+
+        // Log dan Email
+        if (signal) {
+          const log = `${time} - ${signal} @ ${price}`;
+          signalLog.push(log);
+          console.log(log);
+          sendEmail(signal, price);
+          document.getElementById("status").textContent = `📢 ${log}`;
+          saveLogToLocal(log);
+        }
+
+      } catch (err) {
+        console.error("Fetch error:", err);
+        document.getElementById("status").textContent = "⚠️ Gagal ambil data!";
+      }
+    }
+
+    function saveLogToLocal(text) {
+      const blob = new Blob([text + "\n"], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.download = "sinyal-log.txt";
+      link.href = URL.createObjectURL(blob);
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    setInterval(fetchPrice, 30000); // Setiap 30 detik
+  </script>
+</body>
+</html>
 
