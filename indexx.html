@@ -13,8 +13,14 @@
   <h2>Grafik XRP/USDT (1 Hari + Live Update)</h2>
   <canvas id="chart" width="1000" height="450"></canvas>
 
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+
+  <div id="livePrice">Harga Terakhir: ...</div>
+  
   <script>
-    const ctx = document.getElementById('chart').getContext('2d');
+    const ctx = document.getElementById("livePrice").textContent = `Harga Terakhir: $${price}`;
+
     let chart;
     let fullData = [];
 
@@ -31,6 +37,7 @@
         return [];
       }
     }
+
 
     function detectSignals(data) {
       const buy = [], sell = [];
@@ -87,6 +94,8 @@
 
       const { buy, sell } = detectSignals(fullData);
 
+
+      
       chart = new Chart(ctx, {
         type: 'line',
         data: {
