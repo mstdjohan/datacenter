@@ -1,197 +1,78 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>XRP/USDT Signal Chart</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/technicalindicators@3.0.0/dist/browser.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Auto Trading XRP</title>
+  <script src="https://cdn.jsdelivr.net/npm/technicalindicators@3.1.0/dist/browser.js"></script>
   <style>
-    body { font-family: sans-serif; background: #000; color: #fff; text-align: center; }
-    #chart-container { width: 90vw; height: 60vh; margin: auto; }
-    .signal { font-size: 20px; margin-top: 10px; }
+    body { font-family: Arial; background: black; color: white; text-align: center; }
+    .signal { font-size: 2em; font-weight: bold; margin-top: 20px; }
+    .buy { color: lime; }
+    .sell { color: red; }
   </style>
 </head>
 <body>
-  <h2>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h2>
-  <div id="chart-container">
-    <canvas id="priceChart"></canvas>
-  </div>
-  <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
+  <h2>🔁 Auto Trading XRP/USDT</h2>
+  <div id="price">📈 Loading price...</div>
+  <div id="signal" class="signal"></div>
 
   <script>
-    // Validasi awal technicalindicators
-    if (typeof technicalindicators === "undefined") {
-      alert("⚠️ Library technicalindicators gagal dimuat.");
-      throw new Error("technicalindicators is not loaded.");
-    }
+    const priceDiv = document.getElementById('price');
+    const signalDiv = document.getElementById('signal');
 
-    // Init EmailJS
-    try {
-      emailjs.init("aPZx0R9oxUbIQkLEv");
-    } catch (err) {
-      console.error("⚠️ EmailJS init error:", err);
-    }
-
-    const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
-    const priceData = [];
-    const labels = [];
-    let lastSignal = "";
-    let pendingLogs = JSON.parse(localStorage.getItem("pendingLogs")) || [];
-
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'XRP/USDT',
-          data: priceData,
-          borderColor: '#0f0',
-          borderWidth: 2,
-          pointRadius: 2
-        }]
-      },
-      options: {
-        animation: false,
-        responsive: true,
-        scales: {
-          x: { ticks: { color: '#aaa' } },
-          y: { ticks: { color: '#aaa' } }
-        },
-        plugins: {
-          legend: { labels: { color: '#aaa' } }
-        }
-      }
-    });
-
-    function savePendingLogs() {
-      localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
-    }
-
-    function trySendPendingLogs() {
-      const unsent = pendingLogs.filter(log => !log.sent);
-      unsent.forEach(log => {
-        fetch("save_log.php", {
-          method: "POST",
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `type=${log.type}&price=${log.price}&time=${log.time}`
-        })
-        .then(() => {
-          log.sent = true;
-          savePendingLogs();
-          console.log(`✅ Log terkirim ulang: ${log.type} @${log.price}`);
-        })
-        .catch(console.error);
-      });
-    }
-
-    function sendLogToServer(type, price, time) {
-      const log = { type, price, time, sent: false };
-      pendingLogs.push(log);
-      savePendingLogs();
-      trySendPendingLogs();
-    }
-
-    function sendEmail(type, price, time) {
-      const message = `${type} signal pada XRP/USDT\nHarga: $${price}\nWaktu: ${time}`;
-      const templateParams = {
-        name: "XRP Signal Bot",
-        message: message,
-        type: type,
-        time: time,
-        price: price
-      };
-
-      emailjs.send("service_d48312b", "template_1ktk40q", templateParams)
-        .then(() => console.log("📧 Notifikasi email terkirim"))
-        .catch((err) => console.error("❌ Email gagal:", err));
-    }
-
-    function checkSignals() {
-      if (priceData.length < 26) return;
-
+    async function fetchData() {
       try {
-        const rsi = technicalindicators.RSI.calculate({ values: priceData, period: 14 });
-        const macd = technicalindicators.MACD.calculate({
-          values: priceData,
+        const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1&interval=minute");
+        const data = await res.json();
+        const prices = data.prices.map(p => p[1]);
+
+        if (prices.length < 26) {
+          signalDiv.innerText = '📉 Data tidak cukup';
+          return;
+        }
+
+        const closes = prices.slice(-26);
+
+        const inputRSI = {
+          values: closes,
+          period: 14
+        };
+        const inputMACD = {
+          values: closes,
           fastPeriod: 12,
           slowPeriod: 26,
           signalPeriod: 9,
           SimpleMAOscillator: false,
           SimpleMASignal: false
-        });
+        };
 
-        if (!rsi.length || !macd.length) return;
+        const rsi = window.technicalindicators.RSI.calculate(inputRSI).slice(-1)[0];
+        const macd = window.technicalindicators.MACD.calculate(inputMACD).slice(-1)[0];
 
-        const lastRSI = rsi[rsi.length - 1];
-        const lastMACD = macd[macd.length - 1];
-        let signalText = "⏳ Menunggu sinyal...";
-        const currentPrice = priceData[priceData.length - 1];
-        const currentTime = new Date().toLocaleTimeString();
+        const latestPrice = closes[closes.length - 1];
+        priceDiv.innerText = `Live: $${latestPrice.toFixed(4)} | RSI: ${rsi?.toFixed(2)} | MACD: ${macd?.MACD.toFixed(4)} | Signal: ${macd?.signal.toFixed(4)}`;
 
-        if (lastRSI < 30 && lastMACD.histogram > 0 && lastSignal !== "BUY") {
-          signalText = `🟢 BUY signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
-          lastSignal = "BUY";
-          addSignalMarker('🟢');
-          sendLogToServer("BUY", currentPrice, currentTime);
-          sendEmail("BUY", currentPrice, currentTime);
-        } else if (lastRSI > 70 && lastMACD.histogram < 0 && lastSignal !== "SELL") {
-          signalText = `🔴 SELL signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
-          lastSignal = "SELL";
-          addSignalMarker('🔴');
-          sendLogToServer("SELL", currentPrice, currentTime);
-          sendEmail("SELL", currentPrice, currentTime);
+        // Strategi dasar:
+        if (rsi < 30 && macd.MACD > macd.signal) {
+          signalDiv.innerText = "📥 BUY";
+          signalDiv.className = "signal buy";
+        } else if (rsi > 70 && macd.MACD < macd.signal) {
+          signalDiv.innerText = "📤 SELL";
+          signalDiv.className = "signal sell";
+        } else {
+          signalDiv.innerText = "⏳ WAITING";
+          signalDiv.className = "signal";
         }
-
-        document.getElementById('signalResult').textContent = signalText;
       } catch (err) {
-        console.error("⚠️ Error saat menghitung indikator:", err);
-        document.getElementById('signalResult').textContent = "⚠️ Error indikator";
+        priceDiv.innerText = "❌ Gagal ambil data:\n" + err;
+        signalDiv.innerText = "⚠️ Cek koneksi atau coba lagi.";
+        console.error(err);
       }
     }
 
-    function addSignalMarker(symbol) {
-      const latestLabel = labels[labels.length - 1];
-      chart.data.datasets.push({
-        label: symbol,
-        data: [{ x: latestLabel, y: priceData[priceData.length - 1] }],
-        backgroundColor: symbol === '🟢' ? 'lime' : 'red',
-        borderColor: symbol === '🟢' ? 'lime' : 'red',
-        pointRadius: 6,
-        type: 'scatter',
-        showLine: false
-      });
-      chart.update();
-    }
-
-    async function fetchPrice() {
-      try {
-        const res = await fetch(API_URL);
-        if (!res.ok) throw new Error("HTTP error " + res.status);
-        const json = await res.json();
-        const price = parseFloat(json?.ripple?.usd);
-
-        if (!price || isNaN(price)) throw new Error("Invalid price data");
-
-        const now = new Date().toLocaleTimeString();
-        labels.push(now);
-        priceData.push(price);
-        if (labels.length > 100) {
-          labels.shift();
-          priceData.shift();
-        }
-        chart.update();
-        checkSignals();
-      } catch (e) {
-        console.error("❌ Gagal ambil data:", e);
-        document.getElementById('signalResult').textContent = "⚠️ Gagal ambil data!";
-      }
-    }
-
-    // Mulai loop
-    trySendPendingLogs();
-    fetchPrice();
-    setInterval(fetchPrice, 30000);
+    setInterval(fetchData, 15000);
+    fetchData();
   </script>
 </body>
 </html>
