@@ -21,6 +21,14 @@
     const API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana/9xyRr3SufCL3gFfRZr6dN8hSScJreUeXzqThDLfyCFPb"; // GANTI DENGAN PAIR YANG VALID
     const priceData = [];
     const labels = [];
+    
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
+    const data = await res.json();
+    data.prices.forEach(p => {
+      priceData.push(p[1]);
+      const date = new Date(p[0]);
+      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    
 
     const chart = new Chart(document.getElementById('priceChart'), {
       type: 'line',
