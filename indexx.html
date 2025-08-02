@@ -1,150 +1,185 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>XRP/USDT Sinyal RSI + MACD</title>
+  <title>XRP/USDT Signal Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/technicalindicators@3.0.0/dist/browser.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
   <style>
-    body {
-      background: black;
-      color: white;
-      font-family: system-ui, sans-serif;
-      text-align: center;
-      margin: 0;
-      padding: 0;
-    }
-    canvas {
-      margin-top: 20px;
-      background: #000;
-    }
-    #status {
-      color: orange;
-      margin-top: 20px;
-    }
+    body { font-family: sans-serif; background: #000; color: #fff; text-align: center; }
+    #chart-container { width: 90vw; height: 60vh; margin: auto; }
+    .signal { font-size: 20px; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h3>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h3>
-  <canvas id="chart" width="350" height="200"></canvas>
-  <div id="status">⏳ Menunggu sinyal...</div>
+  <h2>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h2>
+  <div id="chart-container">
+    <canvas id="priceChart"></canvas>
+  </div>
+  <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
 
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8"); // Public Key EmailJS
+    emailjs.init("OGH12a8LlCboHPVz8"); // Ganti dengan public key kamu
 
-    const pair = 'ripple'; // CoinGecko ID untuk XRP
-    const vs_currency = 'usd';
-
+    const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
     const priceData = [];
-    const timeData = [];
-    const signalLog = [];
-
-    const chart = new Chart(document.getElementById("chart"), {
+    const labels = [];
+    let lastSignal = "";
+    let pendingLogs = JSON.parse(localStorage.getItem("pendingLogs")) || [];
+const chart = new Chart(document.getElementById('priceChart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'XRP/USDT', data: priceData, borderColor: '#0f0', borderWidth: 2, pointRadius: 1 },
+        { label: 'BUY Signals', data: buySignals, pointBackgroundColor: 'lime', pointRadius: 6, showLine: false, type: 'scatter' },
+        { label: 'SELL Signals', data: sellSignals, pointBackgroundColor: 'red', pointRadius: 6, showLine: false, type: 'scatter' }
+      ]
+    },
+    options: {
+      scales: { x: { ticks: { color: '#aaa' } }, y: { ticks: { color: '#aaa' } } },
+      plugins: { legend: { labels: { color: '#aaa' } } }
+    }
+  });
+    const chart = new Chart(document.getElementById('priceChart'), {
       type: 'line',
       data: {
-        labels: timeData,
+        labels: labels,
         datasets: [{
           label: 'XRP/USDT',
           data: priceData,
-          borderColor: 'lime',
-          pointStyle: [],
-          pointRadius: 6,
-          pointBackgroundColor: [],
-          tension: 0.3
+          borderColor: '#0f0',
+          borderWidth: 2,
+          pointRadius: 2
         }]
       },
       options: {
-        animation: false,
         scales: {
-          x: { ticks: { color: 'white' } },
-          y: { ticks: { color: 'white' } }
-        },
-        plugins: {
-          legend: { labels: { color: 'white' } }
+          x: { ticks: { color: '#aaa' } },
+          y: { ticks: { color: '#aaa' } }
         }
       }
     });
 
-    function sendEmail(signal, price) {
+    function savePendingLogs() {
+      localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
+    }
+
+    function trySendPendingLogs() {
+      const unsent = pendingLogs.filter(log => !log.sent);
+      unsent.forEach(log => {
+        fetch("save_log.php", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `type=${log.type}&price=${log.price}&time=${log.time}`
+        })
+        .then(() => {
+          log.sent = true;
+          savePendingLogs();
+          console.log(`✅ Log terkirim ulang: ${log.type} @${log.price}`);
+        })
+        .catch(console.error);
+      });
+    }
+
+    function sendLogToServer(type, price, time) {
+      const log = { type, price, time, sent: false };
+      pendingLogs.push(log);
+      savePendingLogs();
+      trySendPendingLogs();
+    }
+
+    function sendEmail(type, price, time) {
+      const message = `${type} signal pada XRP/USDT\nHarga: $${price}\nWaktu: ${time}`;
       const templateParams = {
-        name: "Sinyal Bot XRP",
-        message: `Sinyal ${signal} pada harga ${price}`
+        name: "XRP Signal Bot",
+        message: message,
+        type: type,
+        time: time,
+        price: price
       };
 
       emailjs.send("service_5hxo1hk", "template_iq87egh", templateParams)
-        .then(() => console.log("Email sent"))
-        .catch(error => console.error("Email error:", error));
+        .then(() => console.log("📧 Notifikasi email terkirim"))
+        .catch((err) => console.error("❌ Email gagal:", err));
+    }
+
+    function checkSignals() {
+      if (priceData.length < 26) return;
+
+      const rsi = technicalindicators.RSI.calculate({ values: priceData, period: 14 });
+      const macd = technicalindicators.MACD.calculate({
+        values: priceData,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+      });
+
+      const lastRSI = rsi[rsi.length - 1];
+      const lastMACD = macd[macd.length - 1];
+
+      let signalText = "⏳ Menunggu sinyal...";
+      const currentPrice = priceData[priceData.length - 1];
+      const currentTime = new Date().toLocaleTimeString();
+
+      if (lastRSI < 30 && lastMACD.histogram > 0 && lastSignal !== "BUY") {
+        signalText = `🟢 BUY signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
+        lastSignal = "BUY";
+        addSignalMarker('🟢');
+        sendLogToServer("BUY", currentPrice, currentTime);
+        sendEmail("BUY", currentPrice, currentTime);
+      } else if (lastRSI > 70 && lastMACD.histogram < 0 && lastSignal !== "SELL") {
+        signalText = `🔴 SELL signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
+        lastSignal = "SELL";
+        addSignalMarker('🔴');
+        sendLogToServer("SELL", currentPrice, currentTime);
+        sendEmail("SELL", currentPrice, currentTime);
+      }
+
+      document.getElementById('signalResult').textContent = signalText;
+    }
+
+    function addSignalMarker(symbol) {
+      const latestLabel = labels[labels.length - 1];
+      chart.data.datasets.push({
+        label: symbol,
+        data: [{ x: latestLabel, y: priceData[priceData.length - 1] }],
+        backgroundColor: symbol === '🟢' ? 'lime' : 'red',
+        borderColor: symbol === '🟢' ? 'lime' : 'red',
+        pointRadius: 6,
+        type: 'scatter'
+      });
+      chart.update();
     }
 
     async function fetchPrice() {
       try {
-        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${pair}&vs_currencies=${vs_currency}`);
+        const res = await fetch(API_URL);
         const json = await res.json();
-        const price = json[pair][vs_currency];
+        const price = parseFloat(json.ripple.usd);
+        const now = new Date().toLocaleTimeString();
 
-        const now = new Date();
-        const time = now.toLocaleTimeString();
-
+        labels.push(now);
         priceData.push(price);
-        timeData.push(time);
-
-        if (priceData.length > 50) {
+        if (labels.length > 50) {
+          labels.shift();
           priceData.shift();
-          timeData.shift();
         }
-
-        // Deteksi sinyal sederhana (MACD & RSI bisa ditambah nanti)
-        let signal = "";
-        if (priceData.length > 2) {
-          const change = price - priceData[priceData.length - 2];
-          if (change > 0.001) {
-            signal = "BUY";
-            chart.data.datasets[0].pointBackgroundColor.push("lime");
-            chart.data.datasets[0].pointStyle.push("circle");
-          } else if (change < -0.001) {
-            signal = "SELL";
-            chart.data.datasets[0].pointBackgroundColor.push("red");
-            chart.data.datasets[0].pointStyle.push("circle");
-          } else {
-            chart.data.datasets[0].pointBackgroundColor.push("white");
-            chart.data.datasets[0].pointStyle.push("rect");
-          }
-        } else {
-          chart.data.datasets[0].pointBackgroundColor.push("white");
-          chart.data.datasets[0].pointStyle.push("rect");
-        }
-
         chart.update();
 
-        // Log dan Email
-        if (signal) {
-          const log = `${time} - ${signal} @ ${price}`;
-          signalLog.push(log);
-          console.log(log);
-          sendEmail(signal, price);
-          document.getElementById("status").textContent = `📢 ${log}`;
-          saveLogToLocal(log);
-        }
-
-      } catch (err) {
-        console.error("Fetch error:", err);
-        document.getElementById("status").textContent = "⚠️ Gagal ambil data!";
+        checkSignals();
+      } catch (e) {
+        console.error("❌ Gagal ambil data:", e);
+        document.getElementById('signalResult').textContent = "⚠️ Gagal ambil data!";
       }
     }
 
-    function saveLogToLocal(text) {
-      const blob = new Blob([text + "\n"], { type: "text/plain" });
-      const link = document.createElement("a");
-      link.download = "sinyal-log.txt";
-      link.href = URL.createObjectURL(blob);
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    setInterval(fetchPrice, 30000); // Setiap 30 detik
+    // Mulai
+    trySendPendingLogs();
+    fetchPrice();
+    setInterval(fetchPrice, 30000); // tiap 30 detik
   </script>
 </body>
 </html>
-
