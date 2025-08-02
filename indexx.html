@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <title>XRP/USDT - 1 Hari + Real-Time</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+
+  <div id="livePrice">Harga Terakhir: ...</div>
+  
   <style>
     body { background: #111; color: white; font-family: sans-serif; }
     canvas { background: #222; }
@@ -13,11 +18,7 @@
   <h2>Grafik XRP/USDT (1 Hari + Live Update)</h2>
   <canvas id="chart" width="1000" height="450"></canvas>
 
-<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
 
-  <div id="livePrice">Harga Terakhir: ...</div>
-  
   <script>
     const ctx = document.getElementById("livePrice").textContent = `Harga Terakhir: $${price}`;
 
