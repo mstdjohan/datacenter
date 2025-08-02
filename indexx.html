@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>XRP Live + History Chart</title>
+  <title>XRP/USDT - 1 Hari + Real-Time</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { background: #111; color: white; font-family: sans-serif; }
@@ -10,19 +10,18 @@
   </style>
 </head>
 <body>
-  <h2>Grafik XRP/USDT - 5 Hari + Real-time Update</h2>
+  <h2>Grafik XRP/USDT (1 Hari + Live Update)</h2>
   <canvas id="chart" width="1000" height="450"></canvas>
 
   <script>
     const ctx = document.getElementById('chart').getContext('2d');
     let chart;
-    let fullData = []; // simpan semua data historis + live
+    let fullData = [];
 
     async function fetchHistoricalData() {
       const now = Math.floor(Date.now() / 1000);
-      const from = now - (60 * 60 * 24 * 5); // 5 hari lalu
+      const from = now - (60 * 60 * 24); // 1 hari lalu
       const url = `https://api.coingecko.com/api/v3/coins/ripple/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
-
       try {
         const res = await fetch(url);
         const data = await res.json();
@@ -75,10 +74,9 @@
       const now = new Date();
       fullData.push({ time: now, price: price });
 
-      // Batas maksimum data (misalnya hanya 7 hari terakhir ~ 168 jam)
-      if (fullData.length > 168) {
-        fullData.shift();
-      }
+      // Bersihkan data lebih dari 1 hari
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      fullData = fullData.filter(p => p.time >= oneDayAgo);
 
       updateChart();
     }
@@ -129,7 +127,7 @@
           scales: {
             x: {
               type: 'time',
-              time: { unit: 'hour' },
+              time: { unit: 'hour', tooltipFormat: 'HH:mm' },
               ticks: { color: 'white' }
             },
             y: {
@@ -139,7 +137,7 @@
         }
       });
 
-      // Update setiap 30 detik
+      // Update otomatis setiap 30 detik
       setInterval(addLivePriceToChart, 30000);
     }
 
