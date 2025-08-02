@@ -11,24 +11,16 @@
   </style>
 </head>
 <body>
-  <h2>XRP/USDT - Sinyal RSI + MACD</h2>
+  <h2>XRP/USDT - Sinyal RSI + MACD (via CoinGecko)</h2>
   <div id="chart-container">
     <canvas id="priceChart"></canvas>
   </div>
   <div class="signal" id="signalResult">⏳ Menunggu sinyal...</div>
 
   <script>
-    const API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana/9xyRr3SufCL3gFfRZr6dN8hSScJreUeXzqThDLfyCFPb"; // GANTI DENGAN PAIR YANG VALID
+    const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
     const priceData = [];
     const labels = [];
-    
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
-    const data = await res.json();
-    data.prices.forEach(p => {
-      priceData.push(p[1]);
-      const date = new Date(p[0]);
-      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-    
 
     const chart = new Chart(document.getElementById('priceChart'), {
       type: 'line',
@@ -54,7 +46,7 @@
       try {
         const res = await fetch(API_URL);
         const json = await res.json();
-        const price = parseFloat(json.pair.priceUsd);
+        const price = parseFloat(json.ripple.usd);
 
         const now = new Date().toLocaleTimeString();
         labels.push(now);
@@ -68,15 +60,12 @@
         checkSignals();
       } catch (e) {
         console.error("Gagal ambil data:", e);
-        document.getElementById('signalResult').textContent = "❌ Gagal ambil data. Cek koneksi atau Pair ID!";
+        document.getElementById('signalResult').textContent = "⚠️ Gagal ambil data!";
       }
     }
 
     function checkSignals() {
-      if (priceData.length < 26) {
-        document.getElementById('signalResult').textContent = "⏳ Menunggu cukup data...";
-        return;
-      }
+      if (priceData.length < 26) return;
 
       const rsi = technicalindicators.RSI.calculate({
         values: priceData,
@@ -92,11 +81,6 @@
         SimpleMASignal: false
       });
 
-      if (rsi.length === 0 || macd.length === 0) {
-        document.getElementById('signalResult').textContent = "⏳ Data indikator belum cukup...";
-        return;
-      }
-
       const lastRSI = rsi[rsi.length - 1];
       const lastMACD = macd[macd.length - 1];
 
@@ -109,7 +93,6 @@
       document.getElementById('signalResult').textContent = signalText;
     }
 
-    fetchPrice(); // Panggil pertama kali
     setInterval(fetchPrice, 30000); // setiap 30 detik
   </script>
 </body>
