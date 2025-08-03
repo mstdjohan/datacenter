@@ -7,7 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
+    emailjs.init("aPZx0R9oxUbIQkLEv");
   </script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
@@ -143,7 +143,7 @@ function checkSellSignal(current, highest, buyPrice, data30, data7, data1) {
 }
 
 function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_mj9du0b", {
+  emailjs.send("service_d48312b", "template_1ktk40q", {
     subject, body, time: new Date().toLocaleString()
   }).then(() => log(`📧 Email terkirim: ${subject}`))
     .catch(err => log("⚠️ Gagal kirim email: " + err.text));
@@ -204,3 +204,4 @@ async function fetchAndEvaluate() {
 </script>
 </body>
 </html>
+
