@@ -143,8 +143,8 @@ async function fetchInitialData() {
 
 function updateIndicators() {
   const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
+  'const ema12 = calculateEMA(priceData, 12);
+  'const ema26 = calculateEMA(priceData, 26);
   const bb = calculateBollingerBands(priceData);
 
   chart.data.datasets[1].data = ema12;
