@@ -72,7 +72,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   log("🔄 Simulasi telah direset.");
 });
 
-'function calculateSMA(data, period) {
+function calculateSMA(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
     if (i < period - 1) result.push(null);
@@ -81,7 +81,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   return result;
 }
 
-'function calculateEMA(data, period) {
+function calculateEMA(data, period) {
   const result = [];
   const k = 2 / (period + 1);
   let emaPrev = data[0];
@@ -94,7 +94,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   return result;
 }
 
-'function calculateBollingerBands(data, period = 20, multiplier = 2) {
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
   const sma = calculateSMA(data, period);
   const upper = [], lower = [];
   for (let i = 0; i < data.length; i++) {
@@ -150,8 +150,8 @@ function updateIndicators() {
   chart.data.datasets[1].data = ema12;
   chart.data.datasets[2].data = ema26;
   chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
+  'chart.data.datasets[4].data = bb.lower;
+  'chart.data.datasets[5].data = sma10;
 }
 
 async function fetchAndEvaluate() {
