@@ -43,9 +43,9 @@ const chart = new Chart(chartCtx, {
     labels: timeLabels,
     datasets: [
       { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      '{ label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      '{ label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      '{ label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
       { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
       { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
     ]
@@ -72,7 +72,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   log("🔄 Simulasi telah direset.");
 });
 
-function calculateSMA(data, period) {
+'function calculateSMA(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
     if (i < period - 1) result.push(null);
@@ -81,7 +81,7 @@ function calculateSMA(data, period) {
   return result;
 }
 
-function calculateEMA(data, period) {
+'function calculateEMA(data, period) {
   const result = [];
   const k = 2 / (period + 1);
   let emaPrev = data[0];
@@ -94,7 +94,7 @@ function calculateEMA(data, period) {
   return result;
 }
 
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
+'function calculateBollingerBands(data, period = 20, multiplier = 2) {
   const sma = calculateSMA(data, period);
   const upper = [], lower = [];
   for (let i = 0; i < data.length; i++) {
