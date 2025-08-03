@@ -164,7 +164,7 @@ async function fetchAndEvaluate() {
     const now = new Date().toLocaleTimeString();
     priceData.push(price);
     timeLabels.push(now);
-    if (priceData.length > 100) {
+    if (priceData.length > 25) {
       priceData.shift();
       timeLabels.shift();
     }
@@ -172,7 +172,7 @@ async function fetchAndEvaluate() {
     chart.update();
 
     if (!lastBuy) {
-      const lowest = Math.min(...priceData.slice(-100));
+      const lowest = Math.min(...priceData.slice(-25));
       if (price <= lowest) {
         lastBuy = price;
         highestSinceBuy = price;
@@ -183,8 +183,8 @@ async function fetchAndEvaluate() {
         localStorage.setItem('lastBuy', lastBuy);
         localStorage.setItem('highestSinceBuy', highestSinceBuy);
         localStorage.setItem('positionAmount', currentPositionAmount);
-        log(`📥 BUY di $${price.toFixed(4)} (terendah 100 data)`);
-        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 100 data)`);
+        log(`📥 BUY di $${price.toFixed(4)} (terendah 25 data)`);
+        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 25 data)`);
       } else {
         log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
       }
