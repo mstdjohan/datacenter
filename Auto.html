@@ -31,7 +31,7 @@
 let priceData = [];
 let timeLabels = [];
 let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 100;
+let qtyPerTrade = 1000;
 let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
 let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
 const chartCtx = document.getElementById('chart').getContext('2d');
@@ -92,7 +92,7 @@ function calculateEMA(data, period) {
   return result;
 }
 
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
+function calculateBollingerBands(data, period = 200, multiplier = 20) {
   const sma = calculateSMA(data, period);
   const upper = [], lower = [];
   for (let i = 0; i < data.length; i++) {
@@ -124,7 +124,7 @@ function sendEmail(subject, body) {
 
 async function fetchInitialData() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=2");
     const data = await res.json();
     data.prices.forEach(p => {
       priceData.push(p[1]);
