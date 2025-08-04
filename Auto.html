@@ -1,96 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Auto Trading CAKE/USDT</title>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Live TON/USDT Auto Trading</title>
   <style>
-    body { font-family: Arial; background: #111; color: #0f0; padding: 20px; }
-    h1 { color: #fff; }
-    #log { white-space: pre-wrap; background: #000; padding: 10px; border: 1px solid #0f0; max-height: 400px; overflow-y: auto; }
+    body { background:#000; color:#0f0; font-family:monospace; padding:20px; }
+    h1 { color:#fff; }
+    #price { font-size: 24px; margin-bottom: 10px; }
+    .log { font-size:14px; color:#ccc; max-height:300px; overflow:auto; }
+    .buy { color: #0f0; }
+    .sell { color: #f00; }
   </style>
 </head>
 <body>
-  <h1>Auto Trading CAKE/USDT</h1>
-  <div id="status">Loading...</div>
-  <div id="log"></div>
+  <h1>TON/USDT Auto Trading</h1>
+  <div id="price">Loading...</div>
+  <div id="wallet">💰 Modal: $1000</div>
+  <div class="log" id="log"></div>
 
   <script>
-    const apiUrl = 'https://api.dexscreener.com/latest/dex/pairs/bsc/0xA39af17CE4a8Eb807e076805DA1E2B8EA7D0755b';
-    let capital = 1000;
-    let qty = 0;
-    let entryPrice = null;
-    let high24h = 0;
-    let low24h = 99999;
-    let buyThreshold = 0;
-    let sellThreshold = 99999;
+    let lastPrice = null;
+    let balance = parseFloat(localStorage.getItem("balance")) || 1000;
+    let lastSignal = localStorage.getItem("lastSignal") || "";
 
-    emailjs.init("OGH12a8LlCboHPVz8");
-    let priceHistory = []; // Simpan harga dalam 24 jam terakhir (maks 2880 titik per 30 detik)
-     // Simpan harga ke history
-     priceHistory.push(price);
-     if (priceHistory.length > 2880) priceHistory.shift(); // jaga agar hanya 24 jam data (30 detik × 2880 = 24 jam)
+    document.getElementById("wallet").textContent = `💰 Modal: $${balance.toFixed(2)}`;
 
-// Hitung high dan low 24 jam manual
-const high = Math.max(...priceHistory);
-const low = Math.min(...priceHistory);
-
-    
-    function log(msg) {
-      const now = new Date().toLocaleTimeString();
-      document.getElementById("log").textContent = `[${now}] ${msg}\n` + document.getElementById("log").textContent;
-    }
-
-    function sendEmail(subject, message) {
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        subject,
-        message,
-      }).then(() => log("Email terkirim."));
-    }
-
-    async function fetchPrice() {
+    async function fetchTONPrice() {
+      const url = "https://api.dexscreener.com/latest/dex/search/?q=TON";
       try {
-        const res = await fetch(apiUrl);
+        const res = await fetch(url);
         const data = await res.json();
-        const pair = data.pair;
-        const price = parseFloat(pair.priceUsd);
-        const high = parseFloat(pair.priceChange.h24.highPrice || "0");
-        const low = parseFloat(pair.priceChange.h24.lowPrice || "0");
 
+        const ton = data.pairs.find(p => p.pairName === "TON/USDT");
+        if (!ton || !ton.priceUsd) throw new Error("Pair TON/USDT tidak ditemukan.");
 
-        if (high !== high24h || low !== low24h) {
-          high24h = high;
-          low24h = low;
-          const range = high - low;
-          buyThreshold = low + range * 0.15;
-          sellThreshold = high - range * 0.15;
+        const price = parseFloat(ton.priceUsd);
+        const priceText = `$${price.toFixed(4)}`;
+        document.getElementById("price").textContent = `Live Price: ${priceText}`;
+
+        if (lastPrice !== null) {
+          const diff = price - lastPrice;
+
+          if (diff <= -0.01 && lastSignal !== "BUY") {
+            // Simulasi BUY
+            balance += 5;
+            lastSignal = "BUY";
+            log("🟢 BUY at " + priceText, "buy");
+          } else if (diff >= 0.01 && lastSignal !== "SELL") {
+            // Simulasi SELL
+            balance -= 5;
+            lastSignal = "SELL";
+            log("🔴 SELL at " + priceText, "sell");
+          }
+
+          localStorage.setItem("lastSignal", lastSignal);
+          localStorage.setItem("balance", balance.toFixed(2));
+          document.getElementById("wallet").textContent = `💰 Modal: $${balance.toFixed(2)}`;
         }
 
-        document.getElementById("status").textContent = `Live: $${price.toFixed(4)} | Buy if < $${buyThreshold.toFixed(4)} | Sell if > $${sellThreshold.toFixed(4)} | Capital: $${capital.toFixed(2)}`;
-
-        // Trading logic
-        if (!entryPrice && price < buyThreshold) {
-          entryPrice = price;
-          qty = capital / price;
-          capital = 0;
-          log(`BUY at $${price.toFixed(4)}`);
-          sendEmail("BUY Signal", `BUY at $${price.toFixed(4)}\nQty: ${qty}`);
-        } else if (entryPrice && price > sellThreshold) {
-          const sellValue = qty * price;
-          capital = sellValue;
-          log(`SELL at $${price.toFixed(4)} | Profit: $${(sellValue - entryPrice * qty).toFixed(2)}`);
-          sendEmail("SELL Signal", `SELL at $${price.toFixed(4)}\nProfit: $${(sellValue - entryPrice * qty).toFixed(2)}`);
-          qty = 0;
-          entryPrice = null;
-        }
+        lastPrice = price;
       } catch (e) {
-        log("Error fetching price: " + e.message);
+        document.getElementById("price").textContent = "❌ Gagal ambil data.";
+        log("❌ Error: " + e.message, "sell");
       }
     }
 
-    setInterval(fetchPrice, 30000); // every 30 seconds
-    fetchPrice();
+    function log(text, cls) {
+      const el = document.getElementById("log");
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement("div");
+      div.innerHTML = `[${time}] <span class="${cls}">${text}</span>`;
+      el.prepend(div);
+    }
+
+    fetchTONPrice();
+    setInterval(fetchTONPrice, 30000);
   </script>
 </body>
 </html>
