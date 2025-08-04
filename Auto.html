@@ -1,67 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>TON/USDT Auto Trading</title>
+  <meta charset="UTF-8">
+  <title>CAKE Auto Trading</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
   <style>
-    body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
-    #price { font-size: 1.5em; margin: 10px 0; }
-    #log { white-space: pre-line; background: #222; padding: 10px; max-height: 200px; overflow-y: auto; }
-    iframe { width: 100%; height: 400px; border: none; margin-top: 20px; }
+    body { font-family: Arial; text-align: center; background: #111; color: #eee; }
+    canvas { max-width: 90vw; margin-top: 20px; }
+    #log { text-align: left; margin: 20px auto; max-width: 600px; background: #222; padding: 10px; border-radius: 10px; }
   </style>
 </head>
 <body>
-  <h1>TON/USDT Auto Trading</h1>
-  <div>💰 Modal: <span id="capital">$1000.00</span></div>
-  <div id="price">Harga: $--</div>
-  <div id="log">Log:</div>
-
-  <!-- TradingView Chart -->
-  <iframe src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:TONUSDT&interval=15&hidesidetoolbar=1&theme=dark&style=1&locale=id"
-    allowtransparency="true" scrolling="no"></iframe>
+  <h2>Real-Time CAKE Auto Trading</h2>
+  <p id="price">Loading...</p>
+  <canvas id="chart" height="120"></canvas>
+  <div id="log"><b>Log:</b><br></div>
 
   <script>
-    const logDiv = document.getElementById('log');
-    const priceDiv = document.getElementById('price');
-    let capital = 1000;
-    let lastPrice = null;
-    let boughtAt = null;
+    emailjs.init("OGH12a8LlCboHPVz8");
+
+    const chartCtx = document.getElementById('chart').getContext('2d');
+    const prices = [];
+    const labels = [];
+    const buyPoints = [];
+    const sellPoints = [];
+
+    let chart = new Chart(chartCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'CAKE/USDT',
+          data: prices,
+          borderColor: 'lime',
+          tension: 0.3
+        },
+        {
+          label: 'BUY',
+          data: buyPoints,
+          pointBackgroundColor: 'green',
+          showLine: false,
+          pointRadius: 6,
+          type: 'scatter'
+        },
+        {
+          label: 'SELL',
+          data: sellPoints,
+          pointBackgroundColor: 'red',
+          showLine: false,
+          pointRadius: 6,
+          type: 'scatter'
+        }]
+      },
+      options: {
+        animation: false,
+        plugins: { legend: { labels: { color: '#fff' } } },
+        scales: {
+          x: { ticks: { color: '#ccc' } },
+          y: { ticks: { color: '#ccc' } }
+        }
+      }
+    });
+
+    let capital = localStorage.getItem("capital") || 1000;
+    let buyPrice = parseFloat(localStorage.getItem("buyPrice") || 0);
+    let positionOpen = localStorage.getItem("positionOpen") === "true";
+
+    function sendEmail(subject, message) {
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+        subject: subject,
+        message: message
+      });
+    }
 
     function log(msg) {
       const time = new Date().toLocaleTimeString();
-      logDiv.textContent = `[${time}] ${msg}\n` + logDiv.textContent;
+      document.getElementById("log").innerHTML += `[${time}] ${msg}<br>`;
     }
 
     async function fetchPrice() {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=toncoin&vs_currencies=usd');
-        const data = await res.json();
-        const price = data.toncoin.usd;
-        priceDiv.textContent = `Harga: $${price.toFixed(4)}`;
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0xA39af17CE4a8Eb807e076805DA1E2B8EA7D0755b");
+        const json = await res.json();
+        const price = parseFloat(json.pair.priceUsd);
+        const now = new Date().toLocaleTimeString();
 
-        if (!lastPrice) lastPrice = price;
+        document.getElementById("price").innerText = `Live Price: $${price.toFixed(4)} | Capital: $${parseFloat(capital).toFixed(2)}`;
 
-        // Logika beli/jual sederhana
-        if (!boughtAt && price < lastPrice * 0.98) {
-          boughtAt = price;
-          log(`✅ BUY at $${price.toFixed(4)}`);
-        } else if (boughtAt && price > boughtAt * 1.02) {
-          const profit = price - boughtAt;
-          capital += profit;
-          boughtAt = null;
-          log(`🟩 SELL at $${price.toFixed(4)} | 💰 Profit: $${profit.toFixed(2)} | Modal: $${capital.toFixed(2)}`);
-          document.getElementById('capital').textContent = `$${capital.toFixed(2)}`;
+        // Update chart
+        prices.push(price);
+        labels.push(now);
+        if (prices.length > 50) {
+          prices.shift(); labels.shift();
+        }
+        chart.update();
+
+        // Trading Logic
+        if (!positionOpen && price >= 2.63) {
+          // BUY
+          buyPrice = price;
+          positionOpen = true;
+          localStorage.setItem("buyPrice", buyPrice);
+          localStorage.setItem("positionOpen", "true");
+          buyPoints.push({x: now, y: price});
+          sellPoints.push(null);
+          sendEmail("BUY ALERT - CAKE", `BUY at $${price}`);
+          log(`✅ BUY at $${price}`);
+        } else if (positionOpen) {
+          const profitPercent = ((price - buyPrice) / buyPrice) * 100;
+          if (profitPercent >= 2 || profitPercent <= -2) {
+            // SELL
+            const pnl = capital * profitPercent / 100;
+            capital = parseFloat(capital) + pnl;
+            positionOpen = false;
+            localStorage.setItem("capital", capital);
+            localStorage.setItem("positionOpen", "false");
+            sellPoints.push({x: now, y: price});
+            buyPoints.push(null);
+            sendEmail("SELL ALERT - CAKE", `SELL at $${price} | PnL: $${pnl.toFixed(2)}`);
+            log(`🔴 SELL at $${price} | PnL: $${pnl.toFixed(2)}`);
+          } else {
+            buyPoints.push(null);
+            sellPoints.push(null);
+          }
+        } else {
+          buyPoints.push(null);
+          sellPoints.push(null);
         }
 
-        lastPrice = price;
-      } catch (e) {
-        log('❌ Gagal ambil data harga TON dari CoinGecko');
+        chart.update();
+      } catch (err) {
+        log("❌ Error fetching price");
       }
     }
 
-    // Fetch setiap 30 detik
     fetchPrice();
-    setInterval(fetchPrice, 30000);
+    setInterval(fetchPrice, 30000); // 30 detik
   </script>
 </body>
 </html>
