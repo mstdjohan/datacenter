@@ -23,7 +23,7 @@
   <div id="log"></div>
 
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8"); // Public Key
+    emailjs.init("aPZx0R9oxUbIQkLEv"); // Public Key
 
     const chartEl = document.getElementById("chart");
     const ctx = chartEl.getContext("2d");
@@ -61,7 +61,7 @@
 
     function sendEmail(subject, body) {
       if (localStorage.getItem("lastEmail") === subject) return;
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+      emailjs.send("service_d48312b", "template_1ktk40q", {
         subject,
         body,
         time: new Date().toLocaleString()
