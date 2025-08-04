@@ -1,138 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Auto Trading CAKE/USDT</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Trade CAKE/USDT</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 10px; }
-    #chart { height: 300px; width: 100%; margin-top: 20px; background: white; border: 1px solid #ccc; }
-    #log { background: #fff; border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; margin-top: 20px; font-size: 12px; }
-    #modalInfo { margin-top: 10px; font-weight: bold; }
-    .buy { color: green; }
-    .sell { color: red; }
+    body { font-family: sans-serif; margin: 20px; background: #f4f4f4; }
+    canvas { background: #fff; border: 1px solid #ccc; border-radius: 10px; }
+    #log { margin-top: 20px; font-size: 14px; white-space: pre-line; background: #fff; padding: 10px; border-radius: 5px; }
+    #controls { margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h2>📈 CAKE/USDT Auto Trading System</h2>
-  <canvas id="chart"></canvas>
-  <div id="modalInfo"></div>
-  <button onclick="resetModal()">🔄 Reset Modal</button>
+  <h2>Auto Trade CAKE/USDT</h2>
+  <canvas id="chart" width="600" height="300"></canvas>
+  <div id="controls">
+    <button onclick="resetModal()">🔄 Reset Modal</button>
+    <div>💰 Modal: <span id="modal"></span> USDT</div>
+  </div>
   <div id="log"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    let prices = [], labels = [], trades = [], modal = parseFloat(localStorage.getItem("modal")) || 1000;
-    let buyPrice = null;
-    const ctx = document.getElementById('chart').getContext('2d');
+    emailjs.init("OGH12a8LlCboHPVz8"); // Public Key
 
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'CAKE/USDT Price',
-          data: prices,
-          borderColor: '#007bff',
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: false,
-        }]
-      },
-      options: {
-        animation: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { beginAtZero: false }
-        }
-      }
-    });
+    const chartEl = document.getElementById("chart");
+    const ctx = chartEl.getContext("2d");
+    let priceData = [];
+    let labels = [];
+    let modal = parseFloat(localStorage.getItem("modal")) || 1000;
+    let lastSignal = localStorage.getItem("lastSignal") || "";
+    let chart;
 
-    function log(msg) {
-      const logBox = document.getElementById("log");
-      logBox.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>` + logBox.innerHTML;
-    }
+    document.getElementById("modal").textContent = modal.toFixed(2);
+
+    const log = (msg) => {
+      const logDiv = document.getElementById("log");
+      logDiv.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    };
 
     function resetModal() {
-      localStorage.setItem("modal", 1000);
       modal = 1000;
-      document.getElementById("modalInfo").textContent = `💰 Modal: $${modal.toFixed(2)}`;
-      log("Modal di-reset ke $1000");
-    }
-
-    function calculateRSI(closes, period = 14) {
-      if (closes.length < period + 1) return null;
-      let gains = 0, losses = 0;
-      for (let i = 1; i <= period; i++) {
-        const change = closes[closes.length - i] - closes[closes.length - i - 1];
-        if (change > 0) gains += change;
-        else losses -= change;
-      }
-      const avgGain = gains / period;
-      const avgLoss = losses / period;
-      const rs = avgGain / avgLoss;
-      return 100 - (100 / (1 + rs));
+      localStorage.setItem("modal", modal);
+      document.getElementById("modal").textContent = modal.toFixed(2);
+      log("🔁 Modal direset ke $1000");
     }
 
     async function fetchPrice() {
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=pancakeswap-token&vs_currencies=usd");
-        const data = await res.json();
-        const price = data["pancakeswap-token"].usd;
-        const now = new Date().toLocaleTimeString();
-        if (prices.length >= 100) {
-          prices.shift();
-          labels.shift();
-        }
-        prices.push(price);
-        labels.push(now);
-        chart.update();
-
-        const rsi = calculateRSI(prices);
-        if (rsi !== null) {
-          const low = Math.min(...prices.slice(-10));
-          const high = Math.max(...prices.slice(-10));
-          if (price <= low && rsi < 30 && !buyPrice) {
-            buyPrice = price;
-            trades.push({ type: "buy", price, time: now });
-            localStorage.setItem("modal", modal);
-            chart.data.datasets.push({
-              type: 'scatter',
-              label: 'BUY',
-              data: [{ x: now, y: price }],
-              pointBackgroundColor: 'green',
-              pointRadius: 5,
-              showLine: false,
-            });
-            log(`🟢 BUY @ $${price.toFixed(4)} (RSI: ${rsi.toFixed(1)})`);
-          } else if (price >= high && rsi > 70 && buyPrice) {
-            const profit = (price - buyPrice) / buyPrice * modal;
-            modal += profit;
-            buyPrice = null;
-            trades.push({ type: "sell", price, time: now });
-            localStorage.setItem("modal", modal);
-            chart.data.datasets.push({
-              type: 'scatter',
-              label: 'SELL',
-              data: [{ x: now, y: price }],
-              pointBackgroundColor: 'red',
-              pointRadius: 5,
-              showLine: false,
-            });
-            log(`🔴 SELL @ $${price.toFixed(4)} | 💰 Modal: $${modal.toFixed(2)} (RSI: ${rsi.toFixed(1)})`);
-          }
-        }
-
-        document.getElementById("modalInfo").textContent = `💰 Modal: $${modal.toFixed(2)} | RSI: ${rsi ? rsi.toFixed(1) : "-"}`;
-      } catch (err) {
-        log("⚠️ Gagal ambil harga: " + err.message);
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0xA39af17CE4a8Eb807e076805DA1E2B8EA7D0755b");
+        const json = await res.json();
+        return parseFloat(json.pair.priceUsd);
+      } catch {
+        log("⚠️ Gagal ambil harga.");
+        return null;
       }
     }
 
-    setInterval(fetchPrice, 30000);
-    fetchPrice();
-    resetModal();
+    function sendEmail(subject, body) {
+      if (localStorage.getItem("lastEmail") === subject) return;
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+        subject,
+        body,
+        time: new Date().toLocaleString()
+      }).then(() => log("📧 Email: " + subject));
+      localStorage.setItem("lastEmail", subject);
+    }
+
+    function updateChart(price) {
+      labels.push(new Date().toLocaleTimeString());
+      priceData.push(price);
+      if (priceData.length > 20) {
+        labels.shift();
+        priceData.shift();
+      }
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = priceData;
+      chart.update();
+    }
+
+    function checkSignal() {
+      const n = priceData.length;
+      if (n < 5) return;
+
+      const last = priceData[n - 1];
+      const prev1 = priceData[n - 2];
+      const prev2 = priceData[n - 3];
+      const prev3 = priceData[n - 4];
+
+      const drop = prev3 > prev2 && prev2 > prev1 && last > prev1;
+      const rally = last < prev1;
+
+      if (drop && lastSignal !== "buy") {
+        lastSignal = "buy";
+        modal += 50;
+        localStorage.setItem("modal", modal);
+        localStorage.setItem("lastSignal", lastSignal);
+        document.getElementById("modal").textContent = modal.toFixed(2);
+        sendEmail("BUY Signal", `Harga: ${last}`);
+        log("🟩 BUY @ $" + last.toFixed(4));
+        chart.data.datasets[1].data.push({ x: labels[n - 1], y: last });
+      } else if (rally && lastSignal === "buy") {
+        lastSignal = "sell";
+        modal += 80;
+        localStorage.setItem("modal", modal);
+        localStorage.setItem("lastSignal", lastSignal);
+        document.getElementById("modal").textContent = modal.toFixed(2);
+        sendEmail("SELL Signal", `Harga: ${last}`);
+        log("🟥 SELL @ $" + last.toFixed(4));
+        chart.data.datasets[2].data.push({ x: labels[n - 1], y: last });
+      }
+    }
+
+    function initChart() {
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "CAKE/USDT",
+              data: priceData,
+              borderColor: "#4444dd",
+              fill: false
+            },
+            {
+              label: "Buy",
+              data: [],
+              backgroundColor: "green",
+              pointRadius: 5,
+              showLine: false
+            },
+            {
+              label: "Sell",
+              data: [],
+              backgroundColor: "red",
+              pointRadius: 5,
+              showLine: false
+            }
+          ]
+        },
+        options: {
+          responsive: false,
+          scales: {
+            x: { display: false },
+            y: { beginAtZero: false }
+          }
+        }
+      });
+    }
+
+    async function loop() {
+      const price = await fetchPrice();
+      if (price) {
+        updateChart(price);
+        checkSignal();
+      }
+      setTimeout(loop, 30000);
+    }
+
+    initChart();
+    loop();
   </script>
 </body>
 </html>
