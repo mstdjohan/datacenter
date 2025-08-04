@@ -26,14 +26,16 @@
     document.getElementById("wallet").textContent = `💰 Modal: $${balance.toFixed(2)}`;
 
     async function fetchTONPrice() {
-      const url = "https://api.dexscreener.com/latest/dex/pairs/1/0x3f1f224e3ae4d6d8ca5cfad074505f378f13ee06";
+      const url = "https://api.dexscreener.com/latest/dex/search?q=TON/USDT";
       try {
         const res = await fetch(url);
         const data = await res.json();
 
-        const price = parseFloat(data.pair.priceUsd);
-        if (!price) throw new Error("Harga tidak valid.");
+        const pair = data.pairs.find(p => p.baseToken.symbol === "TON" && p.quoteToken.symbol === "USDT");
 
+        if (!pair || !pair.priceUsd) throw new Error("Pair TON/USDT tidak ditemukan.");
+
+        const price = parseFloat(pair.priceUsd);
         const priceText = `$${price.toFixed(4)}`;
         document.getElementById("price").textContent = `Live Price: ${priceText}`;
 
