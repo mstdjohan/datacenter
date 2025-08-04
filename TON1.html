@@ -3,225 +3,157 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading TON - Mobile Friendly</title>
+  <title>Strategi Trading TON - "ton1"</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa; }
+    h2 { color: #1f2937; }
+    canvas { background: #fff; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-line; font-family: monospace; background: #eef; padding: 10px; border-radius: 6px; }
   </style>
 </head>
 <body>
+  <h2>📊 Harga TON "ton1" & Indikator (Real-time + Historis)</h2>
+  <canvas id="chart" width="400" height="150"></canvas>
+  <p id="price">💰 Harga Saat Ini: -</p>
+  <p id="balance">💰 Modal: $1000.00</p>
+  <div id="log">⏳ Memuat data...</div>
 
-<h2>📊 Harga TON & Indikator (Real-time + Historis)</h2>
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
+  <script>
+    emailjs.init("OGH12a8LlCboHPVz8");
 
-<button id="resetBtn">🔁 Reset Simulasi</button>
-
-<div id="log"></div>
-
-<script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 100;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let highestSinceBuy = localStorage.getItem('highestSinceBuy') ? parseFloat(localStorage.getItem('highestSinceBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-const chartCtx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
-
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  localStorage.clear();
-  currentCapital = 1000;
-  lastBuy = null;
-  highestSinceBuy = null;
-  currentPositionAmount = 0;
-  updateCapitalDisplay();
-  log("🔄 Simulasi telah direset.");
-});
-
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
-
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
-  }
-  return result;
-}
-
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
-    }
-  }
-  return { upper, lower };
-}
-
-function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
-
-  function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
-
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
-
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data["the-open-network"].usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-    
-      const date = new Date(p[0]);
-      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    const chartCtx = document.getElementById('chart').getContext('2d');
+    const chart = new Chart(chartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Harga', data: [], borderColor: 'blue', fill: false },
+          { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5, 5], fill: false },
+          { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5, 5], fill: false },
+          { label: 'BUY', data: [], pointBackgroundColor: 'lime', showLine: false, pointRadius: 6, type: 'scatter' },
+          { label: 'SELL', data: [], pointBackgroundColor: 'red', showLine: false, pointRadius: 6, type: 'scatter' }
+        ]
+      }
     });
-    updateIndicators();
-    chart.update();
-    updateCapitalDisplay();
-  } catch (err) {
-    log("❌ Gagal ambil data historis TON dari CoinGecko");
-  }
-}
 
+    let balance = 1000;
+    let lastSignal = localStorage.getItem("ton_last_signal") || "";
 
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data["the-open-network"].usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 100) {
-      priceData.shift();
-      timeLabels.shift();
+    function log(msg) {
+      const now = new Date().toLocaleTimeString();
+      document.getElementById("log").textContent += `\n[${now}] ${msg}`;
     }
-    updateIndicators();
-    chart.update();
 
-    if (!lastBuy) {
-      const lowest = Math.min(...priceData.slice(-100));
-      if (price <= lowest) {
-        lastBuy = price;
-        highestSinceBuy = price;
-        currentPositionAmount = qtyPerTrade / price;
-        currentCapital -= qtyPerTrade;
-        updateCapitalDisplay();
-        localStorage.setItem('capital', currentCapital);
-        localStorage.setItem('lastBuy', lastBuy);
-        localStorage.setItem('highestSinceBuy', highestSinceBuy);
-        localStorage.setItem('positionAmount', currentPositionAmount);
-        log(`📥 BUY di $${price.toFixed(4)} (terendah 100 data)`);
-        sendEmail("BUY Signal", `Beli TON di $${price.toFixed(4)} (terendah 100 data)`);
-      } else {
-        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
-      }
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const loss = ((lastBuy - price) / lastBuy) * 100;
+    function sendEmail(subject, message) {
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+        subject,
+        message,
+      }).then(() => {
+        log(`📧 Notifikasi email terkirim: ${subject}`);
+      }).catch(() => {
+        log(`❌ Gagal kirim email`);
+      });
+    }
 
-      if (drop > 1.0 || loss > 1.5) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        const reason = drop > 1.0 ? "Trailing Profit" : "Cut Loss";
-        log(`📤 SELL (${reason}) di $${price.toFixed(4)}`);
-        sendEmail(`SELL (${reason})`, `Jual TON di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-        localStorage.setItem('capital', currentCapital);
-        localStorage.removeItem('lastBuy');
-        localStorage.removeItem('highestSinceBuy');
-        localStorage.removeItem('positionAmount');
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+    async function fetchHistoricalData() {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/coins/toncoin/market_chart?vs_currency=usd&days=1");
+        const json = await res.json();
+        return json.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
+      } catch (err) {
+        log("❌ Gagal ambil data historis TON dari CoinGecko");
+        return [];
       }
     }
 
-  } catch (err) {
-    log("❌ Gagal ambil harga TON live");
-    console.error(err);
-  }
-}
+    function calculateBollinger(prices) {
+      const period = 20;
+      const result = { upper: [], lower: [], middle: [] };
+      for (let i = 0; i < prices.length; i++) {
+        if (i < period) {
+          result.upper.push(null);
+          result.lower.push(null);
+          result.middle.push(null);
+          continue;
+        }
+        const slice = prices.slice(i - period, i);
+        const avg = slice.reduce((a, b) => a + b, 0) / period;
+        const std = Math.sqrt(slice.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / period);
+        result.middle.push(avg);
+        result.upper.push(avg + 2 * std);
+        result.lower.push(avg - 2 * std);
+      }
+      return result;
+    }
 
-(async () => {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 15000);
-})();
-</script>
+    async function fetchLivePrice() {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=toncoin&vs_currencies=usd");
+        const data = await res.json();
+        const price = parseFloat(data.toncoin.usd);
+        document.getElementById("price").textContent = `💰 Harga Saat Ini: $${price.toFixed(4)}`;
+        return price;
+      } catch (err) {
+        log("❌ Gagal ambil harga TON live");
+        return null;
+      }
+    }
+
+    async function updateChart() {
+      const data = await fetchHistoricalData();
+      if (!data.length) return;
+
+      const prices = data.map(p => p.price);
+      const timestamps = data.map(p => p.time.toLocaleTimeString());
+      const bb = calculateBollinger(prices);
+
+      chart.data.labels = timestamps;
+      chart.data.datasets[0].data = prices;
+      chart.data.datasets[1].data = bb.upper;
+      chart.data.datasets[2].data = bb.lower;
+      chart.update();
+    }
+
+    async function runStrategy() {
+      const price = await fetchLivePrice();
+      if (!price) return;
+
+      const data = await fetchHistoricalData();
+      const prices = data.map(p => p.price);
+      const bb = calculateBollinger(prices);
+      const lastBBUpper = bb.upper[bb.upper.length - 1];
+      const lastBBLower = bb.lower[bb.lower.length - 1];
+
+      const time = new Date().toLocaleTimeString();
+
+      if (price <= lastBBLower && lastSignal !== "buy") {
+        chart.data.datasets[3].data.push({ x: time, y: price });
+        lastSignal = "buy";
+        localStorage.setItem("ton_last_signal", "buy");
+        log(`✅ BUY di $${price.toFixed(4)} (Lower BB)`);
+        sendEmail("BUY Signal", `Beli TON di $${price.toFixed(4)} (Lower BB)`);
+      }
+
+      if (price >= lastBBUpper && lastSignal !== "sell") {
+        chart.data.datasets[4].data.push({ x: time, y: price });
+        lastSignal = "sell";
+        localStorage.setItem("ton_last_signal", "sell");
+        log(`✅ SELL di $${price.toFixed(4)} (Upper BB)`);
+        sendEmail("SELL Signal", `Jual TON di $${price.toFixed(4)} (Upper BB)`);
+      }
+
+      chart.update();
+    }
+
+    async function start() {
+      await updateChart();
+      await runStrategy();
+    }
+
+    setInterval(start, 30000); // 30 detik
+    start();
+  </script>
 </body>
 </html>
