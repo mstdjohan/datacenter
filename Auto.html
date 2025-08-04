@@ -124,7 +124,7 @@ function sendEmail(subject, body) {
 
 async function fetchInitialData() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=2");
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
     const data = await res.json();
     data.prices.forEach(p => {
       priceData.push(p[1]);
