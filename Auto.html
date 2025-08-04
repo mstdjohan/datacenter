@@ -92,7 +92,7 @@ function calculateEMA(data, period) {
   return result;
 }
 
-function calculateBollingerBands(data, period = 200, multiplier = 20) {
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
   const sma = calculateSMA(data, period);
   const upper = [], lower = [];
   for (let i = 0; i < data.length; i++) {
