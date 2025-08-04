@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Live TON/USDT Auto Trading</title>
+  <title>TON/USDT Auto Trading</title>
   <style>
     body { background:#000; color:#0f0; font-family:monospace; padding:20px; }
     h1 { color:#fff; }
@@ -20,21 +20,20 @@
 
   <script>
     let lastPrice = null;
-    let balance = parseFloat(localStorage.getItem("balance")) || 1000;
-    let lastSignal = localStorage.getItem("lastSignal") || "";
+    let balance = parseFloat(localStorage.getItem("balance_ton")) || 1000;
+    let lastSignal = localStorage.getItem("lastSignal_ton") || "";
 
     document.getElementById("wallet").textContent = `💰 Modal: $${balance.toFixed(2)}`;
 
     async function fetchTONPrice() {
-      const url = "https://api.dexscreener.com/latest/dex/search/?q=TON";
+      const url = "https://api.dexscreener.com/latest/dex/pairs/1/0x3f1f224e3ae4d6d8ca5cfad074505f378f13ee06";
       try {
         const res = await fetch(url);
         const data = await res.json();
 
-        const ton = data.pairs.find(p => p.pairName === "TON/USDT");
-        if (!ton || !ton.priceUsd) throw new Error("Pair TON/USDT tidak ditemukan.");
+        const price = parseFloat(data.pair.priceUsd);
+        if (!price) throw new Error("Harga tidak valid.");
 
-        const price = parseFloat(ton.priceUsd);
         const priceText = `$${price.toFixed(4)}`;
         document.getElementById("price").textContent = `Live Price: ${priceText}`;
 
@@ -42,19 +41,17 @@
           const diff = price - lastPrice;
 
           if (diff <= -0.01 && lastSignal !== "BUY") {
-            // Simulasi BUY
             balance += 5;
             lastSignal = "BUY";
             log("🟢 BUY at " + priceText, "buy");
           } else if (diff >= 0.01 && lastSignal !== "SELL") {
-            // Simulasi SELL
             balance -= 5;
             lastSignal = "SELL";
             log("🔴 SELL at " + priceText, "sell");
           }
 
-          localStorage.setItem("lastSignal", lastSignal);
-          localStorage.setItem("balance", balance.toFixed(2));
+          localStorage.setItem("lastSignal_ton", lastSignal);
+          localStorage.setItem("balance_ton", balance.toFixed(2));
           document.getElementById("wallet").textContent = `💰 Modal: $${balance.toFixed(2)}`;
         }
 
