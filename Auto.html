@@ -205,8 +205,13 @@ async function fetchAndEvaluate() {
 }
 
 (async () => {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 15000);
+  // Simulasi awal
+  for (let i = 0; i < 20; i++) {
+    const rand = 6 + Math.random();
+    dataHistory.push(rand);
+  }
+  updateChart();
+  setInterval(loop, 60000); // tiap 60 detik
 })();
 </script>
 </body>
