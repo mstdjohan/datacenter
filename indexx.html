@@ -2,170 +2,137 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CAKE/USDT Candlestick Auto Trading</title>
+  <title>Simulasi Trading CAKE/USDT</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@1/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 15px;
-      background-color: #f4f4f4;
-    }
-    canvas {
-      background-color: white;
-      border: 1px solid #ccc;
-    }
-    #log {
-      max-height: 250px;
-      overflow-y: auto;
-      background-color: #fff;
-      padding: 10px;
-      border: 1px solid #ccc;
-      margin-top: 15px;
-    }
+    body { font-family: Arial; padding: 20px; background: #f4f4f4; }
+    canvas { background: #fff; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-line; background: #fff; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: auto; }
   </style>
 </head>
 <body>
-
-  <h2>CAKE/USDT Auto Trading</h2>
-  <div id="livePrice">Live: $0.0000</div>
+  <h2>Simulasi Trading CAKE/USDT (CoinGecko)</h2>
   <canvas id="chart" width="800" height="400"></canvas>
-
-  <h3>Log Transaksi</h3>
-  <div id="log"></div>
+  <div id="info">
+    <p>Saldo: <span id="balance">$1000</span> | Posisi: <span id="position">-</span></p>
+  </div>
+  <div id="log">Log transaksi:</div>
 
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
+    const ctx = document.getElementById("chart").getContext("2d");
+    let candleData = [];
+    let chart;
+    let lastPrice = 0;
 
-    // Register chart types
-    Chart.register(
-      Chart.FinancialController,
-      Chart.CandlestickController,
-      Chart.OhlcController,
-      Chart.elements.CandlestickElement,
-      Chart.elements.OhlcElement,
-      Chart.scales.TimeScale,
-      Chart.scales.LinearScale
-    );
+    // Simulasi modal dan posisi
+    let balance = 1000;
+    let holding = 0;
+    let entryPrice = 0;
 
-    const chartCtx = document.getElementById("chart").getContext("2d");
-    let priceData = [];
-    let lastBuyPrice = null;
-    let lastSignal = "";
-
-    const chart = new Chart(chartCtx, {
-      type: 'candlestick',
-      data: {
-        datasets: [{
-          label: 'CAKE/USDT',
-          data: [],
-          borderColor: 'black',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'minute'
-            },
-            ticks: {
-              source: 'auto'
+    // Inisialisasi chart candlestick
+    function initChart() {
+      chart = new Chart(ctx, {
+        type: 'candlestick',
+        data: {
+          datasets: [{
+            label: 'CAKE/USDT',
+            data: candleData,
+            color: {
+              up: 'green',
+              down: 'red',
+              unchanged: 'gray'
             }
-          },
-          y: {
-            beginAtZero: false
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'minute',
+                tooltipFormat: 'HH:mm'
+              }
+            },
+            y: {
+              beginAtZero: false
+            }
           }
         }
-      }
-    });
-
-    function logTrade(text) {
-      const time = new Date().toLocaleTimeString();
-      const entry = `[${time}] ${text}`;
-      const logEl = document.getElementById("log");
-      logEl.innerHTML = entry + "<br>" + logEl.innerHTML;
-    }
-
-    function pushNewCandle(price) {
-      const now = new Date();
-      const last = priceData[priceData.length - 1];
-
-      if (!last || now - last.t > 60000) {
-        priceData.push({
-          t: now,
-          o: price,
-          h: price,
-          l: price,
-          c: price
-        });
-      } else {
-        last.h = Math.max(last.h, price);
-        last.l = Math.min(last.l, price);
-        last.c = price;
-      }
-    }
-
-    function sendEmail(subject, body) {
-      if (localStorage.getItem("lastSignal") === subject) return; // jangan kirim ulang
-      localStorage.setItem("lastSignal", subject);
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        subject: subject,
-        message: body
-      }).then(() => {
-        logTrade(`📧 Email terkirim: ${subject}`);
-      }).catch(error => {
-        logTrade(`❌ Gagal kirim email: ${error}`);
       });
     }
 
-    function evaluateSignal(price) {
-      const low24h = Math.min(...priceData.map(p => p.l));
-      const high24h = Math.max(...priceData.map(p => p.h));
-
-      const support = low24h + (high24h - low24h) * 0.15;
-      const resistance = high24h - (high24h - low24h) * 0.15;
-
-      if (price <= support && lastSignal !== "BUY") {
-        lastBuyPrice = price;
-        lastSignal = "BUY";
-        logTrade(`✅ BUY di $${price.toFixed(4)}`);
-        sendEmail("Sinyal BUY", `Harga turun mendekati support: $${price}`);
-      }
-
-      if (price >= resistance && lastSignal === "BUY") {
-        const profit = price - lastBuyPrice;
-        lastSignal = "SELL";
-        logTrade(`💰 SELL di $${price.toFixed(4)} (Profit: $${profit.toFixed(4)})`);
-        sendEmail("Sinyal SELL", `Harga naik mendekati resistance: $${price} (Profit: $${profit.toFixed(4)})`);
-      }
-    }
-
-    async function fetchPrice() {
+    // Ambil data OHLC dari CoinGecko (24 jam, interval 1 menit)
+    async function fetchOHLC() {
       try {
-        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0xA39af17CE4a8Eb807e076805DA1E2B8EA7D0755b");
+        const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/ohlc?vs_currency=usd&days=1");
         const data = await res.json();
-        const price = parseFloat(data.pairs?.[0]?.priceUsd || data.pair?.priceUsd || 0);
+        candleData = data.map(item => ({
+          x: new Date(item[0]),
+          o: item[1],
+          h: item[2],
+          l: item[3],
+          c: item[4]
+        }));
 
-        if (!price) throw new Error("Harga tidak ditemukan di data API");
+        if (!chart) {
+          initChart();
+        } else {
+          chart.data.datasets[0].data = candleData;
+          chart.update();
+        }
 
-        document.getElementById("livePrice").innerText = `Live: $${price.toFixed(4)}`;
-        pushNewCandle(price);
-        chart.data.datasets[0].data = priceData;
-        chart.update();
-        evaluateSignal(price);
+        evaluateStrategy();
+
       } catch (e) {
-        console.error("❌ Gagal fetch harga:", e);
-        logTrade(`❌ Error ambil data: ${e.message}`);
+        console.error("Gagal ambil data OHLC:", e);
       }
     }
 
-    setInterval(fetchPrice, 30000);
-    fetchPrice();
-  </script>
+    // Simulasi strategi trading sederhana
+    function evaluateStrategy() {
+      const latest = candleData[candleData.length - 1];
+      const currentPrice = latest.c;
 
+      // Simulasi logika BUY
+      if (!holding && currentPrice < lastPrice * 0.99) {
+        // Beli saat turun 1%
+        holding = balance / currentPrice;
+        entryPrice = currentPrice;
+        balance = 0;
+        log(`🟢 BUY di $${currentPrice.toFixed(2)} | Jumlah: ${holding.toFixed(2)} CAKE`);
+      }
+
+      // Simulasi logika SELL
+      else if (holding && currentPrice > entryPrice * 1.01) {
+        // Jual saat naik 1%
+        balance = holding * currentPrice;
+        log(`🔴 SELL di $${currentPrice.toFixed(2)} | Saldo: $${balance.toFixed(2)} | Profit: ${(balance - 1000).toFixed(2)}`);
+        holding = 0;
+        entryPrice = 0;
+      }
+
+      lastPrice = currentPrice;
+      updateUI(currentPrice);
+    }
+
+    function log(message) {
+      const logDiv = document.getElementById("log");
+      logDiv.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function updateUI(price) {
+      document.getElementById("balance").textContent = `$${balance.toFixed(2)}`;
+      document.getElementById("position").textContent = holding > 0 ? `${holding.toFixed(2)} CAKE (Avg: $${entryPrice.toFixed(2)})` : "-";
+    }
+
+    // Fetch awal dan interval update tiap 30 detik
+    fetchOHLC();
+    setInterval(fetchOHLC, 30000);
+  </script>
 </body>
 </html>
