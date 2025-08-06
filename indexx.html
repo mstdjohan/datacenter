@@ -1,27 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Auto Trading CAKE/USDT Candlestick</title>
+  <meta charset="UTF-8">
+  <title>CAKE/USDT Candlestick Auto Trading</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 15px;
+      background-color: #f4f4f4;
+    }
+    canvas {
+      background-color: white;
+      border: 1px solid #ccc;
+    }
+    #log {
+      max-height: 250px;
+      overflow-y: auto;
+      background-color: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+      margin-top: 15px;
+    }
+  </style>
 </head>
-<body style="font-family:sans-serif;text-align:center;background:#f0f0f0;padding:20px;">
+<body>
 
-  <h2>📈 CAKE/USDT Auto Trading (Candlestick Chart)</h2>
-  <canvas id="chart" width="400" height="300"></canvas>
-  <p id="livePrice">Live: $0.0000</p>
-  <p id="signal"></p>
-  <div id="log" style="background:#fff;border:1px solid #ccc;padding:10px;margin:20px auto;width:90%;max-width:500px;text-align:left;"></div>
+  <h2>CAKE/USDT Auto Trading</h2>
+  <div id="livePrice">Live: $0.0000</div>
+  <canvas id="chart" width="800" height="400"></canvas>
+
+  <h3>Log Transaksi</h3>
+  <div id="log"></div>
 
   <script>
     emailjs.init("OGH12a8LlCboHPVz8");
 
+    // Register chart types
+    Chart.register(
+      Chart.FinancialController,
+      Chart.CandlestickController,
+      Chart.OhlcController,
+      Chart.elements.CandlestickElement,
+      Chart.elements.OhlcElement,
+      Chart.scales.TimeScale,
+      Chart.scales.LinearScale
+    );
+
     const chartCtx = document.getElementById("chart").getContext("2d");
     let priceData = [];
+    let lastBuyPrice = null;
+    let lastSignal = "";
 
     const chart = new Chart(chartCtx, {
       type: 'candlestick',
@@ -37,10 +68,13 @@
         responsive: true,
         scales: {
           x: {
-            time: { unit: 'minute' },
-            ticks: { source: 'auto' },
-            adapters: { date: { locale: 'en-US' } },
-            type: 'time'
+            type: 'time',
+            time: {
+              unit: 'minute'
+            },
+            ticks: {
+              source: 'auto'
+            }
           },
           y: {
             beginAtZero: false
@@ -49,26 +83,18 @@
       }
     });
 
-    let capital = 1000;
-    let position = 0;
-    let avgBuyPrice = 0;
-    let lastSignal = '';
-
-    function logTrade(msg) {
-      const log = document.getElementById("log");
+    function logTrade(text) {
       const time = new Date().toLocaleTimeString();
-      log.innerHTML = `<div>[${time}] ${msg}</div>` + log.innerHTML;
+      const entry = `[${time}] ${text}`;
+      const logEl = document.getElementById("log");
+      logEl.innerHTML = entry + "<br>" + logEl.innerHTML;
     }
 
     function pushNewCandle(price) {
       const now = new Date();
       const last = priceData[priceData.length - 1];
 
-      if (last && now.getMinutes() === new Date(last.t).getMinutes()) {
-        last.h = Math.max(last.h, price);
-        last.l = Math.min(last.l, price);
-        last.c = price;
-      } else {
+      if (!last || now - last.t > 60000) {
         priceData.push({
           t: now,
           o: price,
@@ -76,52 +102,55 @@
           l: price,
           c: price
         });
-        if (priceData.length > 60) priceData.shift();
+      } else {
+        last.h = Math.max(last.h, price);
+        last.l = Math.min(last.l, price);
+        last.c = price;
       }
+    }
+
+    function sendEmail(subject, body) {
+      if (localStorage.getItem("lastSignal") === subject) return; // jangan kirim ulang
+      localStorage.setItem("lastSignal", subject);
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+        subject: subject,
+        message: body
+      }).then(() => {
+        logTrade(`📧 Email terkirim: ${subject}`);
+      }).catch(error => {
+        logTrade(`❌ Gagal kirim email: ${error}`);
+      });
     }
 
     function evaluateSignal(price) {
-      const support = 2.70;
-      const resistance = 2.90;
+      const low24h = Math.min(...priceData.map(p => p.l));
+      const high24h = Math.max(...priceData.map(p => p.h));
 
-      if (price < support && lastSignal !== 'BUY') {
-        const qty = capital / price;
-        position = qty;
-        avgBuyPrice = price;
-        capital = 0;
-        lastSignal = 'BUY';
-        logTrade(`🟢 BUY at $${price.toFixed(4)}, Qty: ${qty.toFixed(2)}`);
-        document.getElementById("signal").innerText = "🟢 BUY Signal";
-        sendEmail('BUY', price);
-      } else if (price > resistance && lastSignal !== 'SELL' && position > 0) {
-        const proceeds = position * price;
-        capital = proceeds;
-        position = 0;
-        lastSignal = 'SELL';
-        logTrade(`🔴 SELL at $${price.toFixed(4)}, Capital: $${capital.toFixed(2)}`);
-        document.getElementById("signal").innerText = "🔴 SELL Signal";
-        sendEmail('SELL', price);
+      const support = low24h + (high24h - low24h) * 0.15;
+      const resistance = high24h - (high24h - low24h) * 0.15;
+
+      if (price <= support && lastSignal !== "BUY") {
+        lastBuyPrice = price;
+        lastSignal = "BUY";
+        logTrade(`✅ BUY di $${price.toFixed(4)}`);
+        sendEmail("Sinyal BUY", `Harga turun mendekati support: $${price}`);
       }
-    }
 
-    function sendEmail(signal, price) {
-      const sent = localStorage.getItem(`sent-${signal}`);
-      if (sent) return; // hanya kirim sekali
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        signal_type: signal,
-        price: price.toFixed(4),
-        timestamp: new Date().toLocaleString()
-      }).then(() => {
-        localStorage.setItem(`sent-${signal}`, 'true');
-        logTrade(`📧 Email ${signal} terkirim.`);
-      });
+      if (price >= resistance && lastSignal === "BUY") {
+        const profit = price - lastBuyPrice;
+        lastSignal = "SELL";
+        logTrade(`💰 SELL di $${price.toFixed(4)} (Profit: $${profit.toFixed(4)})`);
+        sendEmail("Sinyal SELL", `Harga naik mendekati resistance: $${price} (Profit: $${profit.toFixed(4)})`);
+      }
     }
 
     async function fetchPrice() {
       try {
         const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0xA39af17CE4a8Eb807e076805DA1E2B8EA7D0755b");
         const data = await res.json();
-        const price = parseFloat(data.pair.priceUsd);
+        const price = parseFloat(data.pairs?.[0]?.priceUsd || data.pair?.priceUsd || 0);
+
+        if (!price) throw new Error("Harga tidak ditemukan di data API");
 
         document.getElementById("livePrice").innerText = `Live: $${price.toFixed(4)}`;
         pushNewCandle(price);
@@ -130,12 +159,13 @@
         evaluateSignal(price);
       } catch (e) {
         console.error("❌ Gagal fetch harga:", e);
+        logTrade(`❌ Error ambil data: ${e.message}`);
       }
     }
 
-    // Auto refresh setiap 30 detik
     setInterval(fetchPrice, 30000);
-    fetchPrice(); // pertama kali langsung jalan
+    fetchPrice();
   </script>
+
 </body>
 </html>
