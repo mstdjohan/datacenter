@@ -123,42 +123,73 @@
   }
 
   // ==== METAMASK ====
-  async function connectWallet() {
-  if (typeof window.ethereum === "undefined") {
-    alert("❌ MetaMask tidak terdeteksi di browser Anda");
-    return;
-  }
-
+  async function switchToBSC() {
   try {
-    // Ganti ke jaringan BSC
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const accounts = await provider.send("eth_requestAccounts", []);
-    
-    if (!accounts || accounts.length === 0) {
-      log("❌ Gagal konek MetaMask: Tidak ada wallet aktif");
-      return;
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x38' }], // 56 in hex = BSC Mainnet
+    });
+    log("✅ Berhasil switch ke jaringan BNB Smart Chain");
+  } catch (switchError) {
+    if (switchError.code === 4902) {
+      // Jaringan BSC belum ditambahkan → tambahkan secara otomatis
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x38',
+            chainName: 'BNB Smart Chain',
+            nativeCurrency: {
+              name: 'BNB',
+              symbol: 'BNB',
+              decimals: 18
+            },
+            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+            blockExplorerUrls: ['https://bscscan.com']
+          }]
+        });
+        log("✅ BNB Smart Chain berhasil ditambahkan ke MetaMask");
+      } catch (addError) {
+        log("❌ Gagal menambahkan jaringan BSC: " + addError.message);
+      }
+    } else {
+      log("❌ Gagal switch ke jaringan BSC: " + switchError.message);
     }
+  }
+}
 
-    const signer = provider.getSigner();
-    const userAddress = accounts[0];
-
-    document.getElementById("walletAddress").textContent = userAddress;
-
-    // Ambil saldo BNB di BSC
-    const balance = await provider.getBalance(userAddress);
-    const bnbBalance = ethers.utils.formatEther(balance);
-    document.getElementById("walletBalance").textContent = `${bnbBalance} BNB`;
-
-    log(`✅ Terhubung ke BNB Smart Chain: ${userAddress} | Saldo: ${bnbBalance} BNB`);
-
-    // Opsional: cek chainId untuk pastikan di jaringan BSC
-    const network = await provider.getNetwork();
-    if (network.chainId !== 56) {
-      log("⚠️ Anda tidak sedang di jaringan BNB Mainnet. Chain ID saat ini: " + network.chainId);
+  async function switchToBSC() {
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x38' }], // 56 in hex = BSC Mainnet
+    });
+    log("✅ Berhasil switch ke jaringan BNB Smart Chain");
+  } catch (switchError) {
+    if (switchError.code === 4902) {
+      // Jaringan BSC belum ditambahkan → tambahkan secara otomatis
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x38',
+            chainName: 'BNB Smart Chain',
+            nativeCurrency: {
+              name: 'BNB',
+              symbol: 'BNB',
+              decimals: 18
+            },
+            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+            blockExplorerUrls: ['https://bscscan.com']
+          }]
+        });
+        log("✅ BNB Smart Chain berhasil ditambahkan ke MetaMask");
+      } catch (addError) {
+        log("❌ Gagal menambahkan jaringan BSC: " + addError.message);
+      }
+    } else {
+      log("❌ Gagal switch ke jaringan BSC: " + switchError.message);
     }
-
-  } catch (error) {
-    log("❌ Gagal konek MetaMask: " + error.message);
   }
 }
 
