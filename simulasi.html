@@ -89,7 +89,7 @@
     }
 
     async function fetchPrice() {
-      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd&days=14");
+      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
       return res.data.ripple.usd;
     }
 
