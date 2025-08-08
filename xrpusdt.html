@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Auto-Trading XRP</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f7f7f7; margin: 0; padding: 2rem; }
     #chartContainer { width: 100%; max-width: 800px; margin: auto; }
@@ -17,19 +18,23 @@
 <body>
   <h2>Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
   <button onclick="connectWallet()">🔗 Connect MetaMask</button>
+  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
+  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
   <div id="wallet"></div>
+
   <div id="chartContainer">
     <canvas id="priceChart"></canvas>
   </div>
+
   <h3>📜 Log:</h3>
   <div id="log"></div>
 
   <script>
-    let provider;
-    let signer, router;
-    let currentChainId;
+    let provider, signer, router;
     let walletAddress = "";
+    let currentChainId;
     let xrpPrices = [];
+    let previousPrice = null;
     let chart;
     let currentPositionAmount = 0;
     const qtyPerTrade = 5;
@@ -38,10 +43,11 @@
     const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C";
     const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 
-    function log(message) {
+    function log(msg) {
       const time = new Date().toLocaleTimeString();
-      document.getElementById("log").textContent += `\n[${time}] ${message}`;
-      document.getElementById("log").scrollTop = 999999;
+      const logBox = document.getElementById("log");
+      logBox.textContent += `\n[${time}] ${msg}`;
+      logBox.scrollTop = logBox.scrollHeight;
     }
 
     async function connectWallet() {
@@ -52,6 +58,7 @@
       walletAddress = await signer.getAddress();
       currentChainId = (await provider.getNetwork()).chainId;
       if (currentChainId !== 56) await switchToBSC();
+
       const balance = await provider.getBalance(walletAddress);
       document.getElementById("wallet").innerHTML = `👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB`;
 
@@ -60,7 +67,8 @@
         [
           "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory)",
           "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"
-        ], signer
+        ],
+        signer
       );
 
       log(`✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB`);
@@ -127,13 +135,7 @@
         const path = [tokenIn, tokenOut];
         const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
 
-        const tx = await router.swapExactTokensForTokens(
-          amountIn,
-          0,
-          path,
-          userAddress,
-          deadline
-        );
+        const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
         await tx.wait();
 
         log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
@@ -160,25 +162,26 @@
       const lowerBB = low + range * 0.1;
       const upperBB = peak - range * 0.1;
 
-      if (price <= lowerBB) {
-        await autoSwap("buy", qtyPerTrade);
-        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
-        currentPositionAmount += qtyPerTrade / price;
-      } else if (price >= upperBB && currentPositionAmount > 0) {
-        await autoSwap("sell", price * currentPositionAmount);
-        sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
-        currentPositionAmount = 0;
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${peak.toFixed(4)}`);
+      if (previousPrice !== null) {
+        if (previousPrice < lowerBB && price >= lowerBB) {
+          await autoSwap("buy", qtyPerTrade);
+          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
+          currentPositionAmount += qtyPerTrade / price;
+        } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
+          await autoSwap("sell", price * currentPositionAmount);
+          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
+          currentPositionAmount = 0;
+        } else {
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+        }
       }
+
+      previousPrice = price;
     }
 
+    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS kamu
     initChart();
     setInterval(fetchAndEvaluate, 15000);
-  </script>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
-  <script>
-    emailjs.init("YOUR_USER_ID");
   </script>
 </body>
 </html>
