@@ -88,13 +88,6 @@ function calculateSMA(data, period) {
   return result;
 }
 
-
-
-async function connectWallet() {
-
-
-
-
   
 function calculateEMA(data, period) {
   const result = [];
@@ -139,9 +132,9 @@ function sendEmail(subject, body) {
   });
 }
   
-document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
+async function connectWallet() {
   let provider, signer, userAddress;
-  
+
   if (typeof window.ethereum !== "undefined") {
     try {
       provider = new ethers.providers.Web3Provider(window.ethereum);
