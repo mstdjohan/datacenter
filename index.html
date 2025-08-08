@@ -1,358 +1,248 @@
-
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Monitor Harga CAKE & TON</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="refresh" content="540">
+  <title>Strategi Trading XRP - " XRP1 "</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script>
+    emailjs.init("aPZx0R9oxUbIQkLEv");
+  </script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      text-align: center;
-      background-color: #f4f4f4;
-      color: #222;
-    }
-    @media (prefers-color-scheme: dark) {
-      body {
-        background-color: #121212;
-        color: #eee;
-      }
-      .pair-box {
-        border-color: #444;
-        background-color: #1e1e1e;
-      }
-    }
-    h1 { margin-bottom: 20px; }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 30px;
-    }
-    @media (max-width: 768px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-    .pair-box {
-      border: 1px solid #ccc;
-      border-radius: 10px;
-      padding: 15px;
-      box-shadow: 0 0 5px #ccc;
-    }
-    .price { font-size: 1.5em; margin: 5px 0; }
-    .trend { font-weight: bold; margin-bottom: 10px; }
-    .up { color: green; }
-    .down { color: red; }
-    label { display: block; font-size: 0.9em; margin: 5px 0; }
-    input { width: 80px; text-align: center; }
-    canvas { max-width: 100%; height: 200px; margin-top: 10px; }
-    button { margin-top: 5px; font-size: 0.9em; }
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    #resetBtn, #connectBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h1>📊 Monitor Harga CAKE & TON</h1>
-  <div class="grid">
-    <!-- CAKE/USDT -->
-    <div class="pair-box">
-      <h3>CAKE/USDT</h3>
-      <div id="price-usdt" class="price">Memuat...</div>
-      <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="3.50" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.68" step="0.01" /></label>
-      <button onclick="saveLimits('usdt')">Simpan</button>
-      <button onclick="testStrategy('usdt')">Uji Strategi</button>
-      <div id="log-usdt"></div>
-      <canvas id="chart-usdt"></canvas>
-    </div>
 
-    <!-- TON/USDT -->
-    <div class="pair-box">
-      <h3>TON/USDT</h3>
-      <div id="price-ton" class="price">Memuat...</div>
-      <div id="trend-ton" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-ton" value="3.80" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-ton" value="2.90" step="0.01" /></label>
-      <button onclick="saveLimits('ton')">Simpan</button>
-      <button onclick="testStrategy('ton')">Uji Strategi</button>
-      <div id="log-ton"></div>
-      <canvas id="chart-ton"></canvas>
-    </div>
-  </div>
+<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
+<div>💰 <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
 
-  <script>
-    const alarmSound = document.getElementById("alarm");
-    const pairs = {
-      usdt: {
-        name: "CAKE/USDT",
-        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
-        canvas: "chart-usdt", priceEl: "price-usdt", trendEl: "trend-usdt",
-        upperId: "upper-usdt", lowerId: "lower-usdt",
-        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
-        upperLimit: 3.50, lowerLimit: 2.60
-      },
-      ton: {
-        name: "TON/USDT",
-        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a",
-        canvas: "chart-ton", priceEl: "price-ton", trendEl: "trend-ton",
-        upperId: "upper-ton", lowerId: "lower-ton",
-        priceHistory: [], timeLabels: [], lastPrice: null, lastAlert: null, chart: null,
-        upperLimit: 3.80, lowerLimit: 2.90
-      }
-    };
+<button id="resetBtn">🔁 Reset Simulasi</button>
+<button id="connectBtn">🦊 Hubungkan MetaMask</button>
 
-    function saveLimits(key) {
-      const p = pairs[key];
-      p.upperLimit = parseFloat(document.getElementById(p.upperId).value);
-      p.lowerLimit = parseFloat(document.getElementById(p.lowerId).value);
-      alert(`✅ Alarm ${p.name} disimpan:
-Atas: $${p.upperLimit}
-Bawah: $${p.lowerLimit}`);
+<div id="log"></div>
+
+<script>
+let priceData = [], timeLabels = [];
+let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+let qtyPerTrade = 1000;
+let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
+const chartCtx = document.getElementById('chart').getContext('2d');
+let provider, signer, userAddress;
+const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7B3144628dB156f3F6c60dBE";
+const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const routerABI = ["function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external"];
+
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+    ]
+  },
+  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
+});
+
+function log(msg) {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+}
+
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  localStorage.clear();
+  currentCapital = 1000;
+  lastBuy = null;
+  currentPositionAmount = 0;
+  updateCapitalDisplay();
+  log("🔄 Simulasi telah direset.");
+});
+
+document.getElementById("connectBtn").addEventListener("click", async () => {
+  if (typeof window.ethereum === 'undefined') return log("❌ MetaMask tidak terdeteksi");
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  signer = provider.getSigner();
+  userAddress = await signer.getAddress();
+  log("✅ MetaMask terhubung: " + userAddress);
+});
+
+function calculateSMA(data, period) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) result.push(null);
+    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+  }
+  return result;
+}
+
+function calculateEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let emaPrev = data[0];
+  result.push(emaPrev);
+  for (let i = 1; i < data.length; i++) {
+    const ema = data[i] * k + emaPrev * (1 - k);
+    result.push(ema);
+    emaPrev = ema;
+  }
+  return result;
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
     }
+  }
+  return { upper, lower };
+}
 
-    function testStrategy(key) {
-      const p = pairs[key];
-      const price = p.lastPrice;
-      if (price === null) {
-        alert("Harga belum tersedia.");
-        return;
-      }
-      let action = "WAIT ⏳";
-      if (price <= p.lowerLimit) action = "BUY 💰";
-      else if (price >= p.upperLimit) action = "SELL 💵";
-      document.getElementById(`log-${key}`).textContent = `[${new Date().toLocaleTimeString()}] Strategi: ${action} di harga $${price.toFixed(4)}`;
-    }
-
-    function initCharts() {
-      for (const key in pairs) {
-        const p = pairs[key];
-        const ctx = document.getElementById(p.canvas).getContext("2d");
-        p.chart = new Chart(ctx, {
-          type: "line",
-          data: { labels: p.timeLabels, datasets: [{ label: p.name, data: p.priceHistory, borderColor: "blue", backgroundColor: "rgba(0,0,255,0.1)", fill: true }] },
-          options: { scales: { x: { display: false }, y: { title: { display: true, text: "USD" } } }, plugins: { legend: { display: false } } }
-        });
-      }
-    }
-
-    async function fetchPrices() {
-      const now = new Date().toLocaleTimeString();
-      for (const key in pairs) {
-        const p = pairs[key];
-        try {
-          const res = await fetch(p.api);
-          const data = await res.json();
-          const price = parseFloat(data.pair.priceUsd);
-          document.getElementById(p.priceEl).textContent = `$${price.toFixed(4)}`;
-          const trendEl = document.getElementById(p.trendEl);
-          if (p.lastPrice !== null) {
-            if (price > p.lastPrice) { trendEl.textContent = "Naik"; trendEl.className = "trend up"; }
-            else if (price < p.lastPrice) { trendEl.textContent = "Turun"; trendEl.className = "trend down"; }
-            else { trendEl.textContent = "Stabil"; trendEl.className = "trend"; }
-          }
-          if (price >= p.upperLimit && p.lastAlert !== 'high') {
-            alarmSound.play(); p.lastAlert = 'high';
-          } else if (price <= p.lowerLimit && p.lastAlert !== 'low') {
-            alarmSound.play(); p.lastAlert = 'low';
-          } else if (price < p.upperLimit && price > p.lowerLimit) {
-            p.lastAlert = null;
-          }
-          p.priceHistory.push(price);
-          p.timeLabels.push(now);
-          if (p.priceHistory.length > 20) { p.priceHistory.shift(); p.timeLabels.shift(); }
-          p.chart.update();
-          p.lastPrice = price;
-        } catch (err) {
-          document.getElementById(p.priceEl).textContent = "❌ Error";
-          console.error(`Gagal ambil harga ${p.name}:`, err);
-        }
-      }
-    }
-
-    initCharts();
-    fetchPrices();
-    setInterval(fetchPrices, 30000);
-  </script>
-
-  <audio id="alarm" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
-
-  
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8"); // ← user ID ini didapat dari https://dashboard.emailjs.com/admin/account
-
-    const alarmSound = document.getElementById("alarm");
-
-    const pairs = {
-      usdt: {
-        name: "CAKE/USDT",
-        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
-        canvas: "chart-usdt",
-        priceEl: "price-usdt",
-        trendEl: "trend-usdt",
-        upperId: "upper-usdt",
-        lowerId: "lower-usdt",
-        priceHistory: [],
-        timeLabels: [],
-        lastPrice: null,
-        lastAlert: null,
-        chart: null,
-        upperLimit: 3.50,
-        lowerLimit: 2.60
-      },
-      ton: {
-        name: "TON/USDT",
-        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x819a26d0c6f3af2b9fe4e9c4bcac04fcb3ea7f2a",
-        canvas: "chart-ton",
-        priceEl: "price-ton",
-        trendEl: "trend-ton",
-        upperId: "upper-ton",
-        lowerId: "lower-ton",
-        priceHistory: [],
-        timeLabels: [],
-        lastPrice: null,
-        lastAlert: null,
-        chart: null,
-        upperLimit: 3.80,
-        lowerLimit: 3.01
-      }
-    };
-
-    function saveLimits(pairKey) {
-      const pair = pairs[pairKey];
-      pair.upperLimit = parseFloat(document.getElementById(pair.upperId).value);
-      pair.lowerLimit = parseFloat(document.getElementById(pair.lowerId).value);
-      alert(`✅ Alarm ${pair.name} disimpan:\nAtas: $${pair.upperLimit}\nBawah: $${pair.lowerLimit}`);
-    }
-
-
-    function sendEmailNotification(pairName, price) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    to_name: "DATA CENTER OTOMATIS",
-    from_name: "Crypto Tracker",
-    pair: pairName,
-    price: price,
-    time: new Date().toLocaleTimeString(),
-    message: `Harga ${pairName} telah mencapai $${price}`
+function sendEmail(subject, body) {
+  emailjs.send("service_d48312b", "service_d48312b", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
   }).then(() => {
-    console.log("📧 Email terkirim");
-  }).catch((err) => {
-    console.error("❌ Gagal kirim email:", err);
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
   });
-
-  if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
-  alarmSound.play();
-  pair.lastAlert = 'high';
-  sendEmailNotification(pair.name, price); // jika ingin pakai email
-} else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
-  alarmSound.play();
-  pair.lastAlert = 'low';
-  sendEmailNotification(pair.name, price); // jika ingin pakai email
-} else if (price < pair.upperLimit && price > pair.lowerLimit) {
-  pair.lastAlert = null;
 }
 
-// 🔥 Tambahan sinyal scalping
-if (price <= pair.lowerLimit) {
-  console.log(`📈 Sinyal BUY untuk ${pair.name} di harga $${price}`);
-} else if (price >= pair.upperLimit) {
-  console.log(`📉 Sinyal SELL untuk ${pair.name} di harga $${price}`);
-}
-}
-    
+async function swap(tokenIn, tokenOut, amountIn) {
+  if (!signer) return log("⚠️ MetaMask belum terhubung");
+  const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
+  const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
+  const path = [tokenIn, tokenOut];
 
-    function initCharts() {
-      for (const key in pairs) {
-        const pair = pairs[key];
-        const ctx = document.getElementById(pair.canvas).getContext("2d");
-        pair.chart = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: pair.timeLabels,
-            datasets: [{
-              label: `Harga ${pair.name}`,
-              data: pair.priceHistory,
-              borderColor: "blue",
-              backgroundColor: "rgba(0,0,255,0.1)",
-              fill: true,
-              tension: 0.3
-            }]
-          },
-          options: {
-            scales: {
-              x: { display: false },
-              y: { title: { display: true, text: "USD" } }
-            },
-            plugins: { legend: { display: false } }
-          }
-        });
-      }
+  const token = new ethers.Contract(tokenIn, ["function approve(address,uint256) public returns(bool)"], signer);
+  await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256);
+
+  await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+    ethers.utils.parseUnits(amountIn.toString(), 18),
+    0,
+    path,
+    userAddress,
+    deadline
+  );
+  log("🔁 Swap berhasil antara token.");
+}
+
+async function fetchInitialData() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+    const data = await res.json();
+    data.prices.forEach(p => {
+      priceData.push(p[1]);
+      const date = new Date(p[0]);
+      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    });
+    updateIndicators();
+    chart.update();
+    updateCapitalDisplay();
+  } catch (err) {
+    log("❌ Gagal ambil data historis XRP dari CoinGecko");
+  }
+}
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData);
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
+}
+
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+    const data = await res.json();
+    const price = parseFloat(data.ripple.usd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 25) {
+      priceData.shift();
+      timeLabels.shift();
     }
+    updateIndicators();
+    chart.update();
 
-    async function fetchPrices() {
-      const now = new Date().toLocaleTimeString();
-      for (const key in pairs) {
-        const pair = pairs[key];
-        try {
-          const res = await fetch(pair.api);
-          const data = await res.json();
-          const price = parseFloat(data.pair.priceUsd);
+    const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length - 1];
+    const upperBB = bb.upper[bb.upper.length - 1];
 
-          document.getElementById(pair.priceEl).textContent = `$${price.toFixed(4)}`;
-          const trendEl = document.getElementById(pair.trendEl);
-          if (pair.lastPrice !== null) {
-            if (price > pair.lastPrice) {
-              trendEl.textContent = "Naik";
-              trendEl.className = "trend up";
-            } else if (price < pair.lastPrice) {
-              trendEl.textContent = "Turun";
-              trendEl.className = "trend down";
-            } else {
-              trendEl.textContent = "Stabil";
-              trendEl.className = "trend";
-            }
-          }
-
-          // Alarm harga dan email
-          if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
-            alarmSound.play();
-            sendEmailNotification(pair.name, price);
-            pair.lastAlert = 'high';
-          } else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
-            alarmSound.play();
-            sendEmailNotification(pair.name, price);
-            pair.lastAlert = 'low';
-          } else if (price < pair.upperLimit && price > pair.lowerLimit) {
-            pair.lastAlert = null;
-          }
-
-          // 🔥 Sinyal scalping ke console
-          if (price <= pair.lowerLimit) {
-            console.log(`📈 Sinyal BUY untuk ${pair.name} di harga $${price}`);
-          } else if (price >= pair.upperLimit) {
-            console.log(`📉 Sinyal SELL untuk ${pair.name} di harga $${price}`);
-          }
-          
-          
-          pair.priceHistory.push(price);
-          pair.timeLabels.push(now);
-          if (pair.priceHistory.length > 20) {
-            pair.priceHistory.shift();
-            pair.timeLabels.shift();
-          }
-          pair.chart.update();
-          pair.lastPrice = price;
-
-        } catch (err) {
-          document.getElementById(pair.priceEl).textContent = "❌ Error";
-          console.error(`Gagal ambil harga ${pair.name}:`, err);
-        }
-      }
+    if (!lastBuy && price <= lowerBB) {
+      lastBuy = price;
+      currentPositionAmount = qtyPerTrade / price;
+      currentCapital -= qtyPerTrade;
+      updateCapitalDisplay();
+      localStorage.setItem('capital', currentCapital);
+      localStorage.setItem('lastBuy', lastBuy);
+      localStorage.setItem('positionAmount', currentPositionAmount);
+      log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
+      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+      swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+    } else if (lastBuy && price >= upperBB) {
+      const sellValue = price * currentPositionAmount;
+      currentCapital += sellValue;
+      updateCapitalDisplay();
+      log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
+      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+      lastBuy = null;
+      currentPositionAmount = 0;
+      localStorage.setItem('capital', currentCapital);
+      localStorage.removeItem('lastBuy');
+      localStorage.removeItem('positionAmount');
+      swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+    } else {
+      log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
     }
+  } catch (err) {
+    log("❌ Gagal ambil harga XRP live");
+    console.error(err);
+  }
+}
 
-    initCharts();
-    fetchPrices();
-    setInterval(fetchPrices, 30000);
-  </script>
+(async () => {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 30000);
+})();
+</script>
 </body>
 </html>
