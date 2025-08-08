@@ -33,7 +33,35 @@
 <button id="resetBtn">🔁 Reset Simulasi</button>
 
 <div id="log"></div>
+<script>
+// 🔽 Fungsi connectWallet didefinisikan dulu
+async function connectWallet() {
+  let provider, signer, userAddress;
 
+  if (typeof window.ethereum !== "undefined") {
+    try {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+
+      document.getElementById("walletAddress").textContent = userAddress;
+
+      const balance = await provider.getBalance(userAddress);
+      document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
+
+      log(`✅ Terhubung ke MetaMask: ${userAddress}`);
+    } catch (error) {
+      log("❌ Gagal konek MetaMask: " + error.message);
+    }
+  } else {
+    alert("MetaMask tidak terdeteksi di browser Anda.");
+  }
+}
+
+// ⬇️ Tambahkan event listener ini SETELAH connectWallet selesai dideklarasikan
+document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
+</script>
 <script>
 let priceData = [];
 let timeLabels = [];
@@ -132,29 +160,7 @@ function sendEmail(subject, body) {
   });
 }
   
-async function connectWallet() {
-  let provider, signer, userAddress;
 
-  if (typeof window.ethereum !== "undefined") {
-    try {
-      provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      signer = provider.getSigner();
-      userAddress = await signer.getAddress();
-
-      document.getElementById("walletAddress").textContent = userAddress;
-
-      const balance = await provider.getBalance(userAddress);
-      document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
-
-      log(`✅ Terhubung ke MetaMask: ${userAddress}`);
-    } catch (error) {
-      log("❌ Gagal konek MetaMask: " + error.message);
-    }
-  } else {
-    alert("MetaMask tidak terdeteksi di browser Anda.");
-  }
-}
   
 async function fetchInitialData() {
   try {
