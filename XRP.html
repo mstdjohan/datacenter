@@ -9,11 +9,11 @@
 <!-- TARUH SEMUA SCRIPT DI AKHIR SEBELUM PENUTUP BODY -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" defer></script>
 
 <script>
   emailjs.init("OGH12a8LlCboHPVz8");
-
+<script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
     canvas { background: white; border: 1px solid #ccc; }
@@ -147,6 +147,7 @@
       }
     } else {
       alert("MetaMask tidak terdeteksi di browser Anda.");
+      console.log(typeof ethers); // Harusnya 'object'
     }
   }
 
