@@ -155,7 +155,7 @@
   // ==== DATA ====
   async function fetchInitialData() {
     try {
-      const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
       const data = await res.json();
       data.prices.forEach(p => {
         priceData.push(p[1]);
@@ -185,7 +185,7 @@
 
   async function fetchAndEvaluate() {
     try {
-       const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
       const data = await res.json();
       const price = parseFloat(data.ripple.usd);
       document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
