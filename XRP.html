@@ -1,33 +1,49 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading XRP - Konservatif</title>
+  <title>Strategi Trading XRP - " XRP1 "</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+
   <script>
-    emailjs.init("aPZx0R9oxUbIQkLEv");
+    emailjs.init("OGH12a8LlCboHPVz8");
   </script>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
     canvas { background: white; border: 1px solid #ccc; }
     #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
   </style>
 </head>
 <body>
-<h2>💰 Strategi Trading CAKE (Konservatif + RSI/MACD)</h2>
-<div>💵 Harga: <span id="livePrice">Memuat...</span></div>
+
+<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
+
+<button id="connectWalletBtn">🔗 Connect MetaMask</button>
+<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
+<div>💵 Saldo: <span id="walletBalance">0</span> ETH</div>
+
+<div>💰 <span id="livePrice">Memuat...</span></div>
 <canvas id="chart" width="800" height="400"></canvas>
-<div>💸 Modal: <span id="capital">$1000.00</span></div>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
+
+<button id="resetBtn">🔁 Reset Simulasi</button>
+
 <div id="log"></div>
 
 <script>
-let priceData = [], timeLabels = [];
-let currentCapital = 1000, qtyPerTrade = 100;
-let lastBuy = null, highestSinceBuy = null, currentPositionAmount = 0;
-
+let priceData = [];
+let timeLabels = [];
+let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+let qtyPerTrade = 100;
+let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+let highestSinceBuy = localStorage.getItem('highestSinceBuy') ? parseFloat(localStorage.getItem('highestSinceBuy')) : null;
+let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
 const chartCtx = document.getElementById('chart').getContext('2d');
+
 const chart = new Chart(chartCtx, {
   type: 'line',
   data: {
@@ -53,6 +69,16 @@ function updateCapitalDisplay() {
   document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
 }
 
+document.getElementById("resetBtn").addEventListener("click", () => {
+  localStorage.clear();
+  currentCapital = 1000;
+  lastBuy = null;
+  highestSinceBuy = null;
+  currentPositionAmount = 0;
+  updateCapitalDisplay();
+  log("🔄 Simulasi telah direset.");
+});
+
 function calculateSMA(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
@@ -62,93 +88,78 @@ function calculateSMA(data, period) {
   return result;
 }
 
+let provider, signer, userAddress;
+
+async function connectWallet() {
+
+
+document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
+
+  
 function calculateEMA(data, period) {
   const result = [];
   const k = 2 / (period + 1);
-  let ema = data[0];
-  result.push(ema);
+  let emaPrev = data[0];
+  result.push(emaPrev);
   for (let i = 1; i < data.length; i++) {
-    ema = data[i] * k + ema * (1 - k);
+    const ema = data[i] * k + emaPrev * (1 - k);
     result.push(ema);
+    emaPrev = ema;
   }
   return result;
 }
 
-function calculateRSI(data, period = 14) {
-  const rsi = [];
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses -= diff;
-  }
-  gains /= period;
-  losses /= period;
-  rsi[period] = 100 - (100 / (1 + gains / losses));
-
-  for (let i = period + 1; i < data.length; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) {
-      gains = (gains * (period - 1) + diff) / period;
-      losses = (losses * (period - 1)) / period;
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
     } else {
-      gains = (gains * (period - 1)) / period;
-      losses = (losses * (period - 1) - diff) / period;
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
     }
-    rsi[i] = 100 - (100 / (1 + gains / losses));
   }
-  return rsi;
-}
-
-function calculateMACD(data) {
-  const ema12 = calculateEMA(data, 12);
-  const ema26 = calculateEMA(data, 26);
-  const macdLine = ema12.map((val, i) => val - ema26[i]);
-  const signalLine = calculateEMA(macdLine.slice(26), 9); // offset to match macdLine
-  return { macdLine, signalLine };
-}
-
-function checkBuySignal(data30, data7, data1) {
-  const current = data1.at(-1);
-  const low30 = Math.min(...data30);
-  const low7 = Math.min(...data7);
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossUp = macdLine.at(-2) < signalLine.at(-2) && macdLine.at(-1) > signalLine.at(-1);
-
-  return (
-    current <= low7 &&
-    current <= low30 * 1.05 &&
-    rsi30 < 30 && rsi7 < 30 && rsi1 < 30 &&
-    macdCrossUp
-  );
-}
-
-function checkSellSignal(current, highest, buyPrice, data30, data7, data1) {
-  const dropFromPeak = ((highest - current) / highest) * 100;
-  const lossFromBuy = ((buyPrice - current) / buyPrice) * 100;
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossDown = macdLine.at(-2) > signalLine.at(-2) && macdLine.at(-1) < signalLine.at(-1);
-
-  return (
-    (dropFromPeak > 1.5 || lossFromBuy > 1.5) &&
-    rsi30 > 70 && rsi7 > 70 && rsi1 > 70 &&
-    macdCrossDown
-  );
+  return { upper, lower };
 }
 
 function sendEmail(subject, body) {
-  emailjs.send("service_d48312b", "template_1ktk40q", {
-    subject, body, time: new Date().toLocaleString()
-  }).then(() => log(`📧 Email terkirim: ${subject}`))
-    .catch(err => log("⚠️ Gagal kirim email: " + err.text));
+  emailjs.send("service_5hxo1hk", "template_iq87egh", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
+  }).then(() => {
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
+  });
 }
 
+  if (typeof window.ethereum !== "undefined") {
+    try {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+
+      document.getElementById("walletAddress").textContent = userAddress;
+
+      const balance = await provider.getBalance(userAddress);
+      document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
+
+      log(`✅ Terhubung ke MetaMask: ${userAddress}`);
+    } catch (error) {
+      log("❌ Gagal konek MetaMask: " + error.message);
+    }
+  } else {
+    alert("MetaMask tidak terdeteksi di browser Anda.");
+  }
+}
+  
 async function fetchInitialData() {
   try {
     const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
@@ -165,117 +176,84 @@ async function fetchInitialData() {
     log("❌ Gagal ambil data historis XRP dari CoinGecko");
   }
 }
-  
-  'async function fetchAndEvaluate() {
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
+}
+
+async function fetchAndEvaluate() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=30");
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
     const data = await res.json();
-    const price = parseFloat(data.pair.priceUsd);
-    document.getElementById("livePrice").textContent = `$${price.toFixed(4)}`;
+    const price = parseFloat(data.ripple.usd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
 
     const now = new Date().toLocaleTimeString();
     priceData.push(price);
     timeLabels.push(now);
-    if (priceData.length > 1000) { priceData.shift(); timeLabels.shift(); }
-
-    const data30 = priceData.slice(-200);
-    const data7 = priceData.slice(-70);
-    const data1 = priceData.slice(-20);
-
+    if (priceData.length > 25) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
     chart.update();
 
     if (!lastBuy) {
-      if (checkBuySignal(data30, data7, data1)) {
+      const lowest = Math.min(...priceData.slice(-25));
+      if (price <= lowest) {
         lastBuy = price;
         highestSinceBuy = price;
         currentPositionAmount = qtyPerTrade / price;
         currentCapital -= qtyPerTrade;
         updateCapitalDisplay();
-        log(`💵 BUY (KONFIRMASI 3 WINDOW) di $${price.toFixed(4)}`);
-        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} berdasarkan konfirmasi RSI/MACD 3 timeframe.`);
+        localStorage.setItem('capital', currentCapital);
+        localStorage.setItem('lastBuy', lastBuy);
+        localStorage.setItem('highestSinceBuy', highestSinceBuy);
+        localStorage.setItem('positionAmount', currentPositionAmount);
+        log(`📥 BUY di $${price.toFixed(4)} (terendah 25 data)`);
+        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 25 data)`);
       } else {
-        log(`⏳ Menunggu konfirmasi semua window...`);
+        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
       }
     } else {
       if (price > highestSinceBuy) highestSinceBuy = price;
-      if (checkSellSignal(price, highestSinceBuy, lastBuy, data30, data7, data1)) {
+      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
+      const loss = ((lastBuy - price) / lastBuy) * 100;
+
+      if (drop > 1.0 || loss > 1.5) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
         updateCapitalDisplay();
-        log(`💸 SELL (Konservatif) di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} berdasarkan RSI/MACD & trailing.`);
+        const reason = drop > 1.0 ? "Trailing Profit" : "Cut Loss";
+        log(`📤 SELL (${reason}) di $${price.toFixed(4)}`);
+        sendEmail(`SELL (${reason})`, `Jual XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
         lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+        localStorage.setItem('capital', currentCapital);
+        localStorage.removeItem('lastBuy');
+        localStorage.removeItem('highestSinceBuy');
+        localStorage.removeItem('positionAmount');
       } else {
-        log(`💱 HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
       }
     }
+
   } catch (err) {
-    log("❌ Gagal ambil data harga!");
+    log("❌ Gagal ambil harga XRP live");
+    console.error(err);
   }
 }
 
-
-      const lastRSI = rsi[rsi.length - 1];
-      const lastMACD = macd[macd.length - 1];
-
-      let signalText = "⏳ Menunggu sinyal...";
-      const currentPrice = priceData[priceData.length - 1];
-      const currentTime = new Date().toLocaleTimeString();
-
-      if (lastRSI < 30 && lastMACD.histogram > 0 && lastSignal !== "BUY") {
-        signalText = `🟢 BUY signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
-        lastSignal = "BUY";
-        addSignalMarker('🟢');
-        sendLogToServer("BUY", currentPrice, currentTime);
-        sendEmail("BUY", currentPrice, currentTime);
-      } else if (lastRSI > 70 && lastMACD.histogram < 0 && lastSignal !== "SELL") {
-        signalText = `🔴 SELL signal - RSI: ${lastRSI.toFixed(1)} | MACD: ${lastMACD.histogram.toFixed(3)}`;
-        lastSignal = "SELL";
-        addSignalMarker('🔴');
-        sendLogToServer("SELL", currentPrice, currentTime);
-        sendEmail("SELL", currentPrice, currentTime);
-      }
-
-      document.getElementById('signalResult').textContent = signalText;
-    }
-
-    function addSignalMarker(symbol) {
-      const latestLabel = labels[labels.length - 1];
-      chart.data.datasets.push({
-        label: symbol,
-        data: [{ x: latestLabel, y: priceData[priceData.length - 1] }],
-        backgroundColor: symbol === '🟢' ? 'lime' : 'red',
-        borderColor: symbol === '🟢' ? 'lime' : 'red',
-        pointRadius: 6,
-        type: 'scatter'
-      });
-      chart.update();
-    }
-
-    async function fetchPrice() {
-      try {
-        const res = await fetch(API_URL);
-        const json = await res.json();
-        const price = parseFloat(json.ripple.usd);
-        const now = new Date().toLocaleTimeString();
-
-        labels.push(now);
-        priceData.push(price);
-        if (labels.length > 50) {
-          labels.shift();
-          priceData.shift();
-        }
-        chart.update();
-
-        checkSignals();
-      } catch (e) {
-        console.error("❌ Gagal ambil data:", e);
-        document.getElementById('signalResult').textContent = "⚠️ Gagal ambil data!";
-      }
-    }
-
-  (async () => {
-  updateCapitalDisplay();
+(async () => {
+  await fetchInitialData();
   setInterval(fetchAndEvaluate, 15000);
 })();
 </script>
