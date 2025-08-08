@@ -88,9 +88,17 @@
       log("✅ Berhasil switch ke jaringan BNB Smart Chain");
     }
 
-    async function fetchPrice() {
-      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd&days=14");
-      return res.data.ripple.usd;
+    async function fetchHistoricalPrices() {
+      const res = await axios.get("https://api.coingecko.com/api/v3/coins/ripple/market_chart", {
+        params: {
+          vs_currency: "usd",
+          days: 14,
+          interval: "hourly"
+        }
+      });
+      const prices = res.data.prices.map(p => ({ x: new Date(p[0]).toLocaleString(), y: p[1] }));
+      xrpPrices = prices.slice(-50);
+      previousPrice = xrpPrices[xrpPrices.length - 2]?.y ?? null;
     }
 
     function updateChart(price, lowerBB = null, upperBB = null) {
@@ -178,7 +186,8 @@
     }
 
     async function fetchAndEvaluate() {
-      const price = await fetchPrice();
+      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+      const price = res.data.ripple.usd;
 
       const peak = Math.max(...xrpPrices.map(p => p.y), price);
       const low = Math.min(...xrpPrices.map(p => p.y), price);
@@ -205,9 +214,15 @@
       previousPrice = price;
     }
 
-    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS kamu
-    initChart();
-    setInterval(fetchAndEvaluate, 15000);
+    emailjs.init("YOUR_USER_ID");
+
+    async function startBot() {
+      await fetchHistoricalPrices();
+      initChart();
+      setInterval(fetchAndEvaluate, 15000);
+    }
+
+    startBot();
   </script>
 </body>
 </html>
