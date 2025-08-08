@@ -1,138 +1,303 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Simulasi Trading CAKE/USDT</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="refresh" content="540">
+  <title>Strategi Trading XRP - " XRP1 "</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@1/build/global/luxon.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script>
+    emailjs.init("aPZx0R9oxUbIQkLEv");
+  </script>
   <style>
-    body { font-family: Arial; padding: 20px; background: #f4f4f4; }
-    canvas { background: #fff; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-line; background: #fff; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: auto; }
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h2>Simulasi Trading CAKE/USDT (CoinGecko)</h2>
-  <canvas id="chart" width="800" height="400"></canvas>
-  <div id="info">
-    <p>Saldo: <span id="balance">$1000</span> | Posisi: <span id="position">-</span></p>
-  </div>
-  <div id="log">Log transaksi:</div>
 
-  <script>
-    const ctx = document.getElementById("chart").getContext("2d");
-    let candleData = [];
-    let chart;
-    let lastPrice = 0;
+<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
 
-    // Simulasi modal dan posisi
-    let balance = 1000;
-    let holding = 0;
-    let entryPrice = 0;
+<button id="connectWalletBtn">🔗 Connect MetaMask</button>
+<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
+<div>💵 Saldo: <span id="walletBalance">0</span> ETH</div>
 
-    // Inisialisasi chart candlestick
-    function initChart() {
-      chart = new Chart(ctx, {
-        type: 'candlestick',
-        data: {
-          datasets: [{
-            label: 'CAKE/USDT',
-            data: candleData,
-            color: {
-              up: 'green',
-              down: 'red',
-              unchanged: 'blue'
-            }
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            x: {
-              type: 'time',
-              time: {
-                unit: 'minute',
-                tooltipFormat: 'HH:mm'
-              }
-            },
-            y: {
-              beginAtZero: false
-            }
-          }
-        }
+<div>💰 <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
+
+<button id="resetBtn">🔁 Reset Simulasi</button>
+
+<div id="log"></div>
+
+<script>
+let priceData = [];
+let timeLabels = [];
+let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+let qtyPerTrade = 500;
+let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
+const chartCtx = document.getElementById('chart').getContext('2d');
+
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+    ]
+  },
+  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
+});
+
+function log(msg) {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+}
+
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  localStorage.clear();
+  currentCapital = 1000;
+  lastBuy = null;
+  currentPositionAmount = 0;
+  updateCapitalDisplay();
+  log("🔄 Simulasi telah direset.");
+});
+
+function calculateSMA(data, period) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) result.push(null);
+    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+  }
+  return result;
+}
+
+function calculateEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let emaPrev = data[0];
+  result.push(emaPrev);
+  for (let i = 1; i < data.length; i++) {
+    const ema = data[i] * k + emaPrev * (1 - k);
+    result.push(ema);
+    emaPrev = ema;
+  }
+  return result;
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
+    }
+  }
+  return { upper, lower };
+}
+
+function sendEmail(subject, body) {
+  emailjs.send("service_d48312b", "service_d48312b", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
+  }).then(() => {
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
+  });
+}
+
+// ==== SWITCH TO BNB SMART CHAIN ====
+  async function switchToBSC() {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
       });
-    }
-
-    // Ambil data OHLC dari CoinGecko (24 jam, interval 1 menit)
-    async function fetchOHLC() {
-      try {
-        const res = await fetch("https://api.coingecko.com/api/v3/coins/pancakeswap-token/ohlc?vs_currency=usd&days=1");
-        const data = await res.json();
-        candleData = data.map(item => ({
-          x: new Date(item[0]),
-          o: item[1],
-          h: item[2],
-          l: item[3],
-          c: item[4]
-        }));
-
-        if (!chart) {
-          initChart();
-        } else {
-          chart.data.datasets[0].data = candleData;
-          chart.update();
+      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
+    } catch (switchError) {
+      if (switchError.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x38',
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: {
+                name: 'BNB',
+                symbol: 'BNB',
+                decimals: 18
+              },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com']
+            }]
+          });
+          log("✅ BNB Smart Chain berhasil ditambahkan ke MetaMask");
+        } catch (addError) {
+          log("❌ Gagal menambahkan jaringan BSC: " + addError.message);
         }
-
-        evaluateStrategy();
-
-      } catch (e) {
-        console.error("Gagal ambil data OHLC:", e);
+      } else {
+        log("❌ Gagal switch ke jaringan BSC: " + switchError.message);
       }
     }
+  }
 
-    // Simulasi strategi trading sederhana
-    function evaluateStrategy() {
-      const latest = candleData[candleData.length - 1];
-      const currentPrice = latest.c;
+  // ==== METAMASK ====
+  async function connectWallet() {
+    if (typeof window.ethereum === "undefined") {
+      alert("❌ MetaMask tidak terdeteksi di browser Anda");
+      return;
+    }
 
-      // Simulasi logika BUY
-      if (!holding && currentPrice < lastPrice * 0.99) {
-        // Beli saat turun 1%
-        holding = balance / currentPrice;
-        entryPrice = currentPrice;
-        balance = 0;
-        log(`🟢 BUY di $${currentPrice.toFixed(2)} | Jumlah: ${holding.toFixed(2)} CAKE`);
+    try {
+      await switchToBSC();
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      if (!accounts || accounts.length === 0) {
+        log("❌ Gagal konek MetaMask: Tidak ada wallet aktif");
+        return;
       }
 
-      // Simulasi logika SELL
-      else if (holding && currentPrice > entryPrice * 1.01) {
-        // Jual saat naik 1%
-        balance = holding * currentPrice;
-        log(`🔴 SELL di $${currentPrice.toFixed(2)} | Saldo: $${balance.toFixed(2)} | Profit: ${(balance - 1000).toFixed(2)}`);
-        holding = 0;
-        entryPrice = 0;
-      }
+      const signer = provider.getSigner();
+      const userAddress = accounts[0];
+      document.getElementById("walletAddress").textContent = userAddress;
 
-      lastPrice = currentPrice;
-      updateUI(currentPrice);
+      const balance = await provider.getBalance(userAddress);
+      const bnbBalance = ethers.utils.formatEther(balance);
+      document.getElementById("walletBalance").textContent = `${bnbBalance} BNB`;
+
+      log(`✅ Terhubung ke BNB Smart Chain: ${userAddress} | Saldo: ${bnbBalance} BNB`);
+    } catch (error) {
+      log("❌ Gagal konek MetaMask: " + error.message);
+    }
+  }
+
+  // (Fungsi lain seperti calculateSMA, calculateEMA, calculateBollingerBands, sendEmail dll bisa tetap di bawah sini)
+ 
+
+  // ==== DATA ====
+
+async function fetchInitialData() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+    const data = await res.json();
+    data.prices.forEach(p => {
+      priceData.push(p[1]);
+      const date = new Date(p[0]);
+      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    });
+    updateIndicators();
+    chart.update();
+    updateCapitalDisplay();
+  } catch (err) {
+    log("❌ Gagal ambil data historis XRP dari CoinGecko");
+  }
+}
+
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData);
+
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
+}
+
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+    const data = await res.json();
+    const price = parseFloat(data.ripple.usd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 25) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
+    chart.update();
+
+    const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length - 1];
+    const upperBB = bb.upper[bb.upper.length - 1];
+
+    if (!lastBuy && price <= lowerBB) {
+      lastBuy = price;
+      currentPositionAmount = qtyPerTrade / price;
+      currentCapital -= qtyPerTrade;
+      updateCapitalDisplay();
+      localStorage.setItem('capital', currentCapital);
+      localStorage.setItem('lastBuy', lastBuy);
+      localStorage.setItem('positionAmount', currentPositionAmount);
+      log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
+      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+    } else if (lastBuy && price >= upperBB) {
+      const sellValue = price * currentPositionAmount;
+      currentCapital += sellValue;
+      updateCapitalDisplay();
+      log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
+      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+      lastBuy = null;
+      currentPositionAmount = 0;
+      localStorage.setItem('capital', currentCapital);
+      localStorage.removeItem('lastBuy');
+      localStorage.removeItem('positionAmount');
+    } else {
+      log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
     }
 
-    function log(message) {
-      const logDiv = document.getElementById("log");
-      logDiv.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}`;
-      logDiv.scrollTop = logDiv.scrollHeight;
-    }
+  } catch (err) {
+    log("❌ Gagal ambil harga XRP live");
+    console.error(err);
+  }
+}
 
-    function updateUI(price) {
-      document.getElementById("balance").textContent = `$${balance.toFixed(2)}`;
-      document.getElementById("position").textContent = holding > 0 ? `${holding.toFixed(2)} CAKE (Avg: $${entryPrice.toFixed(2)})` : "-";
-    }
+// ==== EVENT LISTENER ====
+  document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    localStorage.clear();
+    currentCapital = 1000;
+    lastBuy = null;
+    highestSinceBuy = null;
+    currentPositionAmount = 0;
+    updateCapitalDisplay();
+    log("🔄 Simulasi telah direset.");
+  });
 
-    // Fetch awal dan interval update tiap 30 detik
-    fetchOHLC();
-    setInterval(fetchOHLC, 30000);
-  </script>
+(async () => {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 30000);
+})();
+</script>
 </body>
 </html>
