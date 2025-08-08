@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Auto-Trading XRP</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
@@ -16,10 +16,10 @@
   </style>
 </head>
 <body>
-  <h2>Harga XRP "simulasi.html" & Indikator (Real-time + Historis)</h2>
+  <h2>Harga XRP & Indikator (Real-time + Historis)</h2>
   <button onclick="connectWallet()">🔗 Connect MetaMask</button>
-  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
-  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
+  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP</button>
+  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP</button>
   <div id="wallet"></div>
 
   <div id="chartContainer">
@@ -92,12 +92,12 @@
       const res = await axios.get("https://api.coingecko.com/api/v3/coins/ripple/market_chart", {
         params: {
           vs_currency: "usd",
-          days: 1,
-          interval: "minute"
+          days: 14,
+          interval: "hourly"
         }
       });
-      const prices = res.data.prices.map(p => ({ x: new Date(p[0]).toLocaleTimeString(), y: p[1] }));
-      xrpPrices = prices.slice(-30);
+      const prices = res.data.prices.map(p => ({ x: new Date(p[0]).toLocaleString(), y: p[1] }));
+      xrpPrices = prices.slice(-50);
       previousPrice = xrpPrices[xrpPrices.length - 2]?.y ?? null;
     }
 
@@ -153,9 +153,46 @@
       });
     }
 
+    async function autoSwap(action, amountUSD) {
+      try {
+        const amountIn = ethers.utils.parseUnits(amountUSD.toString(), 18);
+        const userAddress = await signer.getAddress();
+
+        const tokenIn = action === "buy" ? USDT_ADDRESS : XRP_ADDRESS;
+        const tokenOut = action === "buy" ? XRP_ADDRESS : USDT_ADDRESS;
+
+        const tokenContract = new ethers.Contract(tokenIn, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
+        const txApprove = await tokenContract.approve(PANCAKE_ROUTER_ADDRESS, amountIn);
+        await txApprove.wait();
+
+        const path = [tokenIn, tokenOut];
+        const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
+
+        const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
+        await tx.wait();
+
+        log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
+        sendEmail(`AUTO-TRADE ${action.toUpperCase()}`, `Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD}`);
+      } catch (err) {
+        log("❌ Gagal auto-swap: " + err.message);
+      }
+    }
+
+    function sendEmail(subject, message) {
+      emailjs.send("YOUR_SERVICE", "YOUR_TEMPLATE", {
+        subject: subject,
+        message: message
+      });
+    }
+
     async function fetchAndEvaluate() {
       const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-      const price = res.data.ripple.usd;
+      const price = Number(res?.data?.ripple?.usd);
+
+      if (!price || isNaN(price)) {
+        log("⚠️ Gagal mendapatkan harga XRP dari API.");
+        return;
+      }
 
       const peak = Math.max(...xrpPrices.map(p => p.y), price);
       const low = Math.min(...xrpPrices.map(p => p.y), price);
@@ -165,18 +202,34 @@
 
       updateChart(price, lowerBB, upperBB);
 
+      console.log("DEBUG BB:", { price, lowerBB, upperBB });
+
       if (previousPrice !== null) {
         if (previousPrice < lowerBB && price >= lowerBB) {
-          log(`🟢 BUY signal - harga rebound dari lower BB: $${price.toFixed(4)}`);
-        } else if (previousPrice > upperBB && price <= upperBB) {
-          log(`🔴 SELL signal - harga turun dari upper BB: $${price.toFixed(4)}`);
+          await autoSwap("buy", qtyPerTrade);
+          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
+          currentPositionAmount += qtyPerTrade / price;
+        } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
+          await autoSwap("sell", price * currentPositionAmount);
+          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
+          currentPositionAmount = 0;
         } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+          if (
+            typeof price === 'number' && !isNaN(price) &&
+            typeof lowerBB === 'number' && !isNaN(lowerBB) &&
+            typeof upperBB === 'number' && !isNaN(upperBB)
+          ) {
+            log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+          } else {
+            log("⚠️ Nilai tidak valid. price/lowerBB/upperBB bukan angka.");
+          }
         }
       }
 
       previousPrice = price;
     }
+
+    emailjs.init("YOUR_USER_ID");
 
     async function startBot() {
       await fetchHistoricalPrices();
