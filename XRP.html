@@ -124,28 +124,33 @@
 
   // ==== METAMASK ====
   async function connectWallet() {
-    let provider, signer, userAddress;
-
-    if (typeof window.ethereum !== "undefined") {
-      try {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []);
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-
-        document.getElementById("walletAddress").textContent = userAddress;
-        const balance = await provider.getBalance(userAddress);
-        document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
-
-        log(`✅ Terhubung ke MetaMask: ${userAddress}`);
-      } catch (error) {
-        log("❌ Gagal konek MetaMask: " + error.message);
-      }
-    } else {
-      alert("MetaMask tidak terdeteksi di browser Anda.");
-      console.log(typeof ethers); // Harusnya 'object'
-    }
+  if (typeof window.ethereum === "undefined") {
+    alert("❌ MetaMask tidak terdeteksi di browser Anda");
+    return;
   }
+
+  try {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    
+    if (!accounts || accounts.length === 0) {
+      log("❌ Gagal konek MetaMask: Tidak ada wallet aktif");
+      return;
+    }
+
+    const signer = provider.getSigner();
+    const userAddress = accounts[0];
+
+    document.getElementById("walletAddress").textContent = userAddress;
+
+    const balance = await provider.getBalance(userAddress);
+    document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
+
+    log(`✅ Terhubung ke MetaMask: ${userAddress}`);
+  } catch (error) {
+    log("❌ Gagal konek MetaMask: " + error.message);
+  }
+}
 
   // ==== DATA ====
   async function fetchInitialData() {
@@ -231,7 +236,7 @@
           localStorage.removeItem('highestSinceBuy');
           localStorage.removeItem('positionAmount');
         } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
         }
       }
 
