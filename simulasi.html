@@ -1,187 +1,213 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Strategi Otomatis CAKE/USDT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Auto-Trading XRP</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <style>
-    body { font-family: Arial; padding: 20px; background: #f4f4f4; color: #333; }
-    .container { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    h1 { text-align: center; }
-    .log { background: #eee; padding: 10px; margin-top: 20px; white-space: pre-line; height: 200px; overflow-y: auto; font-family: monospace; border-radius: 5px; }
-    canvas { margin-top: 20px; max-width: 100%; }
-    .summary { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; }
-    .summary input { width: 100px; padding: 5px; margin-right: 10px; }
-    .summary label { font-weight: bold; }
+    body { font-family: sans-serif; background: #f7f7f7; margin: 0; padding: 2rem; }
+    #chartContainer { width: 100%; max-width: 900px; margin: auto; }
+    #log { white-space: pre-wrap; background: #eee; padding: 1rem; height: 200px; overflow-y: scroll; }
+    button { padding: 10px 15px; margin: 5px; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🔁 Strategi Otomatis CAKE/USDT</h1>
-    <div id="livePrice">Harga: Memuat...</div>
+  <h2>Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
+  <button onclick="connectWallet()">🔗 Connect MetaMask</button>
+  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
+  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
+  <div id="wallet"></div>
 
-    <div class="summary">
-      <label>💰 Modal Awal ($):</label>
-      <input type="number" id="initialCapitalInput" value="1000" />
-      <label>📈 Modal Saat Ini: </label>
-      <span id="currentCapitalDisplay">$1000.00</span>
-    </div>
-
-    <canvas id="chartCanvas" width="600" height="250"></canvas>
-    <div class="log" id="logBox">📝 Log strategi...</div>
+  <div id="chartContainer">
+    <canvas id="priceChart"></canvas>
   </div>
 
+  <h3>📜 Log:</h3>
+  <div id="log"></div>
+
   <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
+    let provider, signer, router;
+    let walletAddress = "";
+    let currentChainId;
+    let xrpPrices = [];
+    let previousPrice = null;
+    let chart;
+    let currentPositionAmount = 0;
+    const qtyPerTrade = 5;
 
-    // Ambil dari localStorage (jika ada)
-    let lastBuy = parseFloat(localStorage.getItem("lastBuy")) || null;
-    let highestSinceBuy = parseFloat(localStorage.getItem("highestSinceBuy")) || null;
-    let currentPositionAmount = parseFloat(localStorage.getItem("currentPositionAmount")) || 0;
-    let capital = parseFloat(localStorage.getItem("capital")) || 1000;
-    let currentCapital = capital;
-
-    const qtyPerTrade = 100;
-    const priceData = [], timeLabels = [];
-    const logBox = document.getElementById("logBox");
-    const ctx = document.getElementById("chartCanvas").getContext("2d");
-
-    // Inisialisasi modal awal dari input
-    document.getElementById("initialCapitalInput").value = capital;
-    function updateCapitalDisplay() {
-      document.getElementById("currentCapitalDisplay").textContent = `$${currentCapital.toFixed(2)}`;
-      localStorage.setItem("capital", currentCapital);
-    }
-
-    document.getElementById("initialCapitalInput").addEventListener("change", () => {
-      capital = parseFloat(document.getElementById("initialCapitalInput").value);
-      currentCapital = capital;
-      localStorage.setItem("capital", capital);
-      updateCapitalDisplay();
-    });
-
-    updateCapitalDisplay();
-
-    const chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: timeLabels,
-        datasets: [{
-          label: "Harga CAKE/USDT",
-          data: priceData,
-          borderColor: "blue",
-          backgroundColor: "rgba(0,0,255,0.1)",
-          fill: true,
-          tension: 0.4
-        }]
-      },
-      options: {
-        scales: {
-          x: { title: { display: true, text: "Waktu" }},
-          y: { title: { display: true, text: "USD" }}
-        }
-      }
-    });
+    const PANCAKE_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+    const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C";
+    const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 
     function log(msg) {
-      const now = new Date().toLocaleTimeString();
-      const text = `[${now}] ${msg}\n`;
-      logBox.textContent += text;
+      const time = new Date().toLocaleTimeString();
+      const logBox = document.getElementById("log");
+      logBox.textContent += `\n[${time}] ${msg}`;
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    function sendEmail(subject, message) {
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        subject: subject,
-        message: message,
-      }).then(() => {
-        log("📩 Notifikasi email dikirim.");
-      }).catch((err) => {
-        log("❌ Gagal kirim email: " + err.text);
+    async function connectWallet() {
+      if (!window.ethereum) return log("❌ MetaMask tidak terdeteksi");
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      walletAddress = await signer.getAddress();
+      currentChainId = (await provider.getNetwork()).chainId;
+      if (currentChainId !== 56) await switchToBSC();
+
+      const balance = await provider.getBalance(walletAddress);
+      document.getElementById("wallet").innerHTML = `👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB`;
+
+      router = new ethers.Contract(
+        PANCAKE_ROUTER_ADDRESS,
+        [
+          "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory)",
+          "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"
+        ],
+        signer
+      );
+
+      log(`✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB`);
+    }
+
+    async function switchToBSC() {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x38',
+          chainName: 'BNB Smart Chain',
+          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+          rpcUrls: ['https://bsc-dataseed.binance.org'],
+          blockExplorerUrls: ['https://bscscan.com']
+        }]
+      });
+      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
+    }
+
+    async function fetchPrice() {
+      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+      return res.data.ripple.usd;
+    }
+
+    function updateChart(price, lowerBB = null, upperBB = null) {
+      const time = new Date().toLocaleTimeString();
+      xrpPrices.push({ x: time, y: price });
+      if (xrpPrices.length > 50) xrpPrices.shift();
+
+      chart.data.labels = xrpPrices.map(p => p.x);
+      chart.data.datasets[0].data = xrpPrices.map(p => p.y);
+
+      if (lowerBB !== null && upperBB !== null) {
+        chart.data.datasets[1].data = Array(xrpPrices.length).fill(lowerBB);
+        chart.data.datasets[2].data = Array(xrpPrices.length).fill(upperBB);
+      }
+
+      chart.update();
+    }
+
+    function initChart() {
+      const ctx = document.getElementById("priceChart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Harga XRP (USD)",
+              data: [],
+              borderWidth: 2,
+              borderColor: "blue",
+              fill: false,
+            },
+            {
+              label: "Lower BB",
+              data: [],
+              borderWidth: 1,
+              borderColor: "green",
+              borderDash: [5, 5],
+              fill: false,
+            },
+            {
+              label: "Upper BB",
+              data: [],
+              borderWidth: 1,
+              borderColor: "red",
+              borderDash: [5, 5],
+              fill: false,
+            }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: false } } }
       });
     }
 
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
-    const data = await res.json();
-    const price = parseFloat(data.pair.priceUsd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+    async function autoSwap(action, amountUSD) {
+      try {
+        const amountIn = ethers.utils.parseUnits(amountUSD.toString(), 18);
+        const userAddress = await signer.getAddress();
 
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 20) {
-      priceData.shift();
-      timeLabels.shift();
+        const tokenIn = action === "buy" ? USDT_ADDRESS : XRP_ADDRESS;
+        const tokenOut = action === "buy" ? XRP_ADDRESS : USDT_ADDRESS;
+
+        const tokenContract = new ethers.Contract(tokenIn, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
+        const txApprove = await tokenContract.approve(PANCAKE_ROUTER_ADDRESS, amountIn);
+        await txApprove.wait();
+
+        const path = [tokenIn, tokenOut];
+        const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
+
+        const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
+        await tx.wait();
+
+        log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
+        sendEmail(`AUTO-TRADE ${action.toUpperCase()}`, `Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD}`);
+      } catch (err) {
+        log("❌ Gagal auto-swap: " + err.message);
+      }
     }
-    chart.update();
 
-    // === STRATEGI ===
+    function sendEmail(subject, message) {
+      emailjs.send("YOUR_SERVICE", "YOUR_TEMPLATE", {
+        subject: subject,
+        message: message
+      });
+    }
 
-    // --- JIKA TIDAK ADA POSISI (cari waktu TERBAIK untuk beli) ---
-    if (!lastBuy) {
-      if (priceData.length >= 10) {
-        const lowestInWindow = Math.min(...priceData.slice(-10));
-        if (price <= lowestInWindow) {
-          // BUY karena harga menyentuh titik terendah
-          lastBuy = price;
-          highestSinceBuy = price;
-          currentPositionAmount = qtyPerTrade / price;
-          currentCapital -= qtyPerTrade;
-          updateCapitalDisplay();
-          log(`📥 BUY di $${price.toFixed(4)} (terendah dari 10 candle)`);
-          sendEmail("BUY Signal", `Beli CAKE di harga $${price.toFixed(4)} (terendah dari 10 candle terakhir)`);
+    async function fetchAndEvaluate() {
+      const price = await fetchPrice();
+
+      const peak = Math.max(...xrpPrices.map(p => p.y), price);
+      const low = Math.min(...xrpPrices.map(p => p.y), price);
+      const range = peak - low;
+      const lowerBB = low + range * 0.1;
+      const upperBB = peak - range * 0.1;
+
+      updateChart(price, lowerBB, upperBB);
+
+      if (previousPrice !== null) {
+        if (previousPrice < lowerBB && price >= lowerBB) {
+          await autoSwap("buy", qtyPerTrade);
+          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
+          currentPositionAmount += qtyPerTrade / price;
+        } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
+          await autoSwap("sell", price * currentPositionAmount);
+          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
+          currentPositionAmount = 0;
         } else {
-          log(`⏳ Menunggu harga rendah | Sekarang: $${price.toFixed(4)} | Terendah (10 data): $${lowestInWindow.toFixed(4)}`);
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
         }
-      } else {
-        log(`⌛ Mengumpulkan data... (${priceData.length}/10)`);
       }
 
-    // --- JIKA SUDAH ADA POSISI (tunggu sinyal JUAL) ---
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-
-      const dropFromPeak = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const lossFromBuy = ((lastBuy - price) / lastBuy) * 100;
-
-      if (dropFromPeak > 1.0) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)} | Balik: $${sellValue.toFixed(2)} | Modal: $${currentCapital.toFixed(2)}`);
-        sendEmail("SELL (Trailing Profit)", `Jual CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
-        lastBuy = null;
-        highestSinceBuy = null;
-        currentPositionAmount = 0;
-
-      } else if (lossFromBuy > 1.5) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${lossFromBuy.toFixed(2)}% | Modal: $${currentCapital.toFixed(2)}`);
-        sendEmail("SELL (Cut Loss)", `Cut loss CAKE di $${price.toFixed(4)}. Modal sekarang: $${currentCapital.toFixed(2)}`);
-        lastBuy = null;
-        highestSinceBuy = null;
-        currentPositionAmount = 0;
-
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
-      }
+      previousPrice = price;
     }
 
-  } catch (err) {
-    log("❌ Gagal ambil harga");
-    console.error(err);
-  }
-}
-
-
-    // Start
-    fetchAndEvaluate();
-    setInterval(fetchAndEvaluate, 30000);
+    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS kamu
+    initChart();
+    setInterval(fetchAndEvaluate, 15000);
   </script>
 </body>
 </html>
