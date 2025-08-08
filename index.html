@@ -25,7 +25,7 @@
 <canvas id="chart" width="800" height="400"></canvas>
 <div>💼 Modal: <span id="capital">$1000.00</span></div>
 
-"//<button id="resetBtn">🔁 Reset Simulasi</button>
+// <button id="resetBtn">🔁 Reset Simulasi</button>
 <button id="connectBtn">🦊 Hubungkan MetaMask</button>
 
 <div id="log"></div>
@@ -83,7 +83,7 @@ document.getElementById("connectBtn").addEventListener("click", async () => {
   await provider.send("eth_requestAccounts", []);
   signer = provider.getSigner();
   userAddress = await signer.getAddress();
-  log("✅ MetaMask terhubung: " + userAddress);
+ log(`✅ MetaMask terhubung: ${userAddress} | Saldo: ${balanceBNB} BNB`);
 });
 
 function calculateSMA(data, period) {
