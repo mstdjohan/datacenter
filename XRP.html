@@ -212,7 +212,7 @@
           log(`📥 BUY di $${price.toFixed(4)} (terendah 25 data)`);
           sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 25 data)`);
         } else {
-          log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
         }
       } else {
         if (price > highestSinceBuy) highestSinceBuy = price;
