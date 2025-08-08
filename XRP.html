@@ -236,7 +236,7 @@ const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_ch
           localStorage.removeItem('highestSinceBuy');
           localStorage.removeItem('positionAmount');
         } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
         }
       }
 
