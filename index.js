@@ -1,59 +1,248 @@
-require('dotenv').config();
-const Web3 = require('web3');
-const axios = require('axios');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="refresh" content="540">
+  <title>Strategi Trading XRP - " XRP1 "</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script>
+    emailjs.init("aPZx0R9oxUbIQkLEv");
+  </script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    canvas { background: white; border: 1px solid #ccc; }
+    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    #resetBtn, #connectBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+  </style>
+</head>
+<body>
 
-const web3 = new Web3(process.env.RPC_URL);
-const { PRIVATE_KEY, WALLET_ADDRESS } = process.env;
+<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
+<div>💰 <span id="livePrice">Memuat...</span></div>
+<canvas id="chart" width="800" height="400"></canvas>
+<div>💼 Modal: <span id="capital">$1000.00</span></div>
 
-const routerAddress = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
-const routerAbi = [{"inputs":[{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"payable","type":"function"}];
-const router = new web3.eth.Contract(routerAbi, routerAddress);
+<button id="resetBtn">🔁 Reset Simulasi</button>
+<button id="connectBtn">🦊 Hubungkan MetaMask</button>
 
-const tokenIn = '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82'; // CAKE
-const tokenOut = '0x55d398326f99059ff775485246999027b3197955'; // USDT
+<div id="log"></div>
 
-const limitBuyPrice = 2.58;
+<script>
+let priceData = [], timeLabels = [];
+let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+let qtyPerTrade = 1000;
+let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
+const chartCtx = document.getElementById('chart').getContext('2d');
+let provider, signer, userAddress;
+const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7B3144628dB156f3F6c60dBE";
+const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const routerABI = ["function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external"];
 
-async function monitorPriceAndBuy() {
-  try {
-    const res = await axios.get('https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0');
-    const price = parseFloat(res.data.pair.priceUsd);
-    console.log(`[${new Date().toLocaleTimeString()}] Harga CAKE: $${price}`);
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+    ]
+  },
+  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
+});
 
-    if (price <= limitBuyPrice) {
-      console.log('✅ Harga di bawah limit. Proses pembelian...');
+function log(msg) {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
+}
 
-      const amountOutMin = 0;
-      const amountIn = web3.utils.toWei('0.01', 'ether');
+function updateCapitalDisplay() {
+  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
+}
 
-      const tx = router.methods.swapExactETHForTokens(
-        amountOutMin,
-        [tokenOut, tokenIn],
-        WALLET_ADDRESS,
-        Math.floor(Date.now() / 1000) + 60 * 10
-      );
+document.getElementById("resetBtn").addEventListener("click", () => {
+  localStorage.clear();
+  currentCapital = 1000;
+  lastBuy = null;
+  currentPositionAmount = 0;
+  updateCapitalDisplay();
+  log("🔄 Simulasi telah direset.");
+});
 
-      const gas = await tx.estimateGas({ from: WALLET_ADDRESS, value: amountIn });
-      const data = tx.encodeABI();
-      const nonce = await web3.eth.getTransactionCount(WALLET_ADDRESS);
+document.getElementById("connectBtn").addEventListener("click", async () => {
+  if (typeof window.ethereum === 'undefined') return log("❌ MetaMask tidak terdeteksi");
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  signer = provider.getSigner();
+  userAddress = await signer.getAddress();
+  log("✅ MetaMask terhubung: " + userAddress);
+});
 
-      const signedTx = await web3.eth.accounts.signTransaction(
-        {
-          to: routerAddress,
-          data,
-          gas,
-          value: amountIn,
-          nonce,
-        },
-        PRIVATE_KEY
-      );
+function calculateSMA(data, period) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) result.push(null);
+    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+  }
+  return result;
+}
 
-      const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-      console.log('✅ Transaksi berhasil:', receipt.transactionHash);
+function calculateEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let emaPrev = data[0];
+  result.push(emaPrev);
+  for (let i = 1; i < data.length; i++) {
+    const ema = data[i] * k + emaPrev * (1 - k);
+    result.push(ema);
+    emaPrev = ema;
+  }
+  return result;
+}
+
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  const sma = calculateSMA(data, period);
+  const upper = [], lower = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      lower.push(null);
+    } else {
+      const slice = data.slice(i - period + 1, i + 1);
+      const mean = sma[i];
+      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
     }
+  }
+  return { upper, lower };
+}
+
+function sendEmail(subject, body) {
+  emailjs.send("service_d48312b", "service_d48312b", {
+    subject: subject,
+    body: body,
+    time: new Date().toLocaleString()
+  }).then(() => {
+    log(`📧 Email terkirim: ${subject}`);
+  }).catch(err => {
+    log("⚠️ Gagal kirim email: " + err.text);
+  });
+}
+
+async function swap(tokenIn, tokenOut, amountIn) {
+  if (!signer) return log("⚠️ MetaMask belum terhubung");
+  const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
+  const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
+  const path = [tokenIn, tokenOut];
+
+  const token = new ethers.Contract(tokenIn, ["function approve(address,uint256) public returns(bool)"], signer);
+  await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256);
+
+  await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+    ethers.utils.parseUnits(amountIn.toString(), 18),
+    0,
+    path,
+    userAddress,
+    deadline
+  );
+  log("🔁 Swap berhasil antara token.");
+}
+
+async function fetchInitialData() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+    const data = await res.json();
+    data.prices.forEach(p => {
+      priceData.push(p[1]);
+      const date = new Date(p[0]);
+      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+    });
+    updateIndicators();
+    chart.update();
+    updateCapitalDisplay();
   } catch (err) {
-    console.error('❌ Gagal:', err.message);
+    log("❌ Gagal ambil data historis XRP dari CoinGecko");
   }
 }
 
-setInterval(monitorPriceAndBuy, 30000);
+function updateIndicators() {
+  const sma10 = calculateSMA(priceData, 10);
+  const ema12 = calculateEMA(priceData, 12);
+  const ema26 = calculateEMA(priceData, 26);
+  const bb = calculateBollingerBands(priceData);
+  chart.data.datasets[1].data = ema12;
+  chart.data.datasets[2].data = ema26;
+  chart.data.datasets[3].data = bb.upper;
+  chart.data.datasets[4].data = bb.lower;
+  chart.data.datasets[5].data = sma10;
+}
+
+async function fetchAndEvaluate() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
+    const data = await res.json();
+    const price = parseFloat(data.ripple.usd);
+    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+
+    const now = new Date().toLocaleTimeString();
+    priceData.push(price);
+    timeLabels.push(now);
+    if (priceData.length > 25) {
+      priceData.shift();
+      timeLabels.shift();
+    }
+    updateIndicators();
+    chart.update();
+
+    const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length - 1];
+    const upperBB = bb.upper[bb.upper.length - 1];
+
+    if (!lastBuy && price <= lowerBB) {
+      lastBuy = price;
+      currentPositionAmount = qtyPerTrade / price;
+      currentCapital -= qtyPerTrade;
+      updateCapitalDisplay();
+      localStorage.setItem('capital', currentCapital);
+      localStorage.setItem('lastBuy', lastBuy);
+      localStorage.setItem('positionAmount', currentPositionAmount);
+      log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
+      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+      swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+    } else if (lastBuy && price >= upperBB) {
+      const sellValue = price * currentPositionAmount;
+      currentCapital += sellValue;
+      updateCapitalDisplay();
+      log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
+      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+      lastBuy = null;
+      currentPositionAmount = 0;
+      localStorage.setItem('capital', currentCapital);
+      localStorage.removeItem('lastBuy');
+      localStorage.removeItem('positionAmount');
+      swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+    } else {
+      log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
+    }
+  } catch (err) {
+    log("❌ Gagal ambil harga XRP live");
+    console.error(err);
+  }
+}
+
+(async () => {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 30000);
+})();
+</script>
+</body>
+</html>
