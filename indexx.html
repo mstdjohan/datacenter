@@ -21,14 +21,14 @@
 <body>
 
 <h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
-
-<button id="connectWalletBtn">🔗 Connect MetaMask</button>
-<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
-<div>💵 Saldo: <span id="walletBalance">0</span> ETH</div>
-
 <div>💰 <span id="livePrice">Memuat...</span></div>
 <canvas id="chart" width="800" height="400"></canvas>
 <div>💼 Modal: <span id="capital">$1000.00</span></div>
+
+<!-- MetaMask Info -->
+<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
+<div>💵 Saldo: <span id="walletBalance">-</span> BNB</div>
+<button onclick="connectMetaMask()">🔗 Connect MetaMask</button>
 
 <button id="resetBtn">🔁 Reset Simulasi</button>
 
@@ -38,7 +38,7 @@
 let priceData = [];
 let timeLabels = [];
 let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 500;
+let qtyPerTrade = 1000;
 let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
 let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
 const chartCtx = document.getElementById('chart').getContext('2d');
@@ -129,77 +129,6 @@ function sendEmail(subject, body) {
   });
 }
 
-// ==== SWITCH TO BNB SMART CHAIN ====
-  async function switchToBSC() {
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
-      });
-      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x38',
-              chainName: 'BNB Smart Chain',
-              nativeCurrency: {
-                name: 'BNB',
-                symbol: 'BNB',
-                decimals: 18
-              },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
-              blockExplorerUrls: ['https://bscscan.com']
-            }]
-          });
-          log("✅ BNB Smart Chain berhasil ditambahkan ke MetaMask");
-        } catch (addError) {
-          log("❌ Gagal menambahkan jaringan BSC: " + addError.message);
-        }
-      } else {
-        log("❌ Gagal switch ke jaringan BSC: " + switchError.message);
-      }
-    }
-  }
-
-  // ==== METAMASK ====
-  async function connectWallet() {
-    if (typeof window.ethereum === "undefined") {
-      alert("❌ MetaMask tidak terdeteksi di browser Anda");
-      return;
-    }
-
-    try {
-      await switchToBSC();
-
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      if (!accounts || accounts.length === 0) {
-        log("❌ Gagal konek MetaMask: Tidak ada wallet aktif");
-        return;
-      }
-
-      const signer = provider.getSigner();
-      const userAddress = accounts[0];
-      document.getElementById("walletAddress").textContent = userAddress;
-
-      const balance = await provider.getBalance(userAddress);
-      const bnbBalance = ethers.utils.formatEther(balance);
-      document.getElementById("walletBalance").textContent = `${bnbBalance} BNB`;
-
-      log(`✅ Terhubung ke BNB Smart Chain: ${userAddress} | Saldo: ${bnbBalance} BNB`);
-    } catch (error) {
-      log("❌ Gagal konek MetaMask: " + error.message);
-    }
-  }
-
-  // (Fungsi lain seperti calculateSMA, calculateEMA, calculateBollingerBands, sendEmail dll bisa tetap di bawah sini)
- 
-
-  // ==== DATA ====
-
 async function fetchInitialData() {
   try {
     const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
@@ -282,17 +211,54 @@ async function fetchAndEvaluate() {
   }
 }
 
-// ==== EVENT LISTENER ====
-  document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
-  document.getElementById("resetBtn").addEventListener("click", () => {
-    localStorage.clear();
-    currentCapital = 1000;
-    lastBuy = null;
-    highestSinceBuy = null;
-    currentPositionAmount = 0;
-    updateCapitalDisplay();
-    log("🔄 Simulasi telah direset.");
-  });
+// MetaMask Integration
+async function connectMetaMask() {
+  if (typeof window.ethereum === 'undefined') {
+    log("❌ MetaMask tidak terdeteksi");
+    return;
+  }
+
+  try {
+    await ethereum.request({ method: 'eth_requestAccounts' });
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+    const address = await signer.getAddress();
+    document.getElementById("walletAddress").textContent = address;
+
+    // Switch ke BNB Smart Chain
+    try {
+      await ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
+      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
+    } catch (switchError) {
+      if (switchError.code === 4902) {
+        try {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x38',
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com']
+            }]
+          });
+        } catch (addError) {
+          log("❌ Gagal menambahkan jaringan BNB Smart Chain");
+        }
+      }
+    }
+
+    const balanceWei = await provider.getBalance(address);
+    const balanceBNB = parseFloat(ethers.utils.formatEther(balanceWei));
+    document.getElementById("walletBalance").textContent = balanceBNB.toFixed(4);
+    log(`✅ Terhubung: ${address} | Saldo: ${balanceBNB.toFixed(4)} BNB`);
+  } catch (err) {
+    log("❌ Gagal konek MetaMask: " + err.message);
+  }
+}
 
 (async () => {
   await fetchInitialData();
