@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <h2>Harga XRP "simulasi.html" & Indikator (Real-time + Historis)</h2>
+  <h2>Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
   <button onclick="connectWallet()">🔗 Connect MetaMask</button>
   <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
   <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
@@ -46,7 +46,7 @@
     function log(msg) {
       const time = new Date().toLocaleTimeString();
       const logBox = document.getElementById("log");
-      logBox.textContent += \n[${time}] ${msg};
+      logBox.textContent += `\n[${time}] ${msg}`;
       logBox.scrollTop = logBox.scrollHeight;
     }
 
@@ -60,7 +60,7 @@
       if (currentChainId !== 56) await switchToBSC();
 
       const balance = await provider.getBalance(walletAddress);
-      document.getElementById("wallet").innerHTML = 👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB;
+      document.getElementById("wallet").innerHTML = `👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB`;
 
       router = new ethers.Contract(
         PANCAKE_ROUTER_ADDRESS,
@@ -71,7 +71,7 @@
         signer
       );
 
-      log(✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB);
+      log(`✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB`);
     }
 
     async function switchToBSC() {
@@ -163,8 +163,8 @@
         const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
         await tx.wait();
 
-        log(✅ Swap ${action.toUpperCase()} XRP berhasil);
-        sendEmail(AUTO-TRADE ${action.toUpperCase()}, Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD});
+        log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
+        sendEmail(`AUTO-TRADE ${action.toUpperCase()}`, `Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD}`);
       } catch (err) {
         log("❌ Gagal auto-swap: " + err.message);
       }
@@ -191,14 +191,14 @@
       if (previousPrice !== null) {
         if (previousPrice < lowerBB && price >= lowerBB) {
           await autoSwap("buy", qtyPerTrade);
-          sendEmail("BUY Signal", Rebound dari Lower BB di $${price.toFixed(4)});
+          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
           currentPositionAmount += qtyPerTrade / price;
         } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
           await autoSwap("sell", price * currentPositionAmount);
-          sendEmail("SELL Signal", Rebound dari Upper BB di $${price.toFixed(4)});
+          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
           currentPositionAmount = 0;
         } else {
-          log(⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)});
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
         }
       }
 
