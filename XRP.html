@@ -130,6 +130,7 @@
   }
 
   try {
+    // Ganti ke jaringan BSC
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const accounts = await provider.send("eth_requestAccounts", []);
     
@@ -143,10 +144,19 @@
 
     document.getElementById("walletAddress").textContent = userAddress;
 
+    // Ambil saldo BNB di BSC
     const balance = await provider.getBalance(userAddress);
-    document.getElementById("walletBalance").textContent = ethers.utils.formatEther(balance);
+    const bnbBalance = ethers.utils.formatEther(balance);
+    document.getElementById("walletBalance").textContent = `${bnbBalance} BNB`;
 
-    log(`✅ Terhubung ke MetaMask: ${userAddress}`);
+    log(`✅ Terhubung ke BNB Smart Chain: ${userAddress} | Saldo: ${bnbBalance} BNB`);
+
+    // Opsional: cek chainId untuk pastikan di jaringan BSC
+    const network = await provider.getNetwork();
+    if (network.chainId !== 56) {
+      log("⚠️ Anda tidak sedang di jaringan BNB Mainnet. Chain ID saat ini: " + network.chainId);
+    }
+
   } catch (error) {
     log("❌ Gagal konek MetaMask: " + error.message);
   }
