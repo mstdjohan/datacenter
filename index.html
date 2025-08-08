@@ -83,7 +83,7 @@ document.getElementById("connectBtn").addEventListener("click", async () => {
   await provider.send("eth_requestAccounts", []);
   signer = provider.getSigner();
   userAddress = await signer.getAddress();
- log(`✅ MetaMask terhubung: ${userAddress};
+  log("✅ MetaMask terhubung: " + userAddress);
 });
 
 function calculateSMA(data, period) {
