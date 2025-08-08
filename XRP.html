@@ -70,6 +70,62 @@
     document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
   }
 
+  
+
+
+
+  function calculateSMA(data, period) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) result.push(null);
+      else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+    }
+    return result;
+  }
+
+  function calculateEMA(data, period) {
+    const result = [];
+    const k = 2 / (period + 1);
+    let emaPrev = data[0];
+    result.push(emaPrev);
+    for (let i = 1; i < data.length; i++) {
+      const ema = data[i] * k + emaPrev * (1 - k);
+      result.push(ema);
+      emaPrev = ema;
+    }
+    return result;
+  }
+
+  function calculateBollingerBands(data, period = 20, multiplier = 2) {
+    const sma = calculateSMA(data, period);
+    const upper = [], lower = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        upper.push(null);
+        lower.push(null);
+      } else {
+        const slice = data.slice(i - period + 1, i + 1);
+        const mean = sma[i];
+        const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+        upper.push(mean + multiplier * stdDev);
+        lower.push(mean - multiplier * stdDev);
+      }
+    }
+    return { upper, lower };
+  }
+
+  function sendEmail(subject, body) {
+    emailjs.send("service_5hxo1hk", "template_iq87egh", {
+      subject: subject,
+      body: body,
+      time: new Date().toLocaleString()
+    }).then(() => {
+      log(`📧 Email terkirim: ${subject}`);
+    }).catch(err => {
+      log("⚠️ Gagal kirim email: " + err.text);
+    });
+  }
+
   // ==== SWITCH TO BNB SMART CHAIN ====
   async function switchToBSC() {
     try {
@@ -137,62 +193,6 @@
   }
 
   // (Fungsi lain seperti calculateSMA, calculateEMA, calculateBollingerBands, sendEmail dll bisa tetap di bawah sini)
-
-
-
-  function calculateSMA(data, period) {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) result.push(null);
-      else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-    }
-    return result;
-  }
-
-  function calculateEMA(data, period) {
-    const result = [];
-    const k = 2 / (period + 1);
-    let emaPrev = data[0];
-    result.push(emaPrev);
-    for (let i = 1; i < data.length; i++) {
-      const ema = data[i] * k + emaPrev * (1 - k);
-      result.push(ema);
-      emaPrev = ema;
-    }
-    return result;
-  }
-
-  function calculateBollingerBands(data, period = 20, multiplier = 2) {
-    const sma = calculateSMA(data, period);
-    const upper = [], lower = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        upper.push(null);
-        lower.push(null);
-      } else {
-        const slice = data.slice(i - period + 1, i + 1);
-        const mean = sma[i];
-        const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-        upper.push(mean + multiplier * stdDev);
-        lower.push(mean - multiplier * stdDev);
-      }
-    }
-    return { upper, lower };
-  }
-
-  function sendEmail(subject, body) {
-    emailjs.send("service_5hxo1hk", "template_iq87egh", {
-      subject: subject,
-      body: body,
-      time: new Date().toLocaleString()
-    }).then(() => {
-      log(`📧 Email terkirim: ${subject}`);
-    }).catch(err => {
-      log("⚠️ Gagal kirim email: " + err.text);
-    });
-  }
-
-  
  
 
   // ==== DATA ====
