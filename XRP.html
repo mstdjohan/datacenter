@@ -228,9 +228,9 @@ async function tryAutoConnect(){
       // already authorized
       signer = provider.getSigner();
       userAddress = accounts[0];
-      walletAddressEl.textContent = "0x2F32D47710B8825B38b011543c00dd5c3189762C";
+      walletAddressEl.textContent = userAddress;
       statusBadge.textContent = 'Connected (auto)';
-      uiLog("✅ MetaMask auto-connected: " + "0x2F32D47710B8825B38b011543c00dd5c3189762C");
+      uiLog("✅ MetaMask auto-connected: " + userAddress);
       await refreshAccountBalances();
     } else {
       uiLog("MetaMask not yet authorized — waiting for user action (auto-connect available on user approval).");
