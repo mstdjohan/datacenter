@@ -254,20 +254,53 @@ window.addEventListener('focus', async () => {
 });
 
 // Manual connect button (unchanged behaviour)
-connectBtn.addEventListener('click', async () => {
-  if (typeof window.ethereum === 'undefined'){ uiLog("❌ MetaMask not detected"); statusBadge.textContent='No wallet'; return; }
+async function connectWallet() {
+  if (typeof window.ethereum === 'undefined') {
+    uiLog("❌ MetaMask not detected");
+    statusBadge.textContent = 'No wallet';
+    return;
+  }
+
   try {
     provider = new ethers.providers.Web3Provider(window.ethereum);
-    await provider.send('eth_requestAccounts', []);
-    signer = provider.getSigner();
-    userAddress = await signer.getAddress();
+
+    // Cek apakah sudah ada akun yang terhubung
+    const accounts = await provider.listAccounts();
+
+    if (accounts.length === 0) {
+      // Belum connect, coba minta izin connect
+      await provider.send('eth_requestAccounts', []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      uiLog('✅ MetaMask connected: ' + userAddress);
+    } else {
+      // Sudah connect, pakai akun yang ada
+      userAddress = accounts[0];
+      signer = provider.getSigner(userAddress);
+      uiLog('ℹ️ MetaMask already connected: ' + userAddress);
+    }
+
     walletAddressEl.textContent = userAddress;
     statusBadge.textContent = 'Connected';
-    uiLog('✅ MetaMask connected: ' + userAddress);
+
     await enhancedRefreshAccountBalances();
+
   } catch (e) {
     uiLog("❌ Connect failed: " + e.message);
   }
+}
+
+// Manual connect button pakai fungsi yang sama
+connectBtn.addEventListener('click', connectWallet);
+
+// Auto connect / refresh setiap 7 menit
+setInterval(() => {
+  connectWallet();
+}, 7 * 60 * 1000);
+
+// Jika ingin langsung connect saat load halaman
+window.addEventListener('load', () => {
+  connectWallet();
 });
 
 refreshBalancesBtn.addEventListener('click', enhancedRefreshAccountBalances);
