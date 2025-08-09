@@ -535,6 +535,23 @@ resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=10
     try { location.reload(); } catch(e) { uiLog("⚠️ Auto-refresh failed: " + e.message); }
   }, 7 * 60 * 1000);
 })();
+
+
+// Saat halaman dimuat setelah refresh
+window.addEventListener('load', async () => {
+  try {
+    await tryAutoConnect();           // Auto-connect MetaMask
+    await refreshAccountBalances();   // Refresh saldo BNB
+    mockSignals = true;               // Aktifkan mock signals
+    if (typeof mockSignalBtn !== 'undefined') {
+      mockSignalBtn.textContent = "🧪 Mock Signals (ON)";
+    }
+    uiLog("Mock signals enabled");
+  } catch(e) {
+    uiLog("⚠️ Init after refresh failed: " + e.message);
+  }
+});
+
 </script>
 </body>
 </html>
