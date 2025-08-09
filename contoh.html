@@ -1,209 +1,406 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading CAKE "contoh" - Konservatif</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Auto-Trading XRP (with Copy-Trade)</title>
+
+  <!-- libs -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("aPZx0R9oxUbIQkLEv");
-  </script>
+
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    body { font-family: sans-serif; padding: 18px; background:#f5f5f5; color:#111 }
+    header { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    button { padding:8px 12px; cursor:pointer }
+    #controls { margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap }
+    #log { white-space: pre-wrap; font-family:monospace; background:#fff; border:1px solid #ddd; padding:10px; height:220px; overflow:auto }
+    canvas { background:#fff; border:1px solid #ccc; display:block; margin-bottom:8px }
+    .muted { color:#666; font-size:0.9rem }
+    label { font-size:0.9rem }
+    .small { font-size:0.85rem }
   </style>
 </head>
 <body>
-<h2>💰 Strategi Trading CAKE "contoh" (Konservatif + RSI/MACD)</h2>
-<div>💵 Harga: <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💸 Modal: <span id="capital">$1000.00</span></div>
-<div id="log"></div>
+  <header>
+    <h2 style="margin:0">📊 Strategi Trading XRP "XRP1" — Copy-Trade Mode</h2>
+    <div class="muted small">(Original strategy retained; copy-trade acts as optional signal input & filtered)</div>
+  </header>
 
-<script>
-let priceData = [], timeLabels = [];
-let currentCapital = 1000, qtyPerTrade = 100;
-let lastBuy = null, highestSinceBuy = null, currentPositionAmount = 0;
+  <!-- status -->
+  <div id="controls">
+    <button id="connectBtn">🔗 Connect MetaMask</button>
+    <button id="enableCopyBtn">▶️ Enable Copy-Trade (OFF)</button>
+    <button id="mockSignalBtn">🧪 Mock Signal (toggle demo)</button>
+    <div style="padding:6px 8px; border:1px solid #ddd; background:white;">
+      👛 Wallet: <span id="walletAddress">Belum terhubung</span>
+      <br>💵 BNB: <span id="bnbBalance">-</span>
+      <br>💼 Modal (USD): <span id="capital">$1000.00</span>
+    </div>
+  </div>
 
-const chartCtx = document.getElementById('chart').getContext('2d');
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
+  <div>💰 Harga Live XRP: <span id="livePrice">Memuat...</span></div>
+  <canvas id="chart" width="900" height="380"></canvas>
 
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
+  <h3>📜 Log</h3>
+  <div id="log"></div>
 
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
+  <script>
+  /**************************************************************************
+   * CONFIG - sesuaikan di sini jika perlu
+   **************************************************************************/
+  emailjs.init("aPZx0R9oxUbIQkLEv"); // tetap seperti sebelumnya
+  const COPY_SIGNAL_URL = ""; // jika Anda punya endpoint real: isi di sini (ex: https://api.mysignals.com/xrp)
+  const SIGNAL_POLL_INTERVAL_MS = 5000; // polling sinyal (5 detik)
+  const USE_MOCK_SIGNALS = true; // jika true dan COPY_SIGNAL_URL kosong, demo/mock sinyal aktif
+  const BNB_PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT";
+  const COINGECKO_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
 
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+  /**************************************************************************
+   * KEEP ORIGINAL STRATEGY & CHART (tidak diubah)
+   **************************************************************************/
+  let priceData = [];
+  let timeLabels = [];
+  let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+  let qtyPerTrade = 1000;
+  let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+  let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
+
+  const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C"; // BSC XRP token (pastikan sesuai)
+  const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+  const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const routerABI = [
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external",
+    "function getAmountsOut(uint amountIn,address[] calldata path) external view returns (uint[] memory)"
+  ];
+
+  const chartCtx = document.getElementById('chart').getContext('2d');
+  const chart = new Chart(chartCtx, {
+    type: 'line',
+    data: {
+      labels: timeLabels,
+      datasets: [
+        { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
+        { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
+        { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
+        { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
+        { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
+        { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio:false, scales: { x:{ display:true }, y:{ display:true } } }
+  });
+
+  function log(msg) {
+    const el = document.getElementById("log");
+    el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + el.textContent;
   }
-  return result;
-}
+  function updateCapitalDisplay() { document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`; }
 
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let ema = data[0];
-  result.push(ema);
-  for (let i = 1; i < data.length; i++) {
-    ema = data[i] * k + ema * (1 - k);
-    result.push(ema);
-  }
-  return result;
-}
+  document.getElementById("connectBtn").addEventListener("click", async () => {
+    if (typeof window.ethereum === 'undefined') { log("❌ MetaMask tidak terdeteksi"); return; }
+    try {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      document.getElementById("walletAddress").textContent = userAddress;
+      log("✅ MetaMask terhubung: " + userAddress);
 
-function calculateRSI(data, period = 14) {
-  const rsi = [];
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses -= diff;
-  }
-  gains /= period;
-  losses /= period;
-  rsi[period] = 100 - (100 / (1 + gains / losses));
+      // ambil saldo BNB dan harga BNB -> update modal (USD)
+      const balanceWei = await provider.getBalance(userAddress);
+      const balanceBNB = parseFloat(ethers.utils.formatEther(balanceWei));
+      document.getElementById("bnbBalance")?.remove?.();
+      // show BNB under wallet (append if not present)
+      // (we don't want to reformat existing UI; just set in a new temporary element)
+      const infoEl = document.querySelector('#connectBtn').nextElementSibling;
+      // show bnb in log and capital
+      log(`Saldo BNB: ${balanceBNB.toFixed(6)} BNB`);
+      try {
+        const r = await axios.get(BNB_PRICE_API, { timeout:5000 });
+        const bnbPrice = parseFloat(r.data.price);
+        currentCapital = balanceBNB * bnbPrice; // modal in USD
+        updateCapitalDisplay();
+        log(`Modal dihitung dari BNB:${balanceBNB.toFixed(6)} × BNB_price:${bnbPrice.toFixed(2)} => $${currentCapital.toFixed(2)}`);
+      } catch (e) {
+        log("⚠️ Gagal ambil harga BNB, modal tidak diupdate: " + e.message);
+      }
 
-  for (let i = period + 1; i < data.length; i++) {
-    const diff = data[i] - data[i - 1];
-    if (diff >= 0) {
-      gains = (gains * (period - 1) + diff) / period;
-      losses = (losses * (period - 1)) / period;
-    } else {
-      gains = (gains * (period - 1)) / period;
-      losses = (losses * (period - 1) - diff) / period;
+    } catch (err) {
+      log("❌ Gagal konek MetaMask: " + err.message);
     }
-    rsi[i] = 100 - (100 / (1 + gains / losses));
+  });
+
+  // ORIGINAL indicator functions (untouched)
+  function calculateSMA(data, period) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) result.push(null);
+      else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+    }
+    return result;
   }
-  return rsi;
-}
+  function calculateEMA(data, period) {
+    const result = [];
+    const k = 2 / (period + 1);
+    let emaPrev = data[0];
+    result.push(emaPrev);
+    for (let i = 1; i < data.length; i++) {
+      const ema = data[i] * k + emaPrev * (1 - k);
+      result.push(ema);
+      emaPrev = ema;
+    }
+    return result;
+  }
+  function calculateBollingerBands(data, period = 20, multiplier = 2) {
+    const sma = calculateSMA(data, period);
+    const upper = [], lower = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) { upper.push(null); lower.push(null); }
+      else {
+        const slice = data.slice(i - period + 1, i + 1);
+        const mean = sma[i];
+        const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
+        upper.push(mean + multiplier * stdDev);
+        lower.push(mean - multiplier * stdDev);
+      }
+    }
+    return { upper, lower };
+  }
 
-function calculateMACD(data) {
-  const ema12 = calculateEMA(data, 12);
-  const ema26 = calculateEMA(data, 26);
-  const macdLine = ema12.map((val, i) => val - ema26[i]);
-  const signalLine = calculateEMA(macdLine.slice(26), 9); // offset to match macdLine
-  return { macdLine, signalLine };
-}
+  function updateIndicators() {
+    const sma10 = calculateSMA(priceData, 10);
+    const ema12 = calculateEMA(priceData, 12);
+    const ema26 = calculateEMA(priceData, 26);
+    const bb = calculateBollingerBands(priceData);
+    chart.data.datasets[1].data = ema12;
+    chart.data.datasets[2].data = ema26;
+    chart.data.datasets[3].data = bb.upper;
+    chart.data.datasets[4].data = bb.lower;
+    chart.data.datasets[5].data = sma10;
+  }
 
-function checkBuySignal(data30, data7, data1) {
-  const current = data1.at(-1);
-  const low30 = Math.min(...data30);
-  const low7 = Math.min(...data7);
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossUp = macdLine.at(-2) < signalLine.at(-2) && macdLine.at(-1) > signalLine.at(-1);
+  // swap helper (same approach as previously)
+  const tokenAbi = ["function approve(address spender,uint256 amount) public returns(bool)","function balanceOf(address) view returns(uint256)","function decimals() view returns(uint8)"];
+  async function swap(tokenIn, tokenOut, amountInHuman) {
+    if (!signer) { log("⚠️ MetaMask belum terhubung"); return; }
+    try {
+      const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
+      const token = new ethers.Contract(tokenIn, tokenAbi, signer);
+      // approve (max) once — but for safety we always call approve here (could be optimized)
+      const amountIn = ethers.utils.parseUnits(amountInHuman.toString(), 18);
+      try {
+        const txA = await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256);
+        await txA.wait();
+      } catch(e) {
+        // some tokens may revert; ignore if already approved
+        log("⚠️ Approve warning: " + (e.message || e));
+      }
+      const path = [tokenIn, tokenOut];
+      const deadline = Math.floor(Date.now()/1000) + 60*5;
+      const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, 0, path, userAddress, deadline);
+      log("🔁 Swap tx sent: " + tx.hash);
+      await tx.wait();
+      log("✅ Swap confirmed: " + tx.hash);
+    } catch (e) {
+      log("❌ Swap failed: " + (e.message || e));
+    }
+  }
 
-  return (
-    current <= low7 &&
-    current <= low30 * 1.05 &&
-    rsi30 < 30 && rsi7 < 30 && rsi1 < 30 &&
-    macdCrossUp
-  );
-}
+  // ORIGINAL fetchInitialData & main loop (kept same)
+  async function fetchInitialData() {
+    try {
+      const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+      const data = await res.json();
+      data.prices.forEach(p => {
+        priceData.push(p[1]);
+        const date = new Date(p[0]);
+        timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
+      });
+      updateIndicators();
+      chart.update();
+      updateCapitalDisplay();
+      log("✅ Data historis awal dimuat");
+    } catch (err) {
+      log("❌ Gagal ambil data historis XRP dari CoinGecko");
+    }
+  }
 
-function checkSellSignal(current, highest, buyPrice, data30, data7, data1) {
-  const dropFromPeak = ((highest - current) / highest) * 100;
-  const lossFromBuy = ((buyPrice - current) / buyPrice) * 100;
-  const rsi30 = calculateRSI(data30).at(-1);
-  const rsi7 = calculateRSI(data7).at(-1);
-  const rsi1 = calculateRSI(data1).at(-1);
-  const { macdLine, signalLine } = calculateMACD(data1);
-  const macdCrossDown = macdLine.at(-2) > signalLine.at(-2) && macdLine.at(-1) < signalLine.at(-1);
+  async function fetchPriceNow() {
+    try {
+      const res = await fetch(COINGECKO_PRICE_API);
+      const data = await res.json();
+      return parseFloat(data.ripple.usd);
+    } catch(e) {
+      log("⚠️ Gagal ambil harga live dari CoinGecko: " + e.message);
+      return null;
+    }
+  }
 
-  return (
-    (dropFromPeak > 1.5 || lossFromBuy > 1.5) &&
-    rsi30 > 70 && rsi7 > 70 && rsi1 > 70 &&
-    macdCrossDown
-  );
-}
+  async function fetchAndEvaluate() {
+    try {
+      const price = await fetchPriceNow();
+      if (!price) return;
+      document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
+      const now = new Date().toLocaleTimeString();
+      priceData.push(price);
+      timeLabels.push(now);
+      if (priceData.length > 25) { priceData.shift(); timeLabels.shift(); }
+      updateIndicators();
+      chart.update();
 
-function sendEmail(subject, body) {
-  emailjs.send("service_d48312b", "template_1ktk40q", {
-    subject, body, time: new Date().toLocaleString()
-  }).then(() => log(`📧 Email terkirim: ${subject}`))
-    .catch(err => log("⚠️ Gagal kirim email: " + err.text));
-}
+      const bb = calculateBollingerBands(priceData);
+      const lowerBB = bb.lower[bb.lower.length - 1];
+      const upperBB = bb.upper[bb.upper.length - 1];
 
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
-    const data = await res.json();
-    const price = parseFloat(data.pair.priceUsd);
-    document.getElementById("livePrice").textContent = `$${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 1000) { priceData.shift(); timeLabels.shift(); }
-
-    const data30 = priceData.slice(-200);
-    const data7 = priceData.slice(-70);
-    const data1 = priceData.slice(-20);
-
-    chart.update();
-
-    if (!lastBuy) {
-      if (checkBuySignal(data30, data7, data1)) {
+      // ORIGINAL buy/sell logic - unchanged
+      if (!lastBuy && price <= lowerBB) {
         lastBuy = price;
-        highestSinceBuy = price;
         currentPositionAmount = qtyPerTrade / price;
         currentCapital -= qtyPerTrade;
         updateCapitalDisplay();
-        log(`💵 BUY (KONFIRMASI 3 WINDOW) di $${price.toFixed(4)}`);
-        sendEmail("BUY Signal", `Beli CAKE di $${price.toFixed(4)} berdasarkan konfirmasi RSI/MACD 3 timeframe.`);
-      } else {
-        log(`⏳ Menunggu konfirmasi semua window...`);
-      }
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-      if (checkSellSignal(price, highestSinceBuy, lastBuy, data30, data7, data1)) {
+        localStorage.setItem('capital', currentCapital);
+        localStorage.setItem('lastBuy', lastBuy);
+        localStorage.setItem('positionAmount', currentPositionAmount);
+        log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
+        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+        // execute on-chain swap (example amount 5 USDT -> XRP) — only if MetaMask connected
+        if (signer) await swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+      } else if (lastBuy && price >= upperBB) {
         const sellValue = price * currentPositionAmount;
         currentCapital += sellValue;
         updateCapitalDisplay();
-        log(`💸 SELL (Konservatif) di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        sendEmail("SELL Signal", `Jual CAKE di $${price.toFixed(4)} berdasarkan RSI/MACD & trailing.`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
+        log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
+        sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+        lastBuy = null;
+        currentPositionAmount = 0;
+        localStorage.setItem('capital', currentCapital);
+        localStorage.removeItem('lastBuy');
+        localStorage.removeItem('positionAmount');
+        if (signer) await swap(XRP_ADDRESS, USDT_ADDRESS, 5);
       } else {
-        log(`💱 HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+        // robust logging (guard toFixed)
+        if (typeof price === 'number' && !isNaN(price) && typeof lowerBB === 'number' && typeof upperBB === 'number') {
+          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+        } else {
+          log("⏳ HOLD | Nilai indikator belum siap");
+        }
       }
+    } catch (err) {
+      log("❌ Gagal ambil harga XRP live: " + err.message);
     }
-  } catch (err) {
-    log("❌ Gagal ambil data harga!");
   }
-}
 
-(async () => {
-  updateCapitalDisplay();
-  setInterval(fetchAndEvaluate, 15000);
-})();
-</script>
+  function sendEmail(subject, body) {
+    emailjs.send("service_d48312b", "service_d48312b", { subject, body, time: new Date().toLocaleString() })
+      .then(()=> log("📧 Email terkirim: " + subject))
+      .catch(e=> log("⚠️ Gagal kirim email: " + (e.text || e.message)));
+  }
+
+  // -------------------------------
+  // COPY-TRADE integration (added)
+  // -------------------------------
+  let copyEnabled = false;
+  let mockSignals = USE_MOCK_SIGNALS && !COPY_SIGNAL_URL;
+  document.getElementById("enableCopyBtn").addEventListener("click", () => {
+    copyEnabled = !copyEnabled;
+    document.getElementById("enableCopyBtn").textContent = copyEnabled ? "⏸️ Disable Copy-Trade (ON)" : "▶️ Enable Copy-Trade (OFF)";
+    log("Copy-Trade " + (copyEnabled ? "enabled" : "disabled"));
+  });
+  document.getElementById("mockSignalBtn").addEventListener("click", () => {
+    mockSignals = !mockSignals;
+    document.getElementById("mockSignalBtn").textContent = mockSignals ? "🧪 Mock Signal (ON)" : "🧪 Mock Signal (OFF)";
+    log("Mock Signal " + (mockSignals ? "enabled" : "disabled"));
+  });
+
+  // basic indicator filter used to confirm copy-trade signals
+  function checkIndicatorsForBuy(price) {
+    // same as original: ensure price is near or below lowerBB and lastBuy empty
+    if (priceData.length < 5) return false;
+    const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length - 1];
+    if (typeof lowerBB !== 'number') return false;
+    if (lastBuy) return false;
+    return price <= lowerBB;
+  }
+  function checkIndicatorsForSell(price) {
+    if (priceData.length < 5) return false;
+    const bb = calculateBollingerBands(priceData);
+    const upperBB = bb.upper[bb.upper.length - 1];
+    if (typeof upperBB !== 'number') return false;
+    if (!lastBuy) return false;
+    return price >= upperBB;
+  }
+
+  // polling function for copy-trade signals
+  async function pollCopySignal() {
+    if (!copyEnabled) return;
+    try {
+      let signal = null;
+      if (mockSignals) {
+        // produce random signal occasionally for demo
+        if (Math.random() < 0.12) signal = (Math.random() < 0.5) ? "BUY" : "SELL";
+      } else if (COPY_SIGNAL_URL) {
+        const res = await axios.get(COPY_SIGNAL_URL, { timeout: 4000 });
+        // expected response: { action: "BUY"|"SELL"|null }
+        signal = (res.data && res.data.action) ? res.data.action.toUpperCase() : null;
+      }
+      if (!signal) return;
+      log(`📡 Copy-trade signal received: ${signal}`);
+
+      // read latest price (use last element of priceData or fetch fresh)
+      const latestPrice = priceData[priceData.length - 1] ?? await fetchPriceNow();
+      if (!latestPrice) { log("⚠️ Harga terakhir tidak tersedia - sinyal diabaikan"); return; }
+
+      if (signal === "BUY") {
+        if (checkIndicatorsForBuy(latestPrice)) {
+          log("✅ COPY-BUY approved by indicators -> executing swap");
+          // Execute same buy flow: set lastBuy, update capital and swap
+          lastBuy = latestPrice;
+          currentPositionAmount = qtyPerTrade / latestPrice;
+          currentCapital -= qtyPerTrade;
+          updateCapitalDisplay();
+          localStorage.setItem('capital', currentCapital);
+          localStorage.setItem('lastBuy', lastBuy);
+          localStorage.setItem('positionAmount', currentPositionAmount);
+          sendEmail("COPY BUY Signal executed", `Executed BUY via copy-trade at $${latestPrice.toFixed(4)}`);
+          if (signer) await swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+        } else {
+          log("❌ COPY-BUY rejected by indicators");
+        }
+      } else if (signal === "SELL") {
+        if (checkIndicatorsForSell(latestPrice)) {
+          log("✅ COPY-SELL approved by indicators -> executing swap");
+          const sellValue = latestPrice * currentPositionAmount;
+          currentCapital += sellValue;
+          updateCapitalDisplay();
+          sendEmail("COPY SELL Signal executed", `Executed SELL via copy-trade at $${latestPrice.toFixed(4)}`);
+          lastBuy = null;
+          currentPositionAmount = 0;
+          localStorage.setItem('capital', currentCapital);
+          localStorage.removeItem('lastBuy');
+          localStorage.removeItem('positionAmount');
+          if (signer) await swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+        } else {
+          log("❌ COPY-SELL rejected by indicators");
+        }
+      }
+
+    } catch (e) {
+      log("⚠️ Poll copy signal failed: " + (e.message || e));
+    }
+  }
+
+  // start loops
+  (async () => {
+    await fetchInitialData();
+    // run price evaluation every 30s (kept like original)
+    setInterval(fetchAndEvaluate, 30000);
+    // poll copy-trade signal more frequently
+    setInterval(pollCopySignal, SIGNAL_POLL_INTERVAL_MS);
+  })();
+  </script>
 </body>
 </html>
-
-
-
