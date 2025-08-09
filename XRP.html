@@ -521,7 +521,7 @@ resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=10
 // --- Multi-token balance & USD conversion ---
 async function fetchPriceBinance(symbol) {
   try {
-    const res = await axios.get("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://api.binance.com/api/v3/ticker/price?symbol=" + symbol), { timeout: 4000 });
+    const res = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=" + symbol, { timeout: 4000 });
     if (res && res.data && res.data.price) return parseFloat(res.data.price);
   } catch (e) {
     // ignore here, caller will fallback
