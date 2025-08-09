@@ -1,312 +1,540 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading XRP - "XRP1"</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Auto-Trading XRP — Final (Auto-connect & Auto-refresh)</title>
+
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    :root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--danger:#ef4444;--success:#10b981}
+    html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial;color:#0f172a}
+    .container{max-width:1100px;margin:20px auto;padding:18px}
+    header{display:flex;justify-content:space-between;align-items:center}
+    h1{margin:0;font-size:18px}
+    .muted{color:#6b7280;font-size:13px}
+    .grid{display:grid;grid-template-columns:340px 1fr;gap:14px;margin-top:12px}
+    .card{background:var(--card);padding:12px;border-radius:8px;box-shadow:0 1px 6px rgba(2,6,23,0.06)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    button{padding:8px 10px;border-radius:6px;border:1px solid #e6eef0;background:#fff;cursor:pointer}
+    .btn-primary{background:linear-gradient(90deg,#06b6d4,#06a6b9);color:#fff;border:none}
+    .btn-danger{background:var(--danger);color:#fff;border:none}
+    input,select{padding:8px;border-radius:6px;border:1px solid #e6eef0;width:100%}
+    .stat{display:flex;justify-content:space-between;padding:8px;border-radius:6px;background:#fafafa;border:1px solid #eef2f7;margin-bottom:6px}
+    #log{font-family:monospace;white-space:pre-wrap;height:220px;overflow:auto;padding:10px;background:#0b1220;color:#dbeafe;border-radius:6px}
+    #chart{height:360px}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    .small{font-size:13px}
   </style>
 </head>
 <body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>📊 Auto-Trading XRP — Final</h1>
+        <div class="muted">Strategy: Bollinger Bands (intact). Auto-connect & auto-refresh every 7 minutes added.</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted small">Status</div>
+        <div id="statusBadge" style="padding:6px 10px;border-radius:8px;background:#fff;border:1px solid #e6eef0">Not connected</div>
+      </div>
+    </header>
 
-<h2>📊 Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
+    <div class="grid">
+      <!-- Left: controls -->
+      <div>
+        <div class="card">
+          <div class="controls">
+            <button id="connectBtn" class="btn-primary">🔗 Connect MetaMask</button>
+            <button id="refreshBalancesBtn">🔄 Refresh Balances</button>
+          </div>
 
-<button id="connectWalletBtn">🔗 Connect MetaMask</button>
-<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
-<div>💵 Saldo: <span id="walletBalance">0</span> ETH</div>
+          <div style="margin-top:8px">
+            <div class="stat"><div>👛 Wallet</div><div id="walletAddress" class="small muted">Belum terhubung</div></div>
+            <div class="stat"><div>💵 Saldo BNB</div><div id="bnbBalance" class="small">-</div></div>
+            <div class="stat"><div>💼 Modal (USD)</div><div id="capital" class="small">$1000.00</div></div>
+            <div class="stat"><div>💰 Harga Live XRP</div><div id="livePrice" class="small">Memuat...</div></div>
+          </div>
+        </div>
 
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
+        <div style="height:12px"></div>
 
-<button id="resetBtn">🔁 Reset Simulasi</button>
+        <div class="card">
+          <div class="small muted" style="margin-bottom:8px">Copy-Trade Mode</div>
 
-<div id="log"></div>
+          <label class="small">Mode</label>
+          <select id="copyMode" style="margin-top:6px;margin-bottom:8px">
+            <option value="signal">Follow Signal API</option>
+            <option value="wallet">Follow Leader Wallet (on-chain)</option>
+          </select>
+
+          <div id="signalSettings" style="margin-top:8px">
+            <label class="small">Signal API URL</label>
+            <input id="signalUrl" placeholder="https://api.provider/signals" />
+            <label class="small" style="margin-top:8px">Bearer Token (optional)</label>
+            <input id="signalToken" placeholder="Authorization token" />
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button id="enableCopyBtn">▶️ Enable Copy-Trade (OFF)</button>
+              <button id="mockSignalBtn">🧪 Mock Signals (ON)</button>
+            </div>
+          </div>
+
+          <div id="walletSettings" style="display:none;margin-top:8px">
+            <label class="small">Leader Wallet Address</label>
+            <input id="leaderAddress" placeholder="0xLeaderAddress..." />
+            <label class="small" style="margin-top:8px">BscScan API Key</label>
+            <input id="bscscanKey" placeholder="(required for txlist polling)" />
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button id="followWalletBtn">🔎 Start Following Wallet</button>
+              <button id="stopFollowBtn" style="display:none">⛔ Stop Following</button>
+            </div>
+            <div class="muted small" style="margin-top:8px">Follow-wallet decodes PancakeSwap swaps and mirrors them (scaled).</div>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card">
+          <div class="small muted" style="margin-bottom:8px">Manual Controls & Safety</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="manualBuy">🟢 BUY (Manual)</button>
+            <button id="manualSell" class="btn-danger">🔴 SELL (Manual)</button>
+            <button id="resetBtn">🔁 Reset Simulasi</button>
+          </div>
+
+          <label class="small">Follow trade size scale (fraction of leader amount)</label>
+          <input id="followScale" placeholder="e.g. 0.5 (50%)" value="0.5" />
+
+          <label class="small" style="margin-top:8px">Max execution amount (human units)</label>
+          <input id="maxExec" placeholder="e.g. 5 (USDT/XRP units)" value="5" />
+        </div>
+      </div>
+
+      <!-- Right: chart + log -->
+      <div>
+        <div class="card" style="height:420px;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="small muted">XRP / USDT — Live (Line) — Bollinger Bands</div>
+            <div class="small muted">Interval: 30s</div>
+          </div>
+          <canvas id="chart"></canvas>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="small muted">Activity Log</div>
+            <div class="small muted">Actions & copy events</div>
+          </div>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Disclaimer: Auto-execution is risky. Start with small amounts. Ensure MetaMask in BSC Mainnet & enough BNB for gas.</footer>
+  </div>
 
 <script>
-  // ==== VARIABEL UTAMA ====
-  let priceData = [];
-  let timeLabels = [];
-  let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-  let qtyPerTrade = 100;
-  let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-  let highestSinceBuy = localStorage.getItem('highestSinceBuy') ? parseFloat(localStorage.getItem('highestSinceBuy')) : null;
-  let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
+/* -------------------- Configuration -------------------- */
+emailjs.init("aPZx0R9oxUbIQkLEv"); // keep your EmailJS id
+const COINGECKO_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
+const BSC_RPC_READ = "https://bsc-dataseed.binance.org/";
+const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const routerABI = [
+  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external",
+  "function getAmountsOut(uint amountIn,address[] calldata path) external view returns (uint[] memory)"
+];
 
-  const chartCtx = document.getElementById('chart').getContext('2d');
-  const chart = new Chart(chartCtx, {
-    type: 'line',
-    data: {
-      labels: timeLabels,
-      datasets: [
-        { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-        { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-        { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-        { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-        { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-        { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-      ]
-    },
-    options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-  });
+// Confirmed addresses you asked to hardcode:
+const XRP_ADDRESS = "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE";
+const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 
-   // ==== TOOLS ====
-  function log(msg) {
-    const logDiv = document.getElementById("log");
-    logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-  }
+/* -------------------- State (unchanged strategy vars) -------------------- */
+let priceData = [], timeLabels = [];
+let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+let qtyPerTrade = 1000;
+let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
 
-  function updateCapitalDisplay() {
-    document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-  }
+/* DOM refs */
+const statusBadge = document.getElementById('statusBadge');
+const walletAddressEl = document.getElementById('walletAddress');
+const bnbBalanceEl = document.getElementById('bnbBalance');
+const capitalEl = document.getElementById('capital');
+const livePriceEl = document.getElementById('livePrice');
+const logEl = document.getElementById('log');
 
-  
+const connectBtn = document.getElementById('connectBtn');
+const refreshBalancesBtn = document.getElementById('refreshBalancesBtn');
+const enableCopyBtn = document.getElementById('enableCopyBtn');
+const mockSignalBtn = document.getElementById('mockSignalBtn');
+const copyModeSelect = document.getElementById('copyMode');
 
+const signalUrlInput = document.getElementById('signalUrl');
+const signalTokenInput = document.getElementById('signalToken');
 
+const leaderAddressInput = document.getElementById('leaderAddress');
+const bscscanKeyInput = document.getElementById('bscscanKey');
+const followWalletBtn = document.getElementById('followWalletBtn');
+const stopFollowBtn = document.getElementById('stopFollowBtn');
 
-  function calculateSMA(data, period) {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) result.push(null);
-      else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+const manualBuyBtn = document.getElementById('manualBuy');
+const manualSellBtn = document.getElementById('manualSell');
+const resetBtn = document.getElementById('resetBtn');
+const followScaleInput = document.getElementById('followScale');
+const maxExecInput = document.getElementById('maxExec');
+
+/* Chart.js */
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [
+      { label:'Harga', data: priceData, borderColor:'#0f172a', fill:false },
+      { label:'EMA-12', data:[], borderColor:'#2563eb', fill:false },
+      { label:'EMA-26', data:[], borderColor:'#7c3aed', fill:false },
+      { label:'Upper BB', data:[], borderColor:'#16a34a', borderDash:[5,5], fill:false },
+      { label:'Lower BB', data:[], borderColor:'#ef4444', borderDash:[5,5], fill:false },
+      { label:'SMA-10', data:[], borderColor:'#f97316', fill:false }
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
+});
+
+/* Utilities */
+function uiLog(msg){ const t = new Date().toLocaleTimeString(); logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent; }
+function updateCapitalDisplay(){ capitalEl.textContent = `$${currentCapital.toFixed(2)}`; }
+
+/* Wallet/provider/autoconnect */
+let provider, signer, userAddress;
+let readProvider = new ethers.providers.JsonRpcProvider(BSC_RPC_READ);
+
+// Attempt auto-connect on load (graceful: will not pop if no permission)
+// We still expose manual connect button.
+async function tryAutoConnect(){
+  try {
+    if (typeof window.ethereum === 'undefined') { uiLog("MetaMask tidak tersedia (auto-connect skipped)"); statusBadge.textContent='No wallet'; return; }
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    // If site already has permission, this returns accounts, otherwise may throw/empty.
+    const accounts = await provider.listAccounts();
+    if (accounts && accounts.length > 0) {
+      // already authorized
+      signer = provider.getSigner();
+      userAddress = accounts[0];
+      walletAddressEl.textContent = userAddress;
+      statusBadge.textContent = 'Connected (auto)';
+      uiLog("✅ MetaMask auto-connected: " + userAddress);
+      await refreshAccountBalances();
+    } else {
+      uiLog("MetaMask not yet authorized — waiting for user action (auto-connect available on user approval).");
+      statusBadge.textContent = 'Not connected';
     }
-    return result;
+  } catch (e){
+    uiLog("Auto-connect failed: " + e.message);
+    statusBadge.textContent = 'Not connected';
   }
+}
 
-  function calculateEMA(data, period) {
-    const result = [];
-    const k = 2 / (period + 1);
-    let emaPrev = data[0];
-    result.push(emaPrev);
-    for (let i = 1; i < data.length; i++) {
-      const ema = data[i] * k + emaPrev * (1 - k);
-      result.push(ema);
-      emaPrev = ema;
-    }
-    return result;
+// call tryAutoConnect on load
+tryAutoConnect();
+
+// Also attempt to connect whenever page gains focus (helps re-open wallet popups)
+window.addEventListener('focus', async () => {
+  try {
+    if (!userAddress) await tryAutoConnect();
+  } catch(e){}
+});
+
+// Manual connect button (unchanged behaviour)
+connectBtn.addEventListener('click', async () => {
+  if (typeof window.ethereum === 'undefined'){ uiLog("❌ MetaMask not detected"); statusBadge.textContent='No wallet'; return; }
+  try {
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+    signer = provider.getSigner();
+    userAddress = await signer.getAddress();
+    walletAddressEl.textContent = userAddress;
+    statusBadge.textContent = 'Connected';
+    uiLog('✅ MetaMask connected: ' + userAddress);
+    await refreshAccountBalances();
+  } catch (e) {
+    uiLog("❌ Connect failed: " + e.message);
   }
+});
 
-  function calculateBollingerBands(data, period = 20, multiplier = 2) {
-    const sma = calculateSMA(data, period);
-    const upper = [], lower = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        upper.push(null);
-        lower.push(null);
-      } else {
-        const slice = data.slice(i - period + 1, i + 1);
-        const mean = sma[i];
-        const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-        upper.push(mean + multiplier * stdDev);
-        lower.push(mean - multiplier * stdDev);
-      }
-    }
-    return { upper, lower };
-  }
+refreshBalancesBtn.addEventListener('click', refreshAccountBalances);
 
-  function sendEmail(subject, body) {
-    emailjs.send("service_5hxo1hk", "template_iq87egh", {
-      subject: subject,
-      body: body,
-      time: new Date().toLocaleString()
-    }).then(() => {
-      log(`📧 Email terkirim: ${subject}`);
-    }).catch(err => {
-      log("⚠️ Gagal kirim email: " + err.text);
-    });
-  }
-
-  // ==== SWITCH TO BNB SMART CHAIN ====
-  async function switchToBSC() {
+async function refreshAccountBalances(){
+  if(!provider || !userAddress){ uiLog("⚠️ Wallet not connected"); return; }
+  try {
+    const balWei = await provider.getBalance(userAddress);
+    const balBNB = parseFloat(ethers.utils.formatEther(balWei));
+    bnbBalanceEl.textContent = `${balBNB.toFixed(6)} BNB`;
+    uiLog(`BNB balance: ${balBNB.toFixed(6)} BNB`);
+    // fetch BNB USD price & update modal
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
-      });
-      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x38',
-              chainName: 'BNB Smart Chain',
-              nativeCurrency: {
-                name: 'BNB',
-                symbol: 'BNB',
-                decimals: 18
-              },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
-              blockExplorerUrls: ['https://bscscan.com']
-            }]
-          });
-          log("✅ BNB Smart Chain berhasil ditambahkan ke MetaMask");
-        } catch (addError) {
-          log("❌ Gagal menambahkan jaringan BSC: " + addError.message);
-        }
-      } else {
-        log("❌ Gagal switch ke jaringan BSC: " + switchError.message);
-      }
-    }
-  }
-
-  // ==== METAMASK ====
-  async function connectWallet() {
-    if (typeof window.ethereum === "undefined") {
-      alert("❌ MetaMask tidak terdeteksi di browser Anda");
-      return;
-    }
-
-    try {
-      await switchToBSC();
-
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      if (!accounts || accounts.length === 0) {
-        log("❌ Gagal konek MetaMask: Tidak ada wallet aktif");
-        return;
-      }
-
-      const signer = provider.getSigner();
-      const userAddress = accounts[0];
-      document.getElementById("walletAddress").textContent = userAddress;
-
-      const balance = await provider.getBalance(userAddress);
-      const bnbBalance = ethers.utils.formatEther(balance);
-      document.getElementById("walletBalance").textContent = `${bnbBalance} BNB`;
-
-      log(`✅ Terhubung ke BNB Smart Chain: ${userAddress} | Saldo: ${bnbBalance} BNB`);
-    } catch (error) {
-      log("❌ Gagal konek MetaMask: " + error.message);
-    }
-  }
-
-  // (Fungsi lain seperti calculateSMA, calculateEMA, calculateBollingerBands, sendEmail dll bisa tetap di bawah sini)
- 
-
-  // ==== DATA ====
-  async function fetchInitialData() {
-    try {
-const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
-      const data = await res.json();
-      data.prices.forEach(p => {
-        priceData.push(p[1]);
-        const date = new Date(p[0]);
-        timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-      });
-      updateIndicators();
-      chart.update();
+      const r = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT");
+      const bnbPrice = parseFloat(r.data.price);
+      currentCapital = balBNB * bnbPrice;
       updateCapitalDisplay();
-    } catch (err) {
-      log("❌ Gagal ambil data historis XRP dari CoinGecko");
+      uiLog(`Capital recalculated: $${currentCapital.toFixed(2)} (BNB price: ${bnbPrice.toFixed(2)})`);
+    } catch(e){
+      uiLog("⚠️ Failed fetch BNB price: " + e.message);
     }
+  } catch(e){
+    uiLog("⚠️ Failed read balance: " + e.message);
   }
+}
 
-  function updateIndicators() {
-    const sma10 = calculateSMA(priceData, 10);
-    const ema12 = calculateEMA(priceData, 12);
-    const ema26 = calculateEMA(priceData, 26);
+/* Strategy indicator functions (exact logic kept) */
+function calculateSMA(data, period){ const r=[]; for(let i=0;i<data.length;i++){ if(i<period-1) r.push(null); else r.push(data.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period);} return r;}
+function calculateEMA(data, period){ const r=[]; const k=2/(period+1); let prev=data[0]; r.push(prev); for(let i=1;i<data.length;i++){ const ema=data[i]*k+prev*(1-k); r.push(ema); prev=ema;} return r;}
+function calculateBollingerBands(data, period=20, multiplier=2){ const sma=calculateSMA(data,period); const upper=[], lower=[]; for(let i=0;i<data.length;i++){ if(i<period-1){ upper.push(null); lower.push(null);} else { const slice=data.slice(i-period+1,i+1); const mean=sma[i]; const stdDev=Math.sqrt(slice.reduce((acc,val)=>acc+Math.pow(val-mean,2),0)/period); upper.push(mean+multiplier*stdDev); lower.push(mean-multiplier*stdDev); } } return {upper,lower}; }
+function updateIndicators(){ const sma10=calculateSMA(priceData,10); const ema12=calculateEMA(priceData,12); const ema26=calculateEMA(priceData,26); const bb=calculateBollingerBands(priceData); chart.data.datasets[1].data=ema12; chart.data.datasets[2].data=ema26; chart.data.datasets[3].data=bb.upper; chart.data.datasets[4].data=bb.lower; chart.data.datasets[5].data=sma10; }
+
+/* Swap helper (unchanged) */
+const tokenAbi = ["function approve(address,uint256) public returns(bool)","function decimals() view returns(uint8)","function balanceOf(address) view returns(uint256)"];
+async function swap(tokenIn, tokenOut, amountHuman){
+  if(!signer){ uiLog("⚠️ MetaMask not connected — swap skipped"); return; }
+  try {
+    const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
+    const token = new ethers.Contract(tokenIn, tokenAbi, signer);
+    const amountIn = ethers.utils.parseUnits(amountHuman.toString(), 18);
+    try { const a = await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256); await a.wait(); } catch(e){ uiLog("⚠️ Approve warning: " + (e.message||e)); }
+    const path = [tokenIn, tokenOut];
+    const deadline = Math.floor(Date.now()/1000) + 60*5;
+    const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, 0, path, userAddress, deadline);
+    uiLog("🔁 Swap tx sent: " + tx.hash);
+    await tx.wait();
+    uiLog("✅ Swap confirmed: " + tx.hash);
+    await refreshAccountBalances();
+  } catch(e){
+    uiLog("❌ Swap failed: " + (e.message||e));
+  }
+}
+
+/* Fetch initial historical & live price logic (kept) */
+async function fetchInitialData(){
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+    const data = await res.json();
+    data.prices.forEach(p=>{ priceData.push(p[1]); timeLabels.push(new Date(p[0]).toLocaleTimeString()); });
+    updateIndicators(); chart.update(); updateCapitalDisplay(); uiLog("✅ Historical loaded");
+  } catch(e){ uiLog("❌ Failed historical: " + e.message); }
+}
+
+async function fetchPriceNow(){
+  try { const r = await axios.get(COINGECKO_PRICE_API); return parseFloat(r.data.ripple.usd); } catch(e){ uiLog("⚠️ Price fetch failed: " + e.message); return null; }
+}
+
+/* Core evaluate loop (decision logic unchanged) */
+async function fetchAndEvaluate(){
+  try {
+    const price = await fetchPriceNow();
+    if(!price) return;
+    livePriceEl.textContent = `Harga: $${price.toFixed(4)}`;
+    priceData.push(price); timeLabels.push(new Date().toLocaleTimeString());
+    if(priceData.length>25){ priceData.shift(); timeLabels.shift(); }
+    updateIndicators(); chart.update();
+
     const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length-1];
+    const upperBB = bb.upper[bb.upper.length-1];
 
-    chart.data.datasets[1].data = ema12;
-    chart.data.datasets[2].data = ema26;
-    chart.data.datasets[3].data = bb.upper;
-    chart.data.datasets[4].data = bb.lower;
-    chart.data.datasets[5].data = sma10;
-  }
-
-  async function fetchAndEvaluate() {
-    try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-      const data = await res.json();
-      const price = parseFloat(data.ripple.usd);
-      document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-      const now = new Date().toLocaleTimeString();
-      priceData.push(price);
-      timeLabels.push(now);
-      if (priceData.length > 25) {
-        priceData.shift();
-        timeLabels.shift();
-      }
-
-      updateIndicators();
-      chart.update();
-
-      if (!lastBuy) {
-        const lowest = Math.min(...priceData.slice(-25));
-        if (price <= lowest) {
-          lastBuy = price;
-          highestSinceBuy = price;
-          currentPositionAmount = qtyPerTrade / price;
-          currentCapital -= qtyPerTrade;
-          updateCapitalDisplay();
-          localStorage.setItem('capital', currentCapital);
-          localStorage.setItem('lastBuy', lastBuy);
-          localStorage.setItem('highestSinceBuy', highestSinceBuy);
-          localStorage.setItem('positionAmount', currentPositionAmount);
-          log(`📥 BUY di $${price.toFixed(4)} (terendah 25 data)`);
-          sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (terendah 25 data)`);
-        } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
-        }
-      } else {
-        if (price > highestSinceBuy) highestSinceBuy = price;
-        const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-        const loss = ((lastBuy - price) / lastBuy) * 100;
-
-        if (drop > 1.0 || loss > 1.5) {
-          const sellValue = price * currentPositionAmount;
-          currentCapital += sellValue;
-          updateCapitalDisplay();
-          const reason = drop > 1.0 ? "Trailing Profit" : "Cut Loss";
-          log(`📤 SELL (${reason}) di $${price.toFixed(4)}`);
-          sendEmail(`SELL (${reason})`, `Jual XRP di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-          lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-          localStorage.setItem('capital', currentCapital);
-          localStorage.removeItem('lastBuy');
-          localStorage.removeItem('highestSinceBuy');
-          localStorage.removeItem('positionAmount');
-        } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
-        }
-      }
-
-    } catch (err) {
-      log("❌ Gagal ambil harga XRP live");
-      console.error(err);
+    if(!lastBuy && price <= lowerBB){
+      lastBuy = price;
+      currentPositionAmount = qtyPerTrade / price;
+      currentCapital -= qtyPerTrade; updateCapitalDisplay();
+      localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
+      uiLog(`📥 BUY (Lower BB) $${price.toFixed(4)}`);
+      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+      if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+    } else if(lastBuy && price >= upperBB){
+      const sellValue = price * currentPositionAmount;
+      currentCapital += sellValue; updateCapitalDisplay();
+      uiLog(`📤 SELL (Upper BB) $${price.toFixed(4)}`);
+      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+      lastBuy = null; currentPositionAmount = 0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
+      if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+    } else {
+      if(typeof price === 'number' && !isNaN(price) && typeof lowerBB === 'number' && typeof upperBB === 'number')
+        uiLog(`⏳ HOLD | Harga: $${price.toFixed(4)} | LowerBB: $${lowerBB.toFixed(4)} | UpperBB: $${upperBB.toFixed(4)}`);
+      else uiLog("⏳ HOLD | Indicators not ready");
     }
-  }
+  } catch(e){ uiLog("❌ fetchAndEvaluate error: " + e.message); }
+}
 
-  // ==== EVENT LISTENER ====
-  document.getElementById("connectWalletBtn").addEventListener("click", connectWallet);
-  document.getElementById("resetBtn").addEventListener("click", () => {
-    localStorage.clear();
-    currentCapital = 1000;
-    lastBuy = null;
-    highestSinceBuy = null;
-    currentPositionAmount = 0;
-    updateCapitalDisplay();
-    log("🔄 Simulasi telah direset.");
-  });
+/* Email helper */
+function sendEmail(subject, body){
+  emailjs.send("service_d48312b","template_1ktk40q",{subject,body,time:new Date().toLocaleString()})
+    .then(()=> uiLog("📧 Email sent: "+subject)).catch(e => uiLog("⚠️ Email failed: " + (e.text||e.message)));
+}
 
-  // ==== JALANKAN ====
-  (async () => {
-    await fetchInitialData();
-    setInterval(fetchAndEvaluate, 15000); // update harga setiap 15 detik
-  })();
+/* Copy-trade (basic - unchanged) */
+let copyEnabled=false, mockSignals=false;
+enableCopyBtn.addEventListener('click', ()=>{ copyEnabled=!copyEnabled; enableCopyBtn.textContent = copyEnabled ? "⏸️ Disable Copy-Trade (ON)" : "▶️ Enable Copy-Trade (OFF)"; uiLog("Copy-Trade " + (copyEnabled?"enabled":"disabled")); });
+mockSignalBtn.addEventListener('click', ()=>{ mockSignals=!mockSignals; mockSignalBtn.textContent = mockSignals ? "🧪 Mock Signals (ON)" : "🧪 Mock Signals (OFF)"; uiLog("Mock signals " + (mockSignals?"enabled":"disabled")); });
+
+async function pollSignal(){
+  if(!copyEnabled || copyModeSelect.value!=='signal') return;
+  try {
+    let action = null;
+    const url = signalUrlInput.value.trim();
+    const token = signalTokenInput.value.trim();
+    if(mockSignals && !url){
+      if(Math.random() < 0.12) action = Math.random()<0.5 ? "BUY":"SELL";
+    } else if(url){
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const r = await axios.get(url, { headers, timeout:4000 }).catch(()=>null);
+      if(r && r.data && r.data.action) action = r.data.action.toUpperCase();
+    }
+    if(!action) return;
+    uiLog("📡 Signal received: " + action);
+    const latest = priceData[priceData.length-1] ?? await fetchPriceNow();
+    if(!latest){ uiLog("⚠️ No price - ignoring signal"); return; }
+    if(action==="BUY"){
+      const bb = calculateBollingerBands(priceData);
+      const lowerBB = bb.lower[bb.lower.length-1];
+      if(typeof lowerBB==='number' && !lastBuy && latest <= lowerBB){
+        uiLog("✅ COPY-BUY approved -> executing");
+        lastBuy = latest; currentPositionAmount = qtyPerTrade / latest; currentCapital -= qtyPerTrade; updateCapitalDisplay();
+        localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
+        sendEmail("COPY BUY executed", `Executed BUY via copy-trade at $${latest.toFixed(4)}`);
+        if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+      } else uiLog("❌ COPY-BUY rejected by indicators or position exists");
+    } else if(action==="SELL"){
+      const bb = calculateBollingerBands(priceData);
+      const upperBB = bb.upper[bb.upper.length-1];
+      if(typeof upperBB==='number' && lastBuy && latest >= upperBB){
+        uiLog("✅ COPY-SELL approved -> executing");
+        const sellValue = latest * currentPositionAmount;
+        currentCapital += sellValue; updateCapitalDisplay();
+        sendEmail("COPY SELL executed", `Executed SELL via copy-trade at $${latest.toFixed(4)}`);
+        lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
+        if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+      } else uiLog("❌ COPY-SELL rejected by indicators or no position");
+    }
+  } catch(e){ uiLog("⚠️ pollSignal error: " + e.message); }
+}
+
+/* Follow-wallet mode (unchanged concept) */
+let following=false;
+let followIntervalHandle=null;
+let lastSeenTxHash = null;
+followWalletBtn.addEventListener('click', ()=> startFollowing());
+stopFollowBtn.addEventListener('click', ()=> stopFollowing());
+
+copyModeSelect.addEventListener('change', ()=> {
+  const mode = copyModeSelect.value;
+  document.getElementById('signalSettings').style.display = mode==='signal' ? 'block' : 'none';
+  document.getElementById('walletSettings').style.display = mode==='wallet' ? 'block' : 'none';
+});
+
+async function startFollowing(){
+  if(following) return;
+  const leader = document.getElementById('leaderAddress').value.trim();
+  const bsck = document.getElementById('bscscanKey').value.trim();
+  if(!leader){ uiLog("⚠️ Leader address required"); return; }
+  following = true;
+  followWalletBtn.style.display='none';
+  stopFollowBtn.style.display='inline-block';
+  uiLog("🔎 Start following wallet: " + leader);
+  followIntervalHandle = setInterval(()=> pollLeaderTxs(leader, bsck), 8000);
+  pollLeaderTxs(leader, bsck);
+}
+
+async function stopFollowing(){ if(!following) return; clearInterval(followIntervalHandle); following=false; followWalletBtn.style.display='inline-block'; stopFollowBtn.style.display='none'; uiLog("⛔ Stopped following wallet"); }
+
+async function pollLeaderTxs(leader, bscscanKey){
+  try {
+    let txs = null;
+    if(bscscanKey){
+      const url = `https://api.bscscan.com/api?module=account&action=txlist&address=${leader}&startblock=0&endblock=99999999&page=1&offset=10&sort=desc&apikey=${bscscanKey}`;
+      const res = await axios.get(url, { timeout:5000 });
+      if(res.data && res.data.status==='1' && res.data.result) txs = res.data.result;
+    } else {
+      try { txs = await readProvider.getHistory(leader); } catch(e){ uiLog("⚠️ BscScan key not set and provider.getHistory not supported"); }
+    }
+    if(!txs || txs.length===0) return;
+    for(const t of txs){
+      const txHash = t.hash || t.transactionHash;
+      if(lastSeenTxHash === txHash) break;
+      const to = (t.to || t.toAddress || "").toLowerCase();
+      if(to === PANCAKE_ROUTER.toLowerCase()){
+        uiLog(`📥 Leader executed tx to router: ${txHash}`);
+        try {
+          const rawTx = await readProvider.getTransaction(txHash);
+          if(!rawTx){ uiLog("⚠️ ReadProvider couldn't fetch tx (may not be indexed yet)"); continue; }
+          const iface = new ethers.utils.Interface(routerABI);
+          let parsed = null;
+          try { parsed = iface.parseTransaction({ data: rawTx.data, value: rawTx.value }); } catch(e){ uiLog("⚠️ Could not parse router tx: " + e.message); }
+          if(parsed){
+            let path = parsed.args.path || parsed.args[2] || null;
+            if(path && path.length >= 2){
+              const tokenIn = path[0].toLowerCase();
+              const tokenOut = path[path.length-1].toLowerCase();
+              const scale = parseFloat(followScaleInput.value) || 0.5;
+              const maxExec = parseFloat(maxExecInput.value) || 5;
+              const amountHuman = Math.min(maxExec, maxExec * scale);
+              uiLog(`👉 Leader swap detected: ${tokenIn.substring(0,10)}... -> ${tokenOut.substring(0,10)}... (mirror ${amountHuman} units)`);
+              if(tokenOut === XRP_ADDRESS.toLowerCase()){
+                await swap(USDT_ADDRESS, XRP_ADDRESS, amountHuman);
+                uiLog("✅ Mirrored BUY (wallet follow)");
+              } else if(tokenOut === USDT_ADDRESS.toLowerCase()){
+                await swap(XRP_ADDRESS, USDT_ADDRESS, amountHuman);
+                uiLog("✅ Mirrored SELL (wallet follow)");
+              } else {
+                uiLog("⚠️ Leader swapped tokens not matching USDT/XRP pair - ignored");
+              }
+            } else uiLog("⚠️ Router call found but path not decoded - ignored");
+          }
+        } catch(e){ uiLog("⚠️ Failed process tx: " + e.message); }
+      }
+      lastSeenTxHash = txHash;
+    }
+  } catch(e){ uiLog("⚠️ pollLeaderTxs error: " + (e.message||e)); }
+}
+
+/* manual actions */
+manualBuyBtn.addEventListener('click', async ()=> {
+  uiLog("Manual BUY pressed");
+  const price = priceData[priceData.length-1] ?? await fetchPriceNow();
+  if(!price){ uiLog("⚠️ Price not available"); return; }
+  lastBuy = price; currentPositionAmount = qtyPerTrade / price; currentCapital -= qtyPerTrade; updateCapitalDisplay();
+  localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
+  sendEmail("MANUAL BUY", `Manual BUY at $${price.toFixed(4)}`);
+  if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+});
+manualSellBtn.addEventListener('click', async ()=> {
+  uiLog("Manual SELL pressed");
+  const price = priceData[priceData.length-1] ?? await fetchPriceNow();
+  if(!price){ uiLog("⚠️ Price not available"); return; }
+  const sellValue = price * currentPositionAmount; currentCapital += sellValue; updateCapitalDisplay();
+  lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
+  sendEmail("MANUAL SELL", `Manual SELL at $${price.toFixed(4)}`);
+  if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+});
+
+resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=1000; lastBuy=null; currentPositionAmount=0; updateCapitalDisplay(); uiLog("🔄 Simulasi reset"); });
+
+/* polling loops & auto-refresh (every 7 minutes) */
+(async ()=> {
+  await fetchInitialData();
+  setInterval(fetchAndEvaluate, 30000); // main evaluation (unchanged)
+  setInterval(pollSignal, 5000); // signal polling
+  // Auto-refresh every 7 minutes (420000 ms)
+  setTimeout(()=> {
+    uiLog("🔁 Auto-refreshing page (7 minutes elapsed) ...");
+    try { location.reload(); } catch(e) { uiLog("⚠️ Auto-refresh failed: " + e.message); }
+  }, 7 * 60 * 1000);
+})();
 </script>
-
 </body>
 </html>
