@@ -373,7 +373,7 @@ async function fetchAndEvaluate(){
 
 /* Email helper */
 function sendEmail(subject, body){
-  emailjs.send("service_d48312b","service_d48312b",{subject,body,time:new Date().toLocaleString()})
+  emailjs.send("service_d48312b","template_1ktk40q",{subject,body,time:new Date().toLocaleString()})
     .then(()=> uiLog("📧 Email sent: "+subject)).catch(e => uiLog("⚠️ Email failed: " + (e.text||e.message)));
 }
 
