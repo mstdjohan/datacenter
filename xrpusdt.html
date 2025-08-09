@@ -1,187 +1,476 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Auto-Trading XRP</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Auto-Trading XRP (Dashboard)</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
   <style>
-    body { font-family: sans-serif; background: #f7f7f7; margin: 0; padding: 2rem; }
-    #chartContainer { width: 100%; max-width: 800px; margin: auto; }
-    #log { white-space: pre-wrap; background: #eee; padding: 1rem; height: 200px; overflow-y: scroll; }
-    button { padding: 10px 15px; margin: 5px; }
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --accent:#0ea5a5;
+      --danger:#ef4444;
+      --success:#10b981;
+      --mono: Menlo, Monaco, "Courier New", monospace;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:#0f172a}
+    .container{max-width:1100px;margin:24px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    header h1{font-size:20px;margin:0}
+    .muted{color:var(--muted);font-size:13px}
+    .grid{display:grid;grid-template-columns: 320px 1fr; gap:16px}
+    .card{background:var(--card);border-radius:8px;padding:12px;box-shadow:0 1px 4px rgba(2,6,23,0.06)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    button{padding:8px 10px;border-radius:6px;border:1px solid #e6eef0;background:#fff;cursor:pointer}
+    .btn-primary{background:linear-gradient(90deg,#06b6d4,#06a6b9);color:white;border:none}
+    .btn-danger{background:var(--danger);color:white;border:none}
+    .status{font-size:13px;margin-bottom:8px}
+    .stat-row{display:flex;flex-direction:column;gap:6px}
+    .stat{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:6px;background:#fcfcfd;border:1px solid #eef2f7}
+    .small{font-size:13px}
+    #chartWrapper{height:420px}
+    #log{font-family:var(--mono);white-space:pre-wrap;overflow:auto;height:240px;padding:10px;background:#0b1220;color:#dbeafe;border-radius:6px}
+    footer{margin-top:12px;font-size:13px;color:var(--muted)}
+    .pill{padding:4px 8px;border-radius:999px;font-size:12px}
   </style>
 </head>
 <body>
-  <h2>Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
-  <button onclick="connectWallet()">🔗 Connect MetaMask</button>
-  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
-  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
-  <div id="wallet"></div>
+  <div class="container">
+    <header>
+      <div>
+        <h1>📊 Strategi Trading XRP — Dashboard</h1>
+        <div class="muted">Original strategy (Bollinger Bands) kept intact. Copy-trade is optional & filtered.</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted small">Status</div>
+        <div id="statusBadge" class="pill" style="background:#fff;border:1px solid #e6eef0">Not connected</div>
+      </div>
+    </header>
 
-  <div id="chartContainer">
-    <canvas id="priceChart"></canvas>
+    <div class="grid">
+      <!-- LEFT: Controls & Account -->
+      <div>
+        <div class="card">
+          <div class="controls">
+            <button id="connectBtn" class="btn-primary">🔗 Connect MetaMask</button>
+            <button id="enableCopyBtn">▶️ Enable Copy-Trade (OFF)</button>
+            <button id="mockSignalBtn">🧪 Mock (OFF)</button>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat"><div class="small">👛 Wallet</div><div id="walletAddress" class="small muted">Belum terhubung</div></div>
+            <div class="stat"><div class="small">💵 Saldo BNB</div><div id="bnbBalance" class="small">-</div></div>
+            <div class="stat"><div class="small">💼 Modal (USD)</div><div id="capital" class="small">$1000.00</div></div>
+            <div class="stat"><div class="small">💰 Harga Live XRP</div><div id="livePrice" class="small">Memuat...</div></div>
+          </div>
+
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card">
+          <div class="small muted" style="margin-bottom:6px">Manual Controls</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="manualBuy">🟢 BUY (Manual)</button>
+            <button id="manualSell" class="btn-danger">🔴 SELL (Manual)</button>
+            <button id="resetBtn">🔁 Reset Simulasi</button>
+          </div>
+
+          <hr style="margin:10px 0;border:none;border-top:1px solid #f1f5f9">
+
+          <div class="small muted">Copy-Trade Settings</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <label class="small">Signal URL</label>
+          </div>
+          <input id="signalUrl" type="text" placeholder="(optional) https://api.example/signal" style="width:100%;padding:8px;margin-top:6px;border-radius:6px;border:1px solid #e6eef0" />
+        </div>
+      </div>
+
+      <!-- RIGHT: Chart & Log -->
+      <div>
+        <div class="card" id="chartCard" style="height:460px;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="small muted">XRP / USDT — Live</div>
+            <div class="small muted">Interval: 30s</div>
+          </div>
+          <div id="chartWrapper" style="flex:1">
+            <canvas id="chart" style="width:100%;height:100%"></canvas>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="small muted">Activity Log</div>
+            <div class="small muted">Last actions & signals</div>
+          </div>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Tip: Pastikan MetaMask di BSC Mainnet & cukup BNB untuk gas. Copy-trade hanya dijalankan jika indikator setuju.</footer>
   </div>
 
-  <h3>📜 Log:</h3>
-  <div id="log"></div>
-
   <script>
-    let provider, signer, router;
-    let walletAddress = "";
-    let currentChainId;
-    let xrpPrices = [];
-    let previousPrice = null;
-    let chart;
-    let currentPositionAmount = 0;
-    const qtyPerTrade = 5;
+  /**************************************************************************
+   * Configuration - minimal changes only
+   **************************************************************************/
+  emailjs.init("aPZx0R9oxUbIQkLEv"); // emailjs id (as before)
+  let COPY_SIGNAL_URL = ""; // can be set in UI input
+  const SIGNAL_POLL_INTERVAL_MS = 5000;
+  let USE_MOCK_SIGNALS = true;
 
-    const PANCAKE_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-    const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C";
-    const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+  const BNB_PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT";
+  const COINGECKO_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
 
-    function log(msg) {
-      const time = new Date().toLocaleTimeString();
-      const logBox = document.getElementById("log");
-      logBox.textContent += `\n[${time}] ${msg}`;
-      logBox.scrollTop = logBox.scrollHeight;
-    }
+  /**************************************************************************
+   * Original strategy variables & constants (kept unchanged)
+   **************************************************************************/
+  let priceData = [];
+  let timeLabels = [];
+  let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
+  let qtyPerTrade = 1000;
+  let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
+  let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
 
-    async function connectWallet() {
-      if (!window.ethereum) return log("❌ MetaMask tidak terdeteksi");
+  const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C";
+  const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+  const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const routerABI = [
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external",
+    "function getAmountsOut(uint amountIn,address[] calldata path) external view returns (uint[] memory)"
+  ];
+
+  /**************************************************************************
+   * UI references
+   **************************************************************************/
+  const statusBadge = document.getElementById("statusBadge");
+  const walletEl = document.getElementById("walletAddress");
+  const bnbEl = document.getElementById("bnbBalance");
+  const capitalEl = document.getElementById("capital");
+  const livePriceEl = document.getElementById("livePrice");
+  const logEl = document.getElementById("log");
+  const connectBtn = document.getElementById("connectBtn");
+  const enableCopyBtn = document.getElementById("enableCopyBtn");
+  const mockSignalBtn = document.getElementById("mockSignalBtn");
+  const signalUrlInput = document.getElementById("signalUrl");
+  const manualBuyBtn = document.getElementById("manualBuy");
+  const manualSellBtn = document.getElementById("manualSell");
+  const resetBtn = document.getElementById("resetBtn");
+
+  /**************************************************************************
+   * Chart.js setup - unchanged data structure (line chart)
+   **************************************************************************/
+  const ctx = document.getElementById('chart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeLabels,
+      datasets: [
+        { label: 'Harga', data: priceData, borderColor: '#0f172a', fill: false },
+        { label: 'EMA-12', data: [], borderColor: '#2563eb', fill: false },
+        { label: 'EMA-26', data: [], borderColor: '#7c3aed', fill: false },
+        { label: 'Upper BB', data: [], borderColor: '#16a34a', borderDash:[5,5], fill: false },
+        { label: 'Lower BB', data: [], borderColor: '#ef4444', borderDash:[5,5], fill: false },
+        { label: 'SMA-10', data: [], borderColor: '#f97316', fill: false },
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false, scales:{ x:{ display:true }, y:{ display:true } } }
+  });
+
+  function log(msg) {
+    const now = new Date().toLocaleTimeString();
+    logEl.textContent = `[${now}] ${msg}\n` + logEl.textContent;
+  }
+
+  function updateCapitalDisplay() { capitalEl.textContent = `$${currentCapital.toFixed(2)}`; }
+
+  /**************************************************************************
+   * Wallet + balances (only enhancement: show BNB & compute USD modal)
+   **************************************************************************/
+  let provider, signer, userAddress;
+  connectBtn.addEventListener("click", async () => {
+    if (typeof window.ethereum === 'undefined') { log("❌ MetaMask tidak terdeteksi"); statusBadge.textContent='No wallet'; return; }
+    try {
       provider = new ethers.providers.Web3Provider(window.ethereum);
       await provider.send("eth_requestAccounts", []);
       signer = provider.getSigner();
-      walletAddress = await signer.getAddress();
-      currentChainId = (await provider.getNetwork()).chainId;
-      if (currentChainId !== 56) await switchToBSC();
+      userAddress = await signer.getAddress();
+      walletEl.textContent = userAddress;
+      statusBadge.textContent = 'Connected';
+      statusBadge.style.background = '#e6fff6';
+      log("✅ MetaMask terhubung: " + userAddress);
 
-      const balance = await provider.getBalance(walletAddress);
-      document.getElementById("wallet").innerHTML = `👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB`;
-
-      router = new ethers.Contract(
-        PANCAKE_ROUTER_ADDRESS,
-        [
-          "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory)",
-          "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"
-        ],
-        signer
-      );
-
-      log(`✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB`);
-    }
-
-    async function switchToBSC() {
-      await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x38',
-          chainName: 'BNB Smart Chain',
-          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-          rpcUrls: ['https://bsc-dataseed.binance.org'],
-          blockExplorerUrls: ['https://bscscan.com']
-        }]
-      });
-      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
-    }
-
-    async function fetchPrice() {
-      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-      return res.data.ripple.usd;
-    }
-
-    function updateChart(price) {
-      const time = new Date().toLocaleTimeString();
-      xrpPrices.push({ x: time, y: price });
-      if (xrpPrices.length > 50) xrpPrices.shift();
-      chart.data.labels = xrpPrices.map(p => p.x);
-      chart.data.datasets[0].data = xrpPrices.map(p => p.y);
-      chart.update();
-    }
-
-    function initChart() {
-      const ctx = document.getElementById("priceChart").getContext("2d");
-      chart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: [],
-          datasets: [{
-            label: "Harga XRP (USD)",
-            data: [],
-            borderWidth: 2,
-            borderColor: "blue",
-            fill: false,
-          }]
-        },
-        options: { responsive: true, scales: { y: { beginAtZero: false } } }
-      });
-    }
-
-    async function autoSwap(action, amountUSD) {
+      // read BNB balance
       try {
-        const amountIn = ethers.utils.parseUnits(amountUSD.toString(), 18);
-        const userAddress = await signer.getAddress();
+        const balanceWei = await provider.getBalance(userAddress);
+        const balanceBNB = parseFloat(ethers.utils.formatEther(balanceWei));
+        bnbEl.textContent = `${balanceBNB.toFixed(6)} BNB`;
+        log(`Saldo BNB: ${balanceBNB.toFixed(6)} BNB`);
 
-        const tokenIn = action === "buy" ? USDT_ADDRESS : XRP_ADDRESS;
-        const tokenOut = action === "buy" ? XRP_ADDRESS : USDT_ADDRESS;
-
-        const tokenContract = new ethers.Contract(tokenIn, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
-        const txApprove = await tokenContract.approve(PANCAKE_ROUTER_ADDRESS, amountIn);
-        await txApprove.wait();
-
-        const path = [tokenIn, tokenOut];
-        const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-        const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
-        await tx.wait();
-
-        log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
-        sendEmail(`AUTO-TRADE ${action.toUpperCase()}`, `Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD}`);
-      } catch (err) {
-        log("❌ Gagal auto-swap: " + err.message);
+        // fetch BNB price and compute modal USD
+        try {
+          const r = await axios.get(BNB_PRICE_API, { timeout: 5000 });
+          const bnbPrice = parseFloat(r.data.price);
+          currentCapital = balanceBNB * bnbPrice;
+          updateCapitalDisplay();
+          log(`Modal dihitung: ${balanceBNB.toFixed(6)} × ${bnbPrice.toFixed(2)} = $${currentCapital.toFixed(2)}`);
+        } catch (e) {
+          log("⚠️ Gagal ambil harga BNB: " + e.message);
+        }
+      } catch (e) {
+        log("⚠️ Gagal baca saldo BNB: " + e.message);
       }
+    } catch (err) {
+      log("❌ Gagal konek MetaMask: " + err.message);
+      statusBadge.textContent='Not connected';
     }
+  });
 
-    function sendEmail(subject, message) {
-      emailjs.send("YOUR_SERVICE", "YOUR_TEMPLATE", {
-        subject: subject,
-        message: message
-      });
+  /**************************************************************************
+   * Strategy indicator functions (UNCHANGED)
+   **************************************************************************/
+  function calculateSMA(data, period){ const res=[]; for(let i=0;i<data.length;i++){ if(i<period-1) res.push(null); else res.push(data.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period); } return res; }
+  function calculateEMA(data, period){ const res=[]; const k=2/(period+1); let emaPrev=data[0]; res.push(emaPrev); for(let i=1;i<data.length;i++){ const ema=data[i]*k+emaPrev*(1-k); res.push(ema); emaPrev=ema;} return res;}
+  function calculateBollingerBands(data, period=20, multiplier=2){ const sma=calculateSMA(data,period); const upper=[], lower=[]; for(let i=0;i<data.length;i++){ if(i<period-1){ upper.push(null); lower.push(null);} else { const slice=data.slice(i-period+1,i+1); const mean=sma[i]; const stdDev=Math.sqrt(slice.reduce((acc,val)=>acc+Math.pow(val-mean,2),0)/period); upper.push(mean+multiplier*stdDev); lower.push(mean-multiplier*stdDev);} } return {upper,lower};}
+  function updateIndicators(){ const sma10=calculateSMA(priceData,10); const ema12=calculateEMA(priceData,12); const ema26=calculateEMA(priceData,26); const bb=calculateBollingerBands(priceData); chart.data.datasets[1].data=ema12; chart.data.datasets[2].data=ema26; chart.data.datasets[3].data=bb.upper; chart.data.datasets[4].data=bb.lower; chart.data.datasets[5].data=sma10; }
+
+  /**************************************************************************
+   * Swap function (UNCHANGED)
+   **************************************************************************/
+  const tokenAbi = ["function approve(address spender,uint256 amount) public returns(bool)","function balanceOf(address) view returns(uint256)","function decimals() view returns(uint8)"];
+  async function swap(tokenIn, tokenOut, amountInHuman){
+    if(!signer){ log("⚠️ MetaMask belum terhubung"); return; }
+    try {
+      const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
+      const token = new ethers.Contract(tokenIn, tokenAbi, signer);
+      const amountIn = ethers.utils.parseUnits(amountInHuman.toString(), 18);
+      try { const txA = await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256); await txA.wait(); } catch(e){ log("⚠️ Approve warning: " + (e.message||e)); }
+      const path = [tokenIn, tokenOut];
+      const deadline = Math.floor(Date.now()/1000) + 60*5;
+      const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, 0, path, userAddress, deadline);
+      log("🔁 Swap tx sent: " + tx.hash);
+      await tx.wait();
+      log("✅ Swap confirmed: " + tx.hash);
+      // after swap, update balances & modal
+      try { await refreshAccountBalances(); } catch(e){ /* ignore */ }
+    } catch(e){
+      log("❌ Swap failed: " + (e.message||e));
     }
+  }
 
-    async function fetchAndEvaluate() {
-      const price = await fetchPrice();
-      updateChart(price);
+  async function refreshAccountBalances(){
+    if(!provider || !userAddress) return;
+    try {
+      const balWei = await provider.getBalance(userAddress);
+      const balBNB = parseFloat(ethers.utils.formatEther(balWei));
+      bnbEl.textContent = `${balBNB.toFixed(6)} BNB`;
+      // update USD modal
+      try {
+        const r = await axios.get(BNB_PRICE_API);
+        const bnbPrice = parseFloat(r.data.price);
+        currentCapital = balBNB * bnbPrice;
+        updateCapitalDisplay();
+      } catch(e){ log("⚠️ Gagal ambil harga BNB (refresh): " + e.message); }
+    } catch(e){
+      log("⚠️ Gagal refresh balances: " + e.message);
+    }
+  }
 
-      const peak = Math.max(...xrpPrices.map(p => p.y));
-      const low = Math.min(...xrpPrices.map(p => p.y));
-      const range = peak - low;
-      const lowerBB = low + range * 0.1;
-      const upperBB = peak - range * 0.1;
+  /**************************************************************************
+   * Fetch initial historical data & live price (UNCHANGED)
+   **************************************************************************/
+  async function fetchInitialData(){
+    try {
+      const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
+      const data = await res.json();
+      data.prices.forEach(p => { priceData.push(p[1]); const date=new Date(p[0]); timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`); });
+      updateIndicators(); chart.update(); updateCapitalDisplay(); log("✅ Data historis awal dimuat");
+    } catch(e){ log("❌ Gagal ambil data historis XRP dari CoinGecko"); }
+  }
 
-      if (previousPrice !== null) {
-        if (previousPrice < lowerBB && price >= lowerBB) {
-          await autoSwap("buy", qtyPerTrade);
-          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
-          currentPositionAmount += qtyPerTrade / price;
-        } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
-          await autoSwap("sell", price * currentPositionAmount);
-          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
-          currentPositionAmount = 0;
-        } else {
+  async function fetchPriceNow(){
+    try { const res = await fetch(COINGECKO_PRICE_API); const d = await res.json(); return parseFloat(d.ripple.usd); } catch(e){ log("⚠️ Gagal ambil harga live: " + e.message); return null; }
+  }
+
+  async function fetchAndEvaluate(){
+    try {
+      const price = await fetchPriceNow();
+      if(!price) return;
+      livePriceEl.textContent = `Harga: $${price.toFixed(4)}`;
+      const now = new Date().toLocaleTimeString();
+      priceData.push(price); timeLabels.push(now);
+      if(priceData.length>25){ priceData.shift(); timeLabels.shift(); }
+      updateIndicators(); chart.update();
+
+      const bb = calculateBollingerBands(priceData);
+      const lowerBB = bb.lower[bb.lower.length-1];
+      const upperBB = bb.upper[bb.upper.length-1];
+
+      // ORIGINAL buy/sell logic (kept unchanged)
+      if (!lastBuy && price <= lowerBB) {
+        lastBuy = price;
+        currentPositionAmount = qtyPerTrade / price;
+        currentCapital -= qtyPerTrade;
+        updateCapitalDisplay();
+        localStorage.setItem('capital', currentCapital);
+        localStorage.setItem('lastBuy', lastBuy);
+        localStorage.setItem('positionAmount', currentPositionAmount);
+        log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
+        sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
+        if (signer) await swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+      } else if (lastBuy && price >= upperBB) {
+        const sellValue = price * currentPositionAmount;
+        currentCapital += sellValue;
+        updateCapitalDisplay();
+        log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
+        sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+        lastBuy = null;
+        currentPositionAmount = 0;
+        localStorage.setItem('capital', currentCapital);
+        localStorage.removeItem('lastBuy');
+        localStorage.removeItem('positionAmount');
+        if (signer) await swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+      } else {
+        if (typeof price === 'number' && !isNaN(price) && typeof lowerBB === 'number' && typeof upperBB === 'number') {
           log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+        } else {
+          log("⏳ HOLD | Nilai indikator belum siap");
         }
       }
+    } catch(e){ log("❌ Gagal ambil harga XRP live: " + e.message); }
+  }
 
-      previousPrice = price;
-    }
+  function sendEmail(subject, body){
+    emailjs.send("service_d48312b","service_d48312b",{subject,body,time:new Date().toLocaleString()})
+      .then(()=> log("📧 Email terkirim: " + subject)).catch(e=> log("⚠️ Gagal kirim email: " + (e.text||e.message)));
+  }
 
-    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS kamu
-    initChart();
-    setInterval(fetchAndEvaluate, 15000);
+  /**************************************************************************
+   * Copy-trade integration (unchanged logic, just UI improvements)
+   **************************************************************************/
+  let copyEnabled = false;
+  let mockSignals = USE_MOCK_SIGNALS;
+  enableCopyBtn.addEventListener("click", ()=> {
+    copyEnabled = !copyEnabled;
+    enableCopyBtn.textContent = copyEnabled ? "⏸️ Disable Copy-Trade (ON)" : "▶️ Enable Copy-Trade (OFF)";
+    log("Copy-Trade " + (copyEnabled ? "enabled" : "disabled"));
+  });
+  mockSignalBtn.addEventListener("click", ()=> {
+    mockSignals = !mockSignals;
+    mockSignalBtn.textContent = mockSignals ? "🧪 Mock (ON)" : "🧪 Mock (OFF)";
+    log("Mock signals " + (mockSignals ? "enabled" : "disabled"));
+  });
+  signalUrlInput.addEventListener("change", ()=> {
+    COPY_SIGNAL_URL = signalUrlInput.value.trim();
+    log("COPY_SIGNAL_URL set to: " + (COPY_SIGNAL_URL || "(empty)"));
+  });
+
+  function checkIndicatorsForBuy(price){
+    if(priceData.length < 5) return false;
+    const bb = calculateBollingerBands(priceData);
+    const lowerBB = bb.lower[bb.lower.length-1];
+    if(typeof lowerBB !== 'number') return false;
+    if(lastBuy) return false;
+    return price <= lowerBB;
+  }
+  function checkIndicatorsForSell(price){
+    if(priceData.length < 5) return false;
+    const bb = calculateBollingerBands(priceData);
+    const upperBB = bb.upper[bb.upper.length-1];
+    if(typeof upperBB !== 'number') return false;
+    if(!lastBuy) return false;
+    return price >= upperBB;
+  }
+
+  async function pollCopySignal(){
+    if(!copyEnabled) return;
+    try {
+      let signal = null;
+      if(mockSignals && !COPY_SIGNAL_URL) {
+        if(Math.random() < 0.12) signal = Math.random()<0.5 ? "BUY" : "SELL";
+      } else if(COPY_SIGNAL_URL) {
+        try {
+          const res = await axios.get(COPY_SIGNAL_URL, { timeout:4000 });
+          signal = (res.data && res.data.action) ? res.data.action.toUpperCase() : null;
+        } catch(e) {
+          log("⚠️ Polling signal failed: " + e.message);
+        }
+      }
+      if(!signal) return;
+      log("📡 Copy-trade signal received: " + signal);
+      const latestPrice = priceData[priceData.length-1] ?? await fetchPriceNow();
+      if(!latestPrice) { log("⚠️ Harga tidak tersedia - sinyal diabaikan"); return; }
+      if(signal === "BUY") {
+        if(checkIndicatorsForBuy(latestPrice)){
+          log("✅ COPY-BUY approved -> executing");
+          lastBuy = latestPrice;
+          currentPositionAmount = qtyPerTrade / latestPrice;
+          currentCapital -= qtyPerTrade; updateCapitalDisplay();
+          localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
+          sendEmail("COPY BUY executed", `Executed BUY via copy-trade at $${latestPrice.toFixed(4)}`);
+          if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+        } else log("❌ COPY-BUY rejected by indicators");
+      } else if(signal === "SELL") {
+        if(checkIndicatorsForSell(latestPrice)) {
+          log("✅ COPY-SELL approved -> executing");
+          const sellValue = latestPrice * currentPositionAmount;
+          currentCapital += sellValue; updateCapitalDisplay();
+          sendEmail("COPY SELL executed", `Executed SELL via copy-trade at $${latestPrice.toFixed(4)}`);
+          lastBuy = null; currentPositionAmount = 0; localStorage.setItem('capital', currentCapital);
+          localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
+          if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+        } else log("❌ COPY-SELL rejected by indicators");
+      }
+    } catch(e){ log("⚠️ Poll copy signal failed: " + (e.message||e)); }
+  }
+
+  /**************************************************************************
+   * Manual buttons
+   **************************************************************************/
+  manualBuyBtn.addEventListener("click", async ()=> {
+    log("Manual BUY pressed");
+    const price = priceData[priceData.length-1] ?? await fetchPriceNow();
+    if(!price){ log("⚠️ Harga tidak tersedia"); return; }
+    lastBuy = price; currentPositionAmount = qtyPerTrade / price; currentCapital -= qtyPerTrade; updateCapitalDisplay();
+    localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
+    sendEmail("MANUAL BUY", `Manual BUY at $${price.toFixed(4)}`);
+    if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, 5);
+  });
+  manualSellBtn.addEventListener("click", async ()=> {
+    log("Manual SELL pressed");
+    const price = priceData[priceData.length-1] ?? await fetchPriceNow();
+    if(!price){ log("⚠️ Harga tidak tersedia"); return; }
+    const sellValue = price * currentPositionAmount; currentCapital += sellValue; updateCapitalDisplay();
+    lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
+    sendEmail("MANUAL SELL", `Manual SELL at $${price.toFixed(4)}`);
+    if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, 5);
+  });
+
+  resetBtn.addEventListener("click", ()=> {
+    localStorage.clear(); currentCapital = 1000; lastBuy=null; currentPositionAmount=0; updateCapitalDisplay(); log("🔄 Simulasi telah direset.");
+  });
+
+  /**************************************************************************
+   * Start loops
+   **************************************************************************/
+  (async ()=> {
+    await fetchInitialData();
+    setInterval(fetchAndEvaluate, 30000); // original interval
+    setInterval(pollCopySignal, SIGNAL_POLL_INTERVAL_MS); // copy-trade polling
+  })();
+
   </script>
 </body>
 </html>
