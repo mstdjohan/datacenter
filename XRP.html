@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="420">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Auto-Trading XRP — Final (Auto-connect & Auto-refresh)</title>
 
@@ -231,7 +232,7 @@ async function tryAutoConnect(){
       walletAddressEl.textContent = userAddress;
       statusBadge.textContent = 'Connected (auto)';
       uiLog("✅ MetaMask auto-connected: " + userAddress);
-      await refreshAccountBalances();
+      await enhancedRefreshAccountBalances();
     } else {
       uiLog("MetaMask not yet authorized — waiting for user action (auto-connect available on user approval).");
       statusBadge.textContent = 'Not connected';
@@ -263,35 +264,15 @@ connectBtn.addEventListener('click', async () => {
     walletAddressEl.textContent = userAddress;
     statusBadge.textContent = 'Connected';
     uiLog('✅ MetaMask connected: ' + userAddress);
-    await refreshAccountBalances();
+    await enhancedRefreshAccountBalances();
   } catch (e) {
     uiLog("❌ Connect failed: " + e.message);
   }
 });
 
-refreshBalancesBtn.addEventListener('click', refreshAccountBalances);
+refreshBalancesBtn.addEventListener('click', enhancedRefreshAccountBalances);
 
-async function refreshAccountBalances(){
-  if(!provider || !userAddress){ uiLog("⚠️ Wallet not connected"); return; }
-  try {
-    const balWei = await provider.getBalance(userAddress);
-    const balBNB = parseFloat(ethers.utils.formatEther(balWei));
-    bnbBalanceEl.textContent = `${balBNB.toFixed(6)} BNB`;
-    uiLog(`BNB balance: ${balBNB.toFixed(6)} BNB`);
-    // fetch BNB USD price & update modal
-    try {
-      const r = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT");
-      const bnbPrice = parseFloat(r.data.price);
-      currentCapital = balBNB * bnbPrice;
-      updateCapitalDisplay();
-      uiLog(`Capital recalculated: $${currentCapital.toFixed(2)} (BNB price: ${bnbPrice.toFixed(2)})`);
-    } catch(e){
-      uiLog("⚠️ Failed fetch BNB price: " + e.message);
-    }
-  } catch(e){
-    uiLog("⚠️ Failed read balance: " + e.message);
-  }
-}
+
 
 /* Strategy indicator functions (exact logic kept) */
 function calculateSMA(data, period){ const r=[]; for(let i=0;i<data.length;i++){ if(i<period-1) r.push(null); else r.push(data.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period);} return r;}
@@ -314,7 +295,7 @@ async function swap(tokenIn, tokenOut, amountHuman){
     uiLog("🔁 Swap tx sent: " + tx.hash);
     await tx.wait();
     uiLog("✅ Swap confirmed: " + tx.hash);
-    await refreshAccountBalances();
+    await enhancedRefreshAccountBalances();
   } catch(e){
     uiLog("❌ Swap failed: " + (e.message||e));
   }
@@ -537,20 +518,82 @@ resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=10
 })();
 
 
-// Saat halaman dimuat setelah refresh
-window.addEventListener('load', async () => {
+// --- Multi-token balance & USD conversion ---
+async function fetchPriceBinance(symbol) {
   try {
-    await tryAutoConnect();           // Auto-connect MetaMask
-    await refreshAccountBalances();   // Refresh saldo BNB
-    mockSignals = true;               // Aktifkan mock signals
-    if (typeof mockSignalBtn !== 'undefined') {
-      mockSignalBtn.textContent = "🧪 Mock Signals (ON)";
-    }
-    uiLog("Mock signals enabled");
-  } catch(e) {
-    uiLog("⚠️ Init after refresh failed: " + e.message);
+    const res = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=" + symbol, { timeout: 4000 });
+    if (res && res.data && res.data.price) return parseFloat(res.data.price);
+  } catch (e) {
+    // ignore here, caller will fallback
   }
-});
+  return null;
+}
+async function fetchPriceCoingecko(id) {
+  try {
+    const r = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=" + id + "&vs_currencies=usd", { timeout: 4000 });
+    if (r && r.data && r.data[id] && typeof r.data[id].usd === 'number') return r.data[id].usd;
+  } catch (e) {}
+  return null;
+}
+
+async function getTokenBalanceUSD(tokenAddress, symbol, binanceSymbol, coingeckoId) {
+  try {
+    const token = new ethers.Contract(tokenAddress, tokenAbi, provider);
+    const decimals = await token.decimals();
+    const bal = await token.balanceOf(userAddress);
+    const humanBal = parseFloat(ethers.utils.formatUnits(bal, decimals));
+    let price = null;
+    if (binanceSymbol) price = await fetchPriceBinance(binanceSymbol);
+    if (price === null && coingeckoId) price = await fetchPriceCoingecko(coingeckoId);
+    // special-case stablecoins like USDT
+    if (symbol === 'USDT') price = 1.0;
+    const usdValue = (price !== null) ? humanBal * price : 0;
+    uiLog(`${symbol} balance: ${humanBal.toFixed(6)} (~$${usdValue.toFixed(2)})`);
+    return { humanBal, usdValue };
+  } catch (e) {
+    uiLog(`⚠️ Failed read ${symbol} balance: ${e.message}`);
+    return { humanBal: 0, usdValue: 0 };
+  }
+}
+
+async function enhancedRefreshAccountBalances() {
+  if (!provider || !userAddress) { uiLog("⚠️ Wallet not connected"); return; }
+  try {
+    let totalUSD = 0;
+    // BNB
+    try {
+      const bnbWei = await provider.getBalance(userAddress);
+      const bnbBal = parseFloat(ethers.utils.formatEther(bnbWei));
+      let bnbPrice = await fetchPriceBinance('BNBUSDT');
+      if (bnbPrice === null) bnbPrice = await fetchPriceCoingecko('binancecoin');
+      const bnbUSD = (bnbPrice !== null) ? bnbBal * bnbPrice : 0;
+      totalUSD += bnbUSD;
+      bnbBalanceEl.textContent = `${bnbBal.toFixed(6)} BNB`;
+      uiLog(`BNB balance: ${bnbBal.toFixed(6)} BNB (~$${bnbUSD.toFixed(2)})`);
+    } catch (e) {
+      uiLog("⚠️ Failed read BNB balance: " + e.message);
+    }
+
+    // USDT (BEP20)
+    const usdt = await getTokenBalanceUSD("0x55d398326f99059fF775485246999027B3197955", "USDT", "USDTBUSD", "tether");
+    totalUSD += usdt.usdValue;
+
+    // XRP (BEP20)
+    const xrp = await getTokenBalanceUSD("0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", "XRP", "XRPUSDT", "ripple");
+    totalUSD += xrp.usdValue;
+
+    // TWT (BEP20)
+    const twt = await getTokenBalanceUSD("0x4B0F1812e5Df2A09796481Ff14017e6005508003", "TWT", "TWTUSDT", "trust-wallet-token");
+    totalUSD += twt.usdValue;
+
+    uiLog(`💰 Total Capital: $${totalUSD.toFixed(2)}`);
+    if (typeof capitalEl !== 'undefined') capitalEl.textContent = `$${totalUSD.toFixed(2)}`;
+  } catch (e) {
+    uiLog("⚠️ enhancedRefreshAccountBalances error: " + e.message);
+  }
+}
+
+// Replace old refreshAccountBalances definition by hooking refreshBalancesBtn and tryAutoConnect's call
 
 </script>
 </body>
