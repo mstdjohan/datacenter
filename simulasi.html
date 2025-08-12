@@ -1,213 +1,306 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Auto-Trading XRP</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Manual Trade (Trust Wallet) — Real-time</title>
   <style>
-    body { font-family: sans-serif; background: #f7f7f7; margin: 0; padding: 2rem; }
-    #chartContainer { width: 100%; max-width: 900px; margin: auto; }
-    #log { white-space: pre-wrap; background: #eee; padding: 1rem; height: 200px; overflow-y: scroll; }
-    button { padding: 10px 15px; margin: 5px; }
+    /* minimal clean styling */
+    :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{background:#0f1724;color:#e6eef8;margin:0;padding:24px;}
+    .card{background:linear-gradient(180deg,#0b1220, #07101a);border:1px solid rgba(255,255,255,0.04);padding:18px;border-radius:12px;max-width:920px;margin:16px auto}
+    h1{margin:0 0 12px 0;font-size:20px}
+    label{display:block;margin-top:10px;font-size:13px;color:#9fb0d0}
+    input,select,button,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    .muted{color:#8da3c7;font-size:13px}
+    .inline{display:inline-block;width:auto}
+    .small{font-size:13px}
+    .status{background:rgba(0,0,0,0.2);padding:8px;border-radius:8px;margin-top:10px}
+    pre{white-space:pre-wrap;word-break:break-word}
+    .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+    @media(max-width:880px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-  <h2>Harga XRP "XRP1" & Indikator (Real-time + Historis)</h2>
-  <button onclick="connectWallet()">🔗 Connect MetaMask</button>
-  <button onclick="autoSwap('buy', qtyPerTrade)">🟢 BUY XRP (Manual)</button>
-  <button onclick="autoSwap('sell', qtyPerTrade)">🔴 SELL XRP (Manual)</button>
-  <div id="wallet"></div>
+  <div class="card">
+    <h1>Manual Trade — Connect Trust Wallet (WalletConnect)</h1>
+    <div class="muted">Catatan: ini adalah *manual* UI untuk membangun dan mengirim transaksi on-chain (ETH / ERC‑20). XRP native tidak berjalan di jaringan EVM — lihat catatan di bawah.</div>
 
-  <div id="chartContainer">
-    <canvas id="priceChart"></canvas>
+    <div style="margin-top:14px" class="grid">
+      <div>
+        <div id="walletSection">
+          <label>Wallet</label>
+          <div class="row">
+            <div class="col">
+              <input id="address" placeholder="Belum terhubung" readonly />
+            </div>
+            <div style="width:140px">
+              <button id="btnConnect">Connect</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div class="col"><input id="chain" placeholder="Chain" readonly /></div>
+            <div style="width:140px"><input id="nativeBalance" placeholder="Balance" readonly /></div>
+          </div>
+        </div>
+
+        <hr style="margin:14px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+        <label>Jenis Transaksi</label>
+        <select id="txType">
+          <option value="eth_transfer">ETH / Native Transfer</option>
+          <option value="erc20_transfer">ERC-20 Transfer</option>
+        </select>
+
+        <label id="tokenLabel">To Address / Token Contract</label>
+        <div class="row">
+          <input id="to" placeholder="Recipient address (atau token contract untuk ERC20)" />
+        </div>
+
+        <label>Amount</label>
+        <input id="amount" placeholder="jumlah (contoh: 0.01)" />
+
+        <label>Gas Limit (opsional)</label>
+        <input id="gasLimit" placeholder="kosong = estimasi otomatis" />
+
+        <label>Gas Price / Max Fee (opsional)</label>
+        <input id="gasPrice" placeholder="gwei atau kosong untuk default" />
+
+        <button id="btnPreview" style="margin-top:12px">Preview & Sign</button>
+        <button id="btnSend" style="margin-top:8px">Send Transaction</button>
+
+        <div class="status" id="status">Status: idle</div>
+
+        <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+        <label>Logs / Tx</label>
+        <pre id="log" style="max-height:220px;overflow:auto;background:transparent;border-radius:8px;padding:8px">— ready —</pre>
+
+      </div>
+
+      <div>
+        <div class="card" style="padding:12px;background:linear-gradient(180deg,#081522,#07121a)">
+          <h1 style="font-size:16px">Real-time Info</h1>
+          <div class="muted">Address</div>
+          <div id="infoAddress" class="small">—</div>
+
+          <div style="margin-top:8px" class="muted">Native Balance</div>
+          <div id="infoBalance" class="small">—</div>
+
+          <div style="margin-top:8px" class="muted">Selected Token Balance (ERC-20)</div>
+          <div id="infoTokenBal" class="small">—</div>
+
+          <div style="margin-top:8px" class="muted">Latest Nonce</div>
+          <div id="infoNonce" class="small">—</div>
+
+          <div style="margin-top:8px" class="muted">Network / RPC</div>
+          <div id="infoChain" class="small">—</div>
+
+          <hr style="margin:10px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+          <div class="muted">Catatan penting</div>
+          <ul class="small">
+            <li>Trust Wallet (mobile) dapat terhubung via WalletConnect — buka Trust Wallet & pilih "Browser dApp" atau scan QR (mobile pairing mungkin diperlukan).</li>
+            <li>XRP native <strong>tidak</strong> berjalan di EVM; untuk jual/beli XRP gunakan exchange atau wallet native XRP yang mendukung trading on‑ramp.</li>
+            <li>UI ini <strong>tidak</strong> otomatis swap via DEX — hanya membangun dan mengirim transaksi transfer ERC‑20 / native.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <h3>📜 Log:</h3>
-  <div id="log"></div>
+  <!-- Dependencies: Ethers.js + WalletConnectProvider + Web3Modal (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/web3modal@1.9.12/dist/index.js"></script>
 
   <script>
-    let provider, signer, router;
-    let walletAddress = "";
-    let currentChainId;
-    let xrpPrices = [];
-    let previousPrice = null;
-    let chart;
-    let currentPositionAmount = 0;
-    const qtyPerTrade = 5;
-
-    const PANCAKE_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-    const XRP_ADDRESS = "0x1D2F0dA169ceB9Fc7A0cFc94fC57BcC7A9F5217C";
-    const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
-
-    function log(msg) {
-      const time = new Date().toLocaleTimeString();
-      const logBox = document.getElementById("log");
-      logBox.textContent += `\n[${time}] ${msg}`;
-      logBox.scrollTop = logBox.scrollHeight;
+    // --- Minimal helper utilities ---
+    const logEl = el('log');
+    function log(msg){
+      console.log(msg);
+      logEl.textContent = (new Date()).toLocaleTimeString() + ' — ' + msg + '\n' + logEl.textContent;
     }
+    function el(id){return document.getElementById(id)}
 
-    async function connectWallet() {
-      if (!window.ethereum) return log("❌ MetaMask tidak terdeteksi");
-      provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      signer = provider.getSigner();
-      walletAddress = await signer.getAddress();
-      currentChainId = (await provider.getNetwork()).chainId;
-      if (currentChainId !== 56) await switchToBSC();
+    // --- WalletConnect + Web3Modal setup ---
+    let provider; // web3 provider (WalletConnect provider)
+    let web3Provider; // ethers provider
+    let signer;
+    let userAddress;
+    let pollInterval;
 
-      const balance = await provider.getBalance(walletAddress);
-      document.getElementById("wallet").innerHTML = `👛 Wallet: ${walletAddress}<br>💵 Saldo: ${ethers.utils.formatEther(balance)} BNB`;
-
-      router = new ethers.Contract(
-        PANCAKE_ROUTER_ADDRESS,
-        [
-          "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory)",
-          "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"
-        ],
-        signer
-      );
-
-      log(`✅ Terhubung ke BNB Smart Chain: ${walletAddress} | Saldo: ${ethers.utils.formatEther(balance)} BNB`);
-    }
-
-    async function switchToBSC() {
-      await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x38',
-          chainName: 'BNB Smart Chain',
-          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-          rpcUrls: ['https://bsc-dataseed.binance.org'],
-          blockExplorerUrls: ['https://bscscan.com']
-        }]
-      });
-      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
-    }
-
-    async function fetchPrice() {
-      const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-      return res.data.ripple.usd;
-    }
-
-    function updateChart(price, lowerBB = null, upperBB = null) {
-      const time = new Date().toLocaleTimeString();
-      xrpPrices.push({ x: time, y: price });
-      if (xrpPrices.length > 50) xrpPrices.shift();
-
-      chart.data.labels = xrpPrices.map(p => p.x);
-      chart.data.datasets[0].data = xrpPrices.map(p => p.y);
-
-      if (lowerBB !== null && upperBB !== null) {
-        chart.data.datasets[1].data = Array(xrpPrices.length).fill(lowerBB);
-        chart.data.datasets[2].data = Array(xrpPrices.length).fill(upperBB);
-      }
-
-      chart.update();
-    }
-
-    function initChart() {
-      const ctx = document.getElementById("priceChart").getContext("2d");
-      chart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: [],
-          datasets: [
-            {
-              label: "Harga XRP (USD)",
-              data: [],
-              borderWidth: 2,
-              borderColor: "blue",
-              fill: false,
-            },
-            {
-              label: "Lower BB",
-              data: [],
-              borderWidth: 1,
-              borderColor: "green",
-              borderDash: [5, 5],
-              fill: false,
-            },
-            {
-              label: "Upper BB",
-              data: [],
-              borderWidth: 1,
-              borderColor: "red",
-              borderDash: [5, 5],
-              fill: false,
-            }
-          ]
-        },
-        options: { responsive: true, scales: { y: { beginAtZero: false } } }
-      });
-    }
-
-    async function autoSwap(action, amountUSD) {
-      try {
-        const amountIn = ethers.utils.parseUnits(amountUSD.toString(), 18);
-        const userAddress = await signer.getAddress();
-
-        const tokenIn = action === "buy" ? USDT_ADDRESS : XRP_ADDRESS;
-        const tokenOut = action === "buy" ? XRP_ADDRESS : USDT_ADDRESS;
-
-        const tokenContract = new ethers.Contract(tokenIn, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
-        const txApprove = await tokenContract.approve(PANCAKE_ROUTER_ADDRESS, amountIn);
-        await txApprove.wait();
-
-        const path = [tokenIn, tokenOut];
-        const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-        const tx = await router.swapExactTokensForTokens(amountIn, 0, path, userAddress, deadline);
-        await tx.wait();
-
-        log(`✅ Swap ${action.toUpperCase()} XRP berhasil`);
-        sendEmail(`AUTO-TRADE ${action.toUpperCase()}`, `Swap otomatis ${action.toUpperCase()} XRP sebesar $${amountUSD}`);
-      } catch (err) {
-        log("❌ Gagal auto-swap: " + err.message);
-      }
-    }
-
-    function sendEmail(subject, message) {
-      emailjs.send("YOUR_SERVICE", "YOUR_TEMPLATE", {
-        subject: subject,
-        message: message
-      });
-    }
-
-    async function fetchAndEvaluate() {
-      const price = await fetchPrice();
-
-      const peak = Math.max(...xrpPrices.map(p => p.y), price);
-      const low = Math.min(...xrpPrices.map(p => p.y), price);
-      const range = peak - low;
-      const lowerBB = low + range * 0.1;
-      const upperBB = peak - range * 0.1;
-
-      updateChart(price, lowerBB, upperBB);
-
-      if (previousPrice !== null) {
-        if (previousPrice < lowerBB && price >= lowerBB) {
-          await autoSwap("buy", qtyPerTrade);
-          sendEmail("BUY Signal", `Rebound dari Lower BB di $${price.toFixed(4)}`);
-          currentPositionAmount += qtyPerTrade / price;
-        } else if (previousPrice > upperBB && price <= upperBB && currentPositionAmount > 0) {
-          await autoSwap("sell", price * currentPositionAmount);
-          sendEmail("SELL Signal", `Rebound dari Upper BB di $${price.toFixed(4)}`);
-          currentPositionAmount = 0;
-        } else {
-          log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB.toFixed(4)} | Upper BB: $${upperBB.toFixed(4)}`);
+    const providerOptions = {
+      walletconnect: {
+        package: window.WalletConnectProvider.default,
+        options: {
+          rpc: {
+            // Default RPCs (mainnet + common chains). For production, use your own RPC endpoints.
+            1: 'https://rpc.ankr.com/eth',
+            56: 'https://bsc-dataseed.binance.org/',
+            137: 'https://rpc.ankr.com/polygon'
+          }
         }
       }
+    };
 
-      previousPrice = price;
+    const web3Modal = new window.Web3Modal.default({ cacheProvider: false, providerOptions });
+
+    async function connectWallet(){
+      try{
+        provider = await web3Modal.connect();
+        web3Provider = new ethers.providers.Web3Provider(provider);
+        signer = web3Provider.getSigner();
+        userAddress = await signer.getAddress();
+        el('address').value = userAddress;
+        const network = await web3Provider.getNetwork();
+        el('chain').value = network.name + ' ('+network.chainId+')';
+        el('infoAddress').textContent = userAddress;
+        el('infoChain').textContent = network.name + ' ('+network.chainId+')';
+        log('Wallet connected: ' + userAddress + ' on ' + network.name);
+        el('status').textContent = 'Connected';
+        startPolling();
+
+        // handle disconnect
+        provider.on("disconnect", (code, reason) => { disconnect(); });
+      }catch(e){
+        log('connect error: '+e);
+        el('status').textContent = 'Connect error';
+      }
     }
 
-    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS kamu
-    initChart();
-    setInterval(fetchAndEvaluate, 15000);
+    async function disconnect(){
+      try{
+        if(provider && provider.disconnect) await provider.disconnect();
+      }catch(e){/*ignore*/}
+      provider = null; web3Provider = null; signer = null; userAddress = null;
+      el('address').value = '';
+      el('nativeBalance').value = '';
+      el('infoAddress').textContent = '—';
+      el('infoBalance').textContent = '—';
+      el('infoTokenBal').textContent = '—';
+      el('infoNonce').textContent = '—';
+      el('infoChain').textContent = '—';
+      el('status').textContent = 'Disconnected';
+      stopPolling();
+      log('Disconnected');
+    }
+
+    // --- Polling real-time info ---
+    async function updateRealtime(){
+      if(!web3Provider || !signer) return;
+      try{
+        const addr = await signer.getAddress();
+        const bal = await web3Provider.getBalance(addr);
+        const formatted = ethers.utils.formatEther(bal);
+        el('nativeBalance').value = formatted;
+        el('infoBalance').textContent = formatted + ' native';
+        const nonce = await web3Provider.getTransactionCount(addr);
+        el('infoNonce').textContent = nonce;
+
+        // token balance if ERC20 contract provided in "to" and selected type = erc20_transfer
+        const txType = el('txType').value;
+        const to = el('to').value.trim();
+        if(txType === 'erc20_transfer' && ethers.utils.isAddress(to)){
+          const erc20 = new ethers.Contract(to, [
+            'function balanceOf(address) view returns (uint256)',
+            'function decimals() view returns (uint8)',
+            'function symbol() view returns (string)'
+          ], web3Provider);
+          try{
+            const [rawBal, decimals, symbol] = await Promise.all([
+              erc20.balanceOf(addr), erc20.decimals(), erc20.symbol()
+            ]);
+            const human = ethers.utils.formatUnits(rawBal, decimals);
+            el('infoTokenBal').textContent = human + ' ' + symbol;
+          }catch(e){ el('infoTokenBal').textContent = '— (cannot read token)'; }
+        }
+
+      }catch(e){ console.error(e); }
+    }
+    function startPolling(){ if(!pollInterval) pollInterval = setInterval(updateRealtime, 5000); updateRealtime(); }
+    function stopPolling(){ if(pollInterval) { clearInterval(pollInterval); pollInterval = null; } }
+
+    // --- Build / Preview / Send TX ---
+    async function previewTx(){
+      if(!signer){ alert('Connect wallet first'); return; }
+      const txType = el('txType').value;
+      const to = el('to').value.trim();
+      const amount = el('amount').value.trim();
+      if(!to || !amount){ alert('Isi recipient/token contract dan jumlah'); return; }
+
+      el('status').textContent = 'Previewing...';
+      try{
+        const chainId = (await web3Provider.getNetwork()).chainId;
+        if(txType === 'eth_transfer'){
+          const value = ethers.utils.parseEther(amount);
+          const tx = { to, value };
+          // gas overrides
+          const gasLimit = el('gasLimit').value.trim();
+          if(gasLimit) tx.gasLimit = ethers.BigNumber.from(gasLimit);
+          const gasPrice = el('gasPrice').value.trim();
+          if(gasPrice) tx.gasPrice = ethers.utils.parseUnits(gasPrice, 'gwei');
+
+          el('log').textContent = 'Preview TX:\n' + JSON.stringify(tx, null, 2) + '\n' + el('log').textContent;
+          el('status').textContent = 'Preview ready';
+          window._lastTx = tx;
+        }else{
+          // ERC20 transfer: build data for transfer(address,uint256)
+          if(!ethers.utils.isAddress(to)){ alert('Token contract address not valid'); return; }
+          const tokenContract = to;
+          const recipient = prompt('Masukkan recipient address untuk transfer token:');
+          if(!recipient || !ethers.utils.isAddress(recipient)){ alert('Recipient tidak valid'); return; }
+          const decimals = await (new ethers.Contract(tokenContract, ['function decimals() view returns (uint8)'], web3Provider)).decimals();
+          const raw = ethers.utils.parseUnits(amount, decimals);
+          const iface = new ethers.utils.Interface(['function transfer(address to, uint256 value)']);
+          const data = iface.encodeFunctionData('transfer', [recipient, raw]);
+          const tx = { to: tokenContract, data };
+          const gasLimit = el('gasLimit').value.trim();
+          if(gasLimit) tx.gasLimit = ethers.BigNumber.from(gasLimit);
+
+          el('log').textContent = 'Preview ERC20 TX:\n' + JSON.stringify(tx, null, 2) + '\n' + el('log').textContent;
+          el('status').textContent = 'Preview ready (unsigned)';
+          window._lastTx = tx;
+        }
+      }catch(e){ log('preview error: '+e); el('status').textContent = 'Preview error'; }
+    }
+
+    async function sendTx(){
+      if(!signer){ alert('Connect wallet first'); return; }
+      if(!window._lastTx){ alert('Preview dulu transaksi'); return; }
+      try{
+        el('status').textContent = 'Sending...';
+        const signedTx = await signer.sendTransaction(window._lastTx);
+        log('Tx sent: ' + signedTx.hash);
+        el('log').textContent = 'Tx sent: ' + signedTx.hash + '\n' + el('log').textContent;
+        el('status').textContent = 'Tx sent — waiting for confirm';
+        const receipt = await signedTx.wait();
+        log('Tx confirmed: ' + receipt.transactionHash);
+        el('log').textContent = 'Confirmed: ' + receipt.transactionHash + '\n' + el('log').textContent;
+        el('status').textContent = 'Confirmed';
+      }catch(e){ log('send error: '+e); el('status').textContent = 'Send error'; }
+    }
+
+    // --- UI wiring ---
+    el('btnConnect').addEventListener('click', async ()=>{
+      if(!provider) await connectWallet(); else await disconnect();
+    });
+    el('btnPreview').addEventListener('click', previewTx);
+    el('btnSend').addEventListener('click', sendTx);
+
+    // switch label when tx type changes
+    el('txType').addEventListener('change', ()=>{
+      if(el('txType').value === 'eth_transfer'){
+        el('tokenLabel').textContent = 'To Address (recipient)';
+      }else{
+        el('tokenLabel').textContent = 'Token Contract Address (ERC-20)';
+      }
+    });
+
+    // quick safety: before unload disconnect
+    window.addEventListener('beforeunload', ()=>{ if(provider && provider.disconnect) provider.disconnect(); });
+
   </script>
 </body>
 </html>
