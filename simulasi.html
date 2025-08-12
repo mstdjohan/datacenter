@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>XRP↔USDT Auto Trader (BSC) — Stable</title>
+  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Stable Fix</title>
   <style>
     :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
     body{background:#071024;color:#e6eef8;margin:0;padding:20px}
@@ -17,14 +17,21 @@
     .small{font-size:13px;color:#99b3d6}
     pre{white-space:pre-wrap;word-break:break-word;background:transparent;padding:8px}
     .muted{color:#7f9ec8}
+    .danger{color:#ffb4a2}
     @media(max-width:880px){.row{flex-direction:column}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>XRP ↔ USDT Auto Trader (BSC) — Stable</h1>
-      <div class="small muted">Versi stabil: memitigasi error provider.emit dengan wrapper/proxy dan fallback ke window.ethereum. Masih DEMO — uji di testnet dulu.</div>
+      <h1>XRP ↔ USDT Auto Trader — Stable Fix</h1>
+      <div class="small muted">Perbaikan: mencegah error <code>Cannot read properties of undefined (reading 'emit')</code> dengan memastikan provider diproxy/ dinormalisasi dan tidak dipanggil sebelum siap. Mode: Mainnet (real trades). Gunakan hati-hati.</div>
+
+      <label>Mode</label>
+      <select id="mode">
+        <option value="buy">Buy (USDT → XRP)</option>
+        <option value="sell">Sell (XRP → USDT)</option>
+      </select>
 
       <label>Connect Wallet</label>
       <div class="row">
@@ -34,32 +41,26 @@
 
       <label>Network</label>
       <div class="row">
-        <input id="network" placeholder="BSC Mainnet expected" readonly />
-        <input id="balance" placeholder="Balance" readonly />
+        <input id="network" placeholder="—" readonly />
+        <input id="balance" placeholder="—" readonly />
       </div>
 
       <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
 
-      <label>Token Addresses (BEP20)</label>
+      <label>Auto-selected Tokens (BEP20 on BSC)</label>
       <div class="row">
-        <div class="col"><input id="tokenA" placeholder="Token A (XRP-BEP20)" value="" /></div>
-        <div style="width:220px"><input id="decA" placeholder="decimals A (auto)" readonly /></div>
+        <div class="col"><input id="tokenFrom" readonly /></div>
+        <div style="width:220px"><input id="decFrom" placeholder="decimals" readonly /></div>
       </div>
       <div class="row">
-        <div class="col"><input id="tokenB" placeholder="Token B (USDT-BEP20)" value="0x55d398326f99059fF775485246999027B3197955" /></div>
-        <div style="width:220px"><input id="decB" placeholder="decimals B (auto)" readonly /></div>
+        <div class="col"><input id="tokenTo" readonly /></div>
+        <div style="width:220px"><input id="decTo" placeholder="decimals" readonly /></div>
       </div>
-
-      <label>Direction</label>
-      <select id="direction">
-        <option value="AtoB">XRP → USDT (sell XRP)</option>
-        <option value="BtoA">USDT → XRP (buy XRP)</option>
-      </select>
 
       <label>Amount (amount of source token to trade)</label>
-      <input id="amount" placeholder="contoh: 100 (XRP) atau 10 (USDT)" />
+      <input id="amount" placeholder="contoh: 50 (USDT) atau 100 (XRP)" />
 
-      <label>Targets (harga dalam unit token B per 1 token A — mis. USDT per 1 XRP)</label>
+      <label>Targets (harga dalam unit tokenTo per 1 tokenFrom — USDT per XRP)</label>
       <div class="row">
         <div class="col"><input id="tp1" placeholder="TP1" /></div>
         <div class="col"><input id="tp2" placeholder="TP2 (optional)" /></div>
@@ -69,7 +70,7 @@
       <input id="sl" placeholder="SL" />
 
       <label>Slippage tolerance (%)</label>
-      <input id="slippage" placeholder="0.5" value="0.5" />
+      <input id="slippage" placeholder="0.8" value="0.8" />
 
       <div class="row" style="margin-top:12px;">
         <button id="btnStart" disabled>Start Bot</button>
@@ -84,40 +85,39 @@
       </div>
 
       <div style="margin-top:14px;color:#ffd1a9;font-size:13px">
-        <strong>PERINGATAN:</strong> Kode ini akan menandatangani transaksi nyata jika kamu menghubungkan wallet dan menekan Start. Jalankan hanya jika memahami risiko — gas fees, slippage, MEV, rugpull token. UJI DI TESTNET TERLEBIH DAHULU.
+        <strong>PERINGATAN:</strong> Ini akan melakukan transaksi nyata di BSC Mainnet jika Anda menekan Start. Mulailah dengan nominal kecil dan uji terlebih dahulu. Saya tidak bertanggung jawab atas kehilangan dana.
       </div>
     </div>
   </div>
 
-  <!-- Deps -->
+  <!-- Dependencies -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/web3modal@1.9.12/dist/index.js"></script>
 
   <script>
-    // global error handler
-    window.addEventListener('error', function (ev) {
-      try { const msg = (ev && ev.error && ev.error.stack) ? ev.error.stack : ev.message || String(ev); document.getElementById('log').textContent = new Date().toLocaleTimeString() + ' — ERROR: ' + msg + '\n' + document.getElementById('log').textContent; } catch(e) { console.error('log error', e); }
-    });
-
     window.addEventListener('load', function(){
-      function el(id){ return document.getElementById(id); }
-      function safeLog(msg){ try{ el('log').textContent = new Date().toLocaleTimeString() + ' — ' + String(msg) + '\n' + el('log').textContent; }catch(e){ console.log('log write failed', e); } console.log(msg); }
-
-      if(typeof ethers === 'undefined'){ alert('ethers.js gagal dimuat. Periksa CDN / koneksi.'); safeLog('ethers.js not loaded'); return; }
-
+      // constants
+      const BSC_CHAIN_ID = 56;
       const PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
       const WBNB = '0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+      const USDT = '0x55d398326f99059fF775485246999027B3197955';
+      const XRP_BEP20 = '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE';
 
-      let provider = null; // low-level provider returned by Web3Modal
-      let safeProvider = null; // proxied provider that guarantees .on/.emit etc
+      // elements
+      const el = id => document.getElementById(id);
+      function safeLog(msg){ try{ el('log').textContent = new Date().toLocaleTimeString() + ' — ' + String(msg) + '\n' + el('log').textContent; }catch(e){ console.log(msg); } console.log(msg); }
+
+      // state
+      let provider = null; // raw provider
+      let safeProvider = null; // normalized provider (guarantees event methods present)
       let web3Provider = null; // ethers provider
       let signer = null;
       let account = null;
       let botInterval = null;
       let pollInterval = null;
 
-      // Web3Modal config
+      // web3modal
       const providerOptions = {
         walletconnect: {
           package: window.WalletConnectProvider && window.WalletConnectProvider.default ? window.WalletConnectProvider.default : window.WalletConnectProvider,
@@ -127,142 +127,184 @@
       const Web3ModalCtor = window.Web3Modal && (window.Web3Modal.default || window.Web3Modal);
       const web3Modal = Web3ModalCtor ? new Web3ModalCtor({ cacheProvider:false, providerOptions }) : null;
 
-      // Create a Proxy wrapper that provides safe .on/.off/.emit methods if missing.
-      function makeSafeProvider(p){
+      // Normalize provider: add no-op event methods and safe nested connector object to avoid 'emit' errors
+      function normalizeProvider(p){
         if(!p) return p;
         try{
-          const handler = {
-            get(target, prop, receiver){
-              // for common event methods, return bound original or noop
-              if(['on','off','addListener','removeListener','removeAllListeners','emit'].includes(prop)){
-                if(typeof target[prop] === 'function'){
-                  return target[prop].bind(target);
-                }
-                return function(){ /* noop to avoid crashes in libs expecting events */ };
-              }
-              try{ return Reflect.get(target, prop, receiver); }catch(e){ return undefined; }
-            }
-          };
-          return new Proxy(p, handler);
-        }catch(e){
-          safeLog('Proxy creation failed — returning original provider: ' + e);
+          // add top-level methods if missing
+          if(typeof p.on !== 'function') p.on = function(){ /* noop */ };
+          if(typeof p.removeListener !== 'function') p.removeListener = function(){ /* noop */ };
+          if(typeof p.off !== 'function') p.off = function(){ /* noop */ };
+          if(typeof p.once !== 'function') p.once = function(){ /* noop */ };
+          if(typeof p.emit !== 'function') p.emit = function(){ /* noop */ };
+
+          // Ensure connector object exists (some libs call provider.connector.emit)
+          if(typeof p.connector === 'undefined' || p.connector === null){ p.connector = {}; }
+          if(typeof p.connector.emit !== 'function') p.connector.emit = function(){ /* noop */ };
+          if(typeof p.connector.on !== 'function') p.connector.on = function(){ /* noop */ };
+          if(typeof p.connector.off !== 'function') p.connector.off = function(){ /* noop */ };
+
+          // ensure wc / wcProvider fallback
+          if(typeof p.wc === 'undefined' || p.wc === null){ p.wc = {}; }
+          if(typeof p.wc.emit !== 'function') p.wc.emit = function(){ /* noop */ };
+
           return p;
+        }catch(e){ safeLog('normalizeProvider failed: ' + e); return p; }
+      }
+
+      // set tokens according to mode
+      function applyMode(){
+        const mode = el('mode').value; // buy or sell
+        if(mode === 'buy'){
+          el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20;
+        }else{
+          el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT;
         }
+        el('decFrom').value = '';
+        el('decTo').value = '';
+      }
+      el('mode').addEventListener('change', applyMode);
+      applyMode();
+
+      // helper: read decimals safely (returns number or throws)
+      async function readDecimals(tokenAddress){
+        if(!web3Provider) throw new Error('provider not ready');
+        if(!ethers.utils.isAddress(tokenAddress)) throw new Error('invalid token address');
+        const erc = new ethers.Contract(tokenAddress, ['function decimals() view returns (uint8)'], web3Provider);
+        const d = await erc.decimals();
+        return Number(d);
       }
 
-      async function connect(){
-        if(!web3Modal){ alert('Web3Modal tidak tersedia'); return; }
-        try{
-          // Try web3modal first
-          provider = await web3Modal.connect().catch(function(err){ safeLog('web3Modal.connect failed: ' + err); return null; });
-
-          // fallback to window.ethereum if available
-          if(!provider && window.ethereum){ provider = window.ethereum; safeLog('Using window.ethereum fallback'); }
-
-          if(!provider){ alert('Gagal menginisialisasi provider. Pastikan wallet Anda mendukung WalletConnect atau ada window.ethereum.'); return; }
-
-          // wrap provider to avoid undefined .emit errors in downstream libs
-          safeProvider = makeSafeProvider(provider);
-          web3Provider = new ethers.providers.Web3Provider(safeProvider, 'any');
-          signer = web3Provider.getSigner();
-          try{ account = await signer.getAddress(); }catch(e){ account = null; }
-          if(account) el('address').value = account;
-
-          try{ const net = await web3Provider.getNetwork(); el('network').value = net.name + ' (' + net.chainId + ')'; }catch(e){ el('network').value = '—'; }
-          try{ const bal = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal ? ethers.utils.formatEther(bal) + ' BNB' : '—'; }catch(e){ el('balance').value = '—'; }
-
-          safeLog('Connected ' + (account||'?'));
-
-          // Start polling for account/network changes (avoid relying on provider.emit/on)
-          if(pollInterval) clearInterval(pollInterval);
-          pollInterval = setInterval(async function(){
-            try{
-              if(!web3Provider) return;
-              const currentNet = await web3Provider.getNetwork();
-              el('network').value = currentNet.name + ' (' + currentNet.chainId + ')';
-              if(signer){
-                try{ const currentAccount = await signer.getAddress(); if(currentAccount && currentAccount !== account){ account = currentAccount; el('address').value = account; safeLog('account changed: ' + account); } }catch(e){}
-                try{ const bal = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal ? ethers.utils.formatEther(bal) + ' BNB' : '—'; }catch(e){}
-              }
-            }catch(e){ /* silent */ }
-          }, 3500);
-
-          el('btnStart').disabled = false;
-          el('btnStop').disabled = false;
-        }catch(e){ safeLog('connect error: ' + e); }
-      }
-
-      async function disconnect(){
-        try{ if(provider && typeof provider.disconnect === 'function') await provider.disconnect(); }catch(e){ /* ignore */ }
-        try{ if(web3Modal && typeof web3Modal.clearCachedProvider === 'function') web3Modal.clearCachedProvider(); }catch(e){}
-        if(pollInterval){ clearInterval(pollInterval); pollInterval = null; }
-        provider = null; safeProvider = null; web3Provider = null; signer = null; account = null;
-        el('address').value = '';
-        el('network').value = '';
-        el('balance').value = '';
-        el('btnStart').disabled = true;
-        el('btnStop').disabled = true;
-        safeLog('Disconnected');
-      }
-
-      el('btnConnect').addEventListener('click', async function(){ if(!provider) await connect(); else await disconnect(); });
-
-      // helpers using ethers provider
-      async function getDecimals(token){ if(!web3Provider) throw new Error('provider not ready'); const erc20 = new ethers.Contract(token, ['function decimals() view returns (uint8)'], web3Provider); try{ return await erc20.decimals(); }catch(e){ safeLog('decimals read error: '+e); return null; } }
-
-      async function getPrice(tokenIn, tokenOut, amountInHuman){ if(!web3Provider) throw new Error('provider not ready'); try{
+      // helper: price via getAmountsOut
+      async function getPrice(tokenIn, tokenOut, amountInHuman){
+        if(!web3Provider) throw new Error('provider not ready');
         const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider);
-        const decIn = await getDecimals(tokenIn); const decOut = await getDecimals(tokenOut);
-        if(decIn==null||decOut==null) throw new Error('failed decimals');
+        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
         const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
+        // try direct path
         try{ const amounts = await router.getAmountsOut(amountIn, [tokenIn, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
         catch(e){ const amounts = await router.getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
-      }catch(e){ safeLog('getPrice error: '+e); throw e; } }
+      }
 
-      async function approveIfNeeded(token, spender, amountHuman){ if(!signer) throw new Error('signer not ready'); const dec = await getDecimals(token); if(dec==null) throw new Error('decimals unknown'); const erc = new ethers.Contract(token, ['function allowance(address owner, address spender) view returns (uint256)','function approve(address spender, uint256 amount) returns (bool)'], signer); try{ const allowance = await erc.allowance(account, spender); const amount = ethers.utils.parseUnits(String(amountHuman), dec); if(allowance.gte(amount)){ safeLog('Allowance sufficient'); return true; } const tx = await erc.approve(spender, ethers.constants.MaxUint256); safeLog('Approve tx sent: ' + tx.hash); await tx.wait(); safeLog('Approve confirmed'); return true; }catch(e){ safeLog('approve error: '+e); throw e; } }
+      // approval
+      async function approveIfNeeded(token, spender, amountHuman){
+        if(!signer) throw new Error('signer not ready');
+        const dec = await readDecimals(token);
+        const erc = new ethers.Contract(token, ['function allowance(address owner, address spender) view returns (uint256)','function approve(address spender, uint256 amount) returns (bool)'], signer);
+        const allowance = await erc.allowance(account, spender);
+        const amount = ethers.utils.parseUnits(String(amountHuman), dec);
+        if(allowance.gte(amount)) { safeLog('Allowance ok'); return true; }
+        const tx = await erc.approve(spender, ethers.constants.MaxUint256);
+        safeLog('Approve sent: ' + tx.hash);
+        await tx.wait(); safeLog('Approve confirmed'); return true;
+      }
 
-      async function swapExactTokens(tokenIn, tokenOut, amountInHuman, slippagePercent){ if(!signer) throw new Error('signer not ready'); const router = new ethers.Contract(PANCAKE_ROUTER, ['function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer); const decIn = await getDecimals(tokenIn); const decOut = await getDecimals(tokenOut); const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
+      // swap
+      async function swapExactTokens(tokenIn, tokenOut, amountInHuman, slippagePercent){
+        if(!signer) throw new Error('signer not ready');
+        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
+        const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
+        // estimate out
         let amountsOut;
         try{ amountsOut = await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, [tokenIn, tokenOut]); }
         catch(e){ amountsOut = await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); }
         const estOut = amountsOut[amountsOut.length-1];
         const amountOutMin = estOut.mul(10000 - Math.floor(slippagePercent*100)).div(10000);
         let path = [tokenIn, tokenOut];
-        try{ await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, path); }catch(e){ path = [tokenIn, WBNB, tokenOut]; }
-        const to = account; const deadline = Math.floor(Date.now()/1000) + 60*10;
+        try{ await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, path); }
+        catch(e){ path = [tokenIn, WBNB, tokenOut]; }
+        const router = new ethers.Contract(PANCAKE_ROUTER, ['function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer);
         await approveIfNeeded(tokenIn, PANCAKE_ROUTER, amountInHuman);
-        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, amountOutMin, path, to, deadline, { gasLimit: 800000 }); safeLog('Swap tx sent: ' + tx.hash); const receipt = await tx.wait(); safeLog('Swap confirmed: ' + receipt.transactionHash); return receipt; }
+        const deadline = Math.floor(Date.now()/1000) + 60*10;
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, amountOutMin, path, account, deadline, { gasLimit: 800000 });
+        safeLog('Swap sent: ' + tx.hash);
+        const receipt = await tx.wait(); safeLog('Swap confirmed: ' + receipt.transactionHash); return receipt;
+      }
 
-      // Bot logic
-      async function checkAndAct(){ try{
-        const tokenA = el('tokenA').value.trim(); const tokenB = el('tokenB').value.trim(); if(!ethers.utils.isAddress(tokenA) || !ethers.utils.isAddress(tokenB)){ safeLog('Masukkan alamat token valid untuk A dan B'); return; }
-        const direction = el('direction').value; const amount = Number(el('amount').value); if(!amount || amount<=0){ safeLog('Amount invalid'); return; }
-        const price = await getPrice(tokenA, tokenB, 1); safeLog('Market price (1 A → B): ' + price);
-        const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.5;
-        if(direction === 'AtoB'){
-          if(tp1 && price >= tp1){ safeLog('TP1 reached — executing sell A->B'); await swapExactTokens(tokenA, tokenB, amount, slippage); el('tp1').value=''; }
-          else if(tp2 && price >= tp2){ safeLog('TP2 reached — executing sell A->B'); await swapExactTokens(tokenA, tokenB, amount, slippage); el('tp2').value=''; }
-          else if(tp3 && price >= tp3){ safeLog('TP3 reached — executing sell A->B'); await swapExactTokens(tokenA, tokenB, amount, slippage); el('tp3').value=''; }
-          else if(sl && price <= sl){ safeLog('SL reached — executing sell A->B'); await swapExactTokens(tokenA, tokenB, amount, slippage); }
-        } else {
-          if(tp1 && price <= tp1){ safeLog('TP1 reached — executing buy B->A'); await swapExactTokens(tokenB, tokenA, amount, slippage); el('tp1').value=''; }
-          else if(tp2 && price <= tp2){ safeLog('TP2 reached — executing buy B->A'); await swapExactTokens(tokenB, tokenA, amount, slippage); el('tp2').value=''; }
-          else if(tp3 && price <= tp3){ safeLog('TP3 reached — executing buy B->A'); await swapExactTokens(tokenB, tokenA, amount, slippage); el('tp3').value=''; }
-          else if(sl && price >= sl){ safeLog('SL reached — executing buy B->A (stop-loss)'); await swapExactTokens(tokenB, tokenA, amount, slippage); }
-        }
-      }catch(e){ safeLog('bot error: ' + e); } }
+      // connect
+      async function connect(){
+        if(!web3Modal){ alert('Web3Modal tidak tersedia'); return; }
+        try{
+          provider = await web3Modal.connect().catch(() => null);
+          // fallback to injected
+          if(!provider && window.ethereum){ provider = window.ethereum; safeLog('Using window.ethereum fallback'); }
+          if(!provider){ alert('Provider tidak ditemukan. Pastikan wallet mendukung WalletConnect atau MetaMask.'); return; }
+
+          // Normalize provider to avoid emit/on undefined errors
+          safeProvider = normalizeProvider(provider);
+
+          web3Provider = new ethers.providers.Web3Provider(safeProvider, 'any');
+          signer = web3Provider.getSigner();
+          try{ account = await signer.getAddress(); }catch(e){ account = null; }
+          if(account) el('address').value = account;
+
+          const net = await web3Provider.getNetwork(); el('network').value = net.name + ' (' + net.chainId + ')';
+          const bal = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal ? ethers.utils.formatEther(bal) + ' BNB' : '—';
+
+          if(Number(net.chainId) !== BSC_CHAIN_ID){ alert('Switch ke Binance Smart Chain (Mainnet) di wallet Anda. Bot tidak akan berjalan pada network lain.'); safeLog('Non-BSC network detected: ' + net.chainId); }
+
+          // try fetch decimals for UI; if fail, keep Start disabled
+          try{ const decF = await readDecimals(el('tokenFrom').value); el('decFrom').value = decF; const decT = await readDecimals(el('tokenTo').value); el('decTo').value = decT; el('btnStart').disabled = false; }catch(e){ safeLog('decimals failed: ' + e); el('btnStart').disabled = true; alert('Gagal membaca decimals token — kemungkinan token address salah atau token tidak ada di jaringan ini. Periksa token.'); }
+
+          // Poll account/network periodically instead of relying on provider.emit
+          if(pollInterval) clearInterval(pollInterval);
+          pollInterval = setInterval(async ()=>{
+            try{
+              if(!web3Provider) return;
+              const newNet = await web3Provider.getNetwork(); el('network').value = newNet.name + ' (' + newNet.chainId + ')';
+              if(signer){ try{ const newAccount = await signer.getAddress(); if(newAccount && newAccount !== account){ account = newAccount; el('address').value = account; safeLog('account changed'); } }catch(e){}
+                try{ const bal2 = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal2 ? ethers.utils.formatEther(bal2) + ' BNB' : '—'; }catch(e){}
+              }
+            }catch(e){ /* ignore poll errors */ }
+          }, 3500);
+
+          el('btnStop').disabled = false;
+          safeLog('Connected');
+        }catch(e){ safeLog('connect error: ' + e); }
+      }
+
+      el('btnConnect').addEventListener('click', async ()=>{ if(!provider) await connect(); else { try{ if(provider && typeof provider.disconnect === 'function') await provider.disconnect(); }catch(e){} provider = null; safeProvider = null; web3Provider = null; signer = null; account = null; el('address').value=''; el('network').value=''; el('balance').value=''; el('btnStart').disabled=true; el('btnStop').disabled=true; if(pollInterval){ clearInterval(pollInterval); pollInterval=null; } safeLog('Disconnected'); } });
+
+      // bot logic
+      async function checkAndAct(){
+        try{
+          if(!web3Provider || !signer){ safeLog('Provider/signature not ready'); return; }
+          const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ safeLog('Not on BSC — skipping check'); return; }
+          const tokenFrom = el('tokenFrom').value; const tokenTo = el('tokenTo').value; if(!ethers.utils.isAddress(tokenFrom) || !ethers.utils.isAddress(tokenTo)){ safeLog('Invalid token addresses'); return; }
+          const amount = Number(el('amount').value); if(!amount || amount<=0){ safeLog('Invalid amount'); return; }
+
+          let price;
+          try{ price = await getPrice(tokenFrom, tokenTo, 1); }catch(e){ safeLog('getPrice error: ' + e); return; }
+          safeLog('Market price (1 from → to): ' + price);
+
+          const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.8;
+          const mode = el('mode').value; // buy or sell
+
+          if(mode === 'sell'){
+            if(tp1 && price >= tp1){ safeLog('TP1 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; }
+            else if(tp2 && price >= tp2){ safeLog('TP2 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; }
+            else if(tp3 && price >= tp3){ safeLog('TP3 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; }
+            else if(sl && price <= sl){ safeLog('SL hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); }
+          } else {
+            if(tp1 && price <= tp1){ safeLog('TP1 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; }
+            else if(tp2 && price <= tp2){ safeLog('TP2 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; }
+            else if(tp3 && price <= tp3){ safeLog('TP3 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; }
+            else if(sl && price >= sl){ safeLog('SL hit — buying (stop-loss)'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); }
+          }
+        }catch(e){ safeLog('bot error: ' + e); }
+      }
 
       el('btnStart').addEventListener('click', async function(){
-        if(!account){ alert('Connect wallet terlebih dahulu'); return; }
-        if(botInterval){ alert('Bot sudah berjalan'); return; }
-        const tokenA = el('tokenA').value.trim(); const tokenB = el('tokenB').value.trim(); if(!ethers.utils.isAddress(tokenA) || !ethers.utils.isAddress(tokenB)){ alert('Masukkan alamat token A dan B yang valid (BEP20)'); return; }
-        try{ const a = await getDecimals(tokenA); const b = await getDecimals(tokenB); el('decA').value = a; el('decB').value = b; }catch(e){ safeLog('decimals failed: ' + e); }
-        el('status').textContent = 'Bot running — monitoring...'; safeLog('Bot started'); botInterval = setInterval(checkAndAct, 8000); checkAndAct(); el('btnStop').disabled = false; el('btnStart').disabled = true;
+        if(!web3Provider || !signer){ alert('Connect wallet terlebih dahulu'); return; }
+        const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke BSC Mainnet di wallet Anda'); return; }
+        // validate decimals before starting
+        try{ await readDecimals(el('tokenFrom').value); await readDecimals(el('tokenTo').value); }catch(e){ alert('Token tidak valid di jaringan ini: ' + e); return; }
+        el('status').textContent = 'Bot running'; safeLog('Bot started'); botInterval = setInterval(checkAndAct, 8000); checkAndAct(); el('btnStart').disabled = true; el('btnStop').disabled = false;
       });
 
       el('btnStop').addEventListener('click', function(){ if(botInterval){ clearInterval(botInterval); botInterval = null; el('status').textContent = 'Bot stopped'; safeLog('Bot stopped'); el('btnStop').disabled = true; el('btnStart').disabled = false; } else { alert('Bot tidak berjalan'); } });
 
-    }); // end load
+    });
   </script>
 </body>
 </html>
