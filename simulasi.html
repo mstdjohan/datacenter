@@ -330,13 +330,15 @@
           const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.1;
 
           const prices = await getPriceUSDTperXRP(slippage);
-          const { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo } = prices;
+          const { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo, midUSDTperXRP, bestPath } = prices;
           const mode = el('mode').value;
 
           if(mode === 'buy'){
-            safeLog(`Router: 1 USDT → ${oneFrom_toTo} XRP | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+            const dev = midUSDTperXRP ? ((routerUSDTperXRP - midUSDTperXRP)/midUSDTperXRP*100) : 0;
+            safeLog(`Best: ${bestPath.join(' → ')} | 1 USDT → ${oneFrom_toTo} XRP | Dir ${routerUSDTperXRP} USDT/XRP | Mid ~ ${midUSDTperXRP} | Exec ${execUSDTperXRP} (slip ${slippage}%) | Dev vs mid ${dev.toFixed(3)}%`);
           } else {
-            safeLog(`Router: 1 XRP → ${oneFrom_toTo} USDT | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+            const dev = midUSDTperXRP ? ((routerUSDTperXRP - midUSDTperXRP)/midUSDTperXRP*100) : 0;
+            safeLog(`Best: ${bestPath.join(' → ')} | 1 XRP → ${oneFrom_toTo} USDT | Dir ${routerUSDTperXRP} USDT/XRP | Mid ~ ${midUSDTperXRP} | Exec ${execUSDTperXRP} (slip ${slippage}%) | Dev vs mid ${dev.toFixed(3)}%`);
           }
 
           if(mode === 'sell'){
