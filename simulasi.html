@@ -3,29 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Stable Fix</title>
+  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Auto-Fill Saldo + Slippage</title>
   <style>
     :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
     body{background:#071024;color:#e6eef8;margin:0;padding:20px}
     .wrap{max-width:980px;margin:0 auto}
-    .card{background:linear-gradient(180deg,#081428,#06101a);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);}    
+    .card{background:linear-gradient(180deg,#081428,#06101a);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);}    
     h1{margin:0 0 10px;font-size:20px}
     label{display:block;margin-top:10px;color:#9fb0d0;font-size:13px}
-    input,select,button{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit}
+    input,select,button{width:100%;padding:10px;margin-top:6px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
     .row{display:flex;gap:12px}
     .col{flex:1}
     .small{font-size:13px;color:#99b3d6}
     pre{white-space:pre-wrap;word-break:break-word;background:transparent;padding:8px}
     .muted{color:#7f9ec8}
     .danger{color:#ffb4a2}
+    .pill{display:flex;gap:8px;margin-top:8px}
+    .pill button{flex:1;padding:8px;border-radius:999px}
     @media(max-width:880px){.row{flex-direction:column}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>XRP ↔ USDT Auto Trader — Stable Fix</h1>
-      <div class="small muted">Perbaikan: mencegah error <code>Cannot read properties of undefined (reading 'emit')</code> dengan memastikan provider diproxy/ dinormalisasi dan tidak dipanggil sebelum siap. Mode: Mainnet (real trades). Gunakan hati-hati.</div>
+      <h1>XRP ↔ USDT Auto Trader — Auto-Fill Saldo</h1>
+      <div class="small muted">Mainnet (real trades). Harga dari <code>router.getAmountsOut()</code>; perbandingan TP/SL memakai **execution price** (koreksi slippage, default 0,1%). Amount otomatis terisi **saldo token** sesuai mode.</div>
 
       <label>Mode</label>
       <select id="mode">
@@ -36,16 +38,16 @@
       <label>Connect Wallet</label>
       <div class="row">
         <input id="address" placeholder="Belum terhubung" readonly />
-        <div style="width:140px"><button id="btnConnect">Connect</button></div>
+        <div style="width:160px"><button id="btnConnect">Connect</button></div>
       </div>
 
-      <label>Network</label>
+      <label>Network & BNB</label>
       <div class="row">
         <input id="network" placeholder="—" readonly />
         <input id="balance" placeholder="—" readonly />
       </div>
 
-      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.08)" />
 
       <label>Auto-selected Tokens (BEP20 on BSC)</label>
       <div class="row">
@@ -57,10 +59,22 @@
         <div style="width:220px"><input id="decTo" placeholder="decimals" readonly /></div>
       </div>
 
-      <label>Amount (amount of source token to trade)</label>
-      <input id="amount" placeholder="contoh: 50 (USDT) atau 100 (XRP)" />
+      <label>Saldo Token (otomatis)</label>
+      <div class="row">
+        <input id="tokenBalance" placeholder="—" readonly />
+        <div style="width:220px"><input id="tokenSymbol" placeholder="symbol" readonly /></div>
+      </div>
 
-      <label>Targets (harga dalam unit tokenTo per 1 tokenFrom — USDT per XRP)</label>
+      <label>Amount (amount of source token to trade)</label>
+      <input id="amount" placeholder="otomatis: 100% dari saldo" />
+      <div class="pill">
+        <button type="button" data-pct="25" class="pct">25%</button>
+        <button type="button" data-pct="50" class="pct">50%</button>
+        <button type="button" data-pct="75" class="pct">75%</button>
+        <button type="button" data-pct="100" class="pct">100%</button>
+      </div>
+
+      <label>Targets (harga USDT per 1 XRP)</label>
       <div class="row">
         <div class="col"><input id="tp1" placeholder="TP1" /></div>
         <div class="col"><input id="tp2" placeholder="TP2 (optional)" /></div>
@@ -70,7 +84,7 @@
       <input id="sl" placeholder="SL" />
 
       <label>Slippage tolerance (%)</label>
-      <input id="slippage" placeholder="0.8" value="0.8" />
+      <input id="slippage" placeholder="0.1" value="0.1" />
 
       <div class="row" style="margin-top:12px;">
         <button id="btnStart" disabled>Start Bot</button>
@@ -97,27 +111,37 @@
 
   <script>
     window.addEventListener('load', function(){
-      // constants
+      // ===== Constants
       const BSC_CHAIN_ID = 56;
       const PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
       const WBNB = '0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
       const USDT = '0x55d398326f99059fF775485246999027B3197955';
       const XRP_BEP20 = '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE';
+      const ERC20_ABI_MIN = [
+        'function decimals() view returns (uint8)',
+        'function symbol() view returns (string)',
+        'function balanceOf(address) view returns (uint256)',
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 amount) returns (bool)'
+      ];
 
-      // elements
+      // ===== Elements & utils
       const el = id => document.getElementById(id);
       function safeLog(msg){ try{ el('log').textContent = new Date().toLocaleTimeString() + ' — ' + String(msg) + '\n' + el('log').textContent; }catch(e){ console.log(msg); } console.log(msg); }
+      const fmt = (n, d=6) => Number(n).toLocaleString(undefined,{maximumFractionDigits:d});
 
-      // state
-      let provider = null; // raw provider
-      let safeProvider = null; // normalized provider (guarantees event methods present)
-      let web3Provider = null; // ethers provider
+      // ===== State
+      let provider = null;      // raw provider
+      let safeProvider = null;  // normalized provider
+      let web3Provider = null;  // ethers provider
       let signer = null;
       let account = null;
       let botInterval = null;
       let pollInterval = null;
+      let balancePoll = null;
+      let lastSourceBalance = null; // in human units
 
-      // web3modal
+      // ===== Web3Modal
       const providerOptions = {
         walletconnect: {
           package: window.WalletConnectProvider && window.WalletConnectProvider.default ? window.WalletConnectProvider.default : window.WalletConnectProvider,
@@ -127,70 +151,97 @@
       const Web3ModalCtor = window.Web3Modal && (window.Web3Modal.default || window.Web3Modal);
       const web3Modal = Web3ModalCtor ? new Web3ModalCtor({ cacheProvider:false, providerOptions }) : null;
 
-      // Normalize provider: add no-op event methods and safe nested connector object to avoid 'emit' errors
+      // ===== Provider normalizer (avoid emit undefined)
       function normalizeProvider(p){
         if(!p) return p;
         try{
-          // add top-level methods if missing
-          if(typeof p.on !== 'function') p.on = function(){ /* noop */ };
-          if(typeof p.removeListener !== 'function') p.removeListener = function(){ /* noop */ };
-          if(typeof p.off !== 'function') p.off = function(){ /* noop */ };
-          if(typeof p.once !== 'function') p.once = function(){ /* noop */ };
-          if(typeof p.emit !== 'function') p.emit = function(){ /* noop */ };
-
-          // Ensure connector object exists (some libs call provider.connector.emit)
-          if(typeof p.connector === 'undefined' || p.connector === null){ p.connector = {}; }
-          if(typeof p.connector.emit !== 'function') p.connector.emit = function(){ /* noop */ };
-          if(typeof p.connector.on !== 'function') p.connector.on = function(){ /* noop */ };
-          if(typeof p.connector.off !== 'function') p.connector.off = function(){ /* noop */ };
-
-          // ensure wc / wcProvider fallback
-          if(typeof p.wc === 'undefined' || p.wc === null){ p.wc = {}; }
-          if(typeof p.wc.emit !== 'function') p.wc.emit = function(){ /* noop */ };
-
+          if(typeof p.on !== 'function') p.on = function(){};
+          if(typeof p.removeListener !== 'function') p.removeListener = function(){};
+          if(typeof p.off !== 'function') p.off = function(){};
+          if(typeof p.once !== 'function') p.once = function(){};
+          if(typeof p.emit !== 'function') p.emit = function(){};
+          if(!p.connector) p.connector = {};
+          if(typeof p.connector.emit !== 'function') p.connector.emit = function(){};
+          if(typeof p.connector.on !== 'function') p.connector.on = function(){};
+          if(typeof p.connector.off !== 'function') p.connector.off = function(){};
+          if(!p.wc) p.wc = {};
+          if(typeof p.wc.emit !== 'function') p.wc.emit = function(){};
           return p;
-        }catch(e){ safeLog('normalizeProvider failed: ' + e); return p; }
+        }catch(e){ safeLog('normalizeProvider failed: '+e); return p; }
       }
 
-      // set tokens according to mode
+      // ===== Mode & tokens
       function applyMode(){
-        const mode = el('mode').value; // buy or sell
-        if(mode === 'buy'){
-          el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20;
-        }else{
-          el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT;
-        }
+        const mode = el('mode').value;
+        if(mode === 'buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
+        else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
         el('decFrom').value = '';
         el('decTo').value = '';
+        // refresh metadata + balances
+        if(web3Provider && signer) { refreshTokenMetaAndBalance().catch(e=>safeLog('applyMode refresh error: '+e)); }
       }
       el('mode').addEventListener('change', applyMode);
-      applyMode();
 
-      // helper: read decimals safely (returns number or throws)
-      async function readDecimals(tokenAddress){
-        if(!web3Provider) throw new Error('provider not ready');
-        if(!ethers.utils.isAddress(tokenAddress)) throw new Error('invalid token address');
-        const erc = new ethers.Contract(tokenAddress, ['function decimals() view returns (uint8)'], web3Provider);
+      // ===== Read token metadata
+      async function readDecimals(token){
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
         const d = await erc.decimals();
         return Number(d);
       }
+      async function readSymbol(token){
+        try{ const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider); return await erc.symbol(); }catch(e){ return token===USDT?'USDT':(token===XRP_BEP20?'XRP':'TOKEN'); }
+      }
 
-      // helper: price via getAmountsOut
-      async function getPrice(tokenIn, tokenOut, amountInHuman){
-        if(!web3Provider) throw new Error('provider not ready');
+      // ===== Balance helpers
+      async function getTokenBalance(token, who){
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
+        const [dec, raw] = await Promise.all([
+          readDecimals(token),
+          erc.balanceOf(who)
+        ]);
+        const human = Number(ethers.utils.formatUnits(raw, dec));
+        return {dec, raw, human};
+      }
+      async function autoFillAmountFromBalance(percent=100){
+        try{
+          const mode = el('mode').value;
+          const source = (mode==='buy') ? USDT : XRP_BEP20;
+          const sym = await readSymbol(source);
+          const bal = await getTokenBalance(source, account);
+          lastSourceBalance = bal.human;
+          const take = (Number(percent)||100)/100 * bal.human;
+          el('tokenBalance').value = `${fmt(bal.human)} ${sym}`;
+          el('tokenSymbol').value = sym;
+          el('amount').value = take>0 ? String(take) : '';
+          el('decFrom').value = bal.dec; // also fill decimals for source
+          el('decTo').value = await readDecimals((mode==='buy')?XRP_BEP20:USDT);
+        }catch(e){ safeLog('autoFill error: '+e); }
+      }
+
+      // ===== Router price helpers
+      async function getPriceRaw(tokenIn, tokenOut, amountInHuman){
         const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider);
         const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
         const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
-        // try direct path
         try{ const amounts = await router.getAmountsOut(amountIn, [tokenIn, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
         catch(e){ const amounts = await router.getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
       }
+      async function getPriceUSDTperXRP(slippagePct){
+        const mode = el('mode').value;
+        const tokenFrom = el('tokenFrom').value;
+        const tokenTo = el('tokenTo').value;
+        const oneFrom_toTo = await getPriceRaw(tokenFrom, tokenTo, 1);
+        let routerUSDTperXRP;
+        if(mode === 'buy') routerUSDTperXRP = 1 / oneFrom_toTo; else routerUSDTperXRP = oneFrom_toTo;
+        const slip = Math.max(0, Number(slippagePct) || 0);
+        const execUSDTperXRP = routerUSDTperXRP * (1 - slip/100); // fee Pancake sudah di formula router
+        return {routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo};
+      }
 
-      // approval
+      // ===== Approve & Swap
       async function approveIfNeeded(token, spender, amountHuman){
-        if(!signer) throw new Error('signer not ready');
-        const dec = await readDecimals(token);
-        const erc = new ethers.Contract(token, ['function allowance(address owner, address spender) view returns (uint256)','function approve(address spender, uint256 amount) returns (bool)'], signer);
+        const {dec} = await getTokenBalance(token, account);
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, signer);
         const allowance = await erc.allowance(account, spender);
         const amount = ethers.utils.parseUnits(String(amountHuman), dec);
         if(allowance.gte(amount)) { safeLog('Allowance ok'); return true; }
@@ -198,74 +249,77 @@
         safeLog('Approve sent: ' + tx.hash);
         await tx.wait(); safeLog('Approve confirmed'); return true;
       }
-
-      // swap
       async function swapExactTokens(tokenIn, tokenOut, amountInHuman, slippagePercent){
-        if(!signer) throw new Error('signer not ready');
         const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
+        const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)','function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer);
         const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
-        // estimate out
-        let amountsOut;
-        try{ amountsOut = await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, [tokenIn, tokenOut]); }
-        catch(e){ amountsOut = await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); }
-        const estOut = amountsOut[amountsOut.length-1];
-        const amountOutMin = estOut.mul(10000 - Math.floor(slippagePercent*100)).div(10000);
         let path = [tokenIn, tokenOut];
-        try{ await (new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider)).getAmountsOut(amountIn, path); }
+        try{ await router.getAmountsOut(amountIn, path); }
         catch(e){ path = [tokenIn, WBNB, tokenOut]; }
-        const router = new ethers.Contract(PANCAKE_ROUTER, ['function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer);
+        const amountsOut = await router.getAmountsOut(amountIn, path);
+        const estOut = amountsOut[amountsOut.length-1];
+        const slipBps = Math.floor((Number(slippagePercent)||0.1) * 100);
+        const amountOutMin = estOut.mul(10000 - slipBps).div(10000);
         await approveIfNeeded(tokenIn, PANCAKE_ROUTER, amountInHuman);
         const deadline = Math.floor(Date.now()/1000) + 60*10;
         const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, amountOutMin, path, account, deadline, { gasLimit: 800000 });
         safeLog('Swap sent: ' + tx.hash);
-        const receipt = await tx.wait(); safeLog('Swap confirmed: ' + receipt.transactionHash); return receipt;
+        const receipt = await tx.wait();
+        safeLog('Swap confirmed: ' + receipt.transactionHash);
+        return receipt;
       }
 
-      // connect
+      // ===== Connect
       async function connect(){
         if(!web3Modal){ alert('Web3Modal tidak tersedia'); return; }
         try{
-          provider = await web3Modal.connect().catch(() => null);
-          // fallback to injected
+          provider = await web3Modal.connect().catch(()=>null);
           if(!provider && window.ethereum){ provider = window.ethereum; safeLog('Using window.ethereum fallback'); }
-          if(!provider){ alert('Provider tidak ditemukan. Pastikan wallet mendukung WalletConnect atau MetaMask.'); return; }
-
-          // Normalize provider to avoid emit/on undefined errors
+          if(!provider){ alert('Provider tidak ditemukan. Pastikan Trust Wallet/MetaMask aktif.'); return; }
           safeProvider = normalizeProvider(provider);
-
           web3Provider = new ethers.providers.Web3Provider(safeProvider, 'any');
           signer = web3Provider.getSigner();
           try{ account = await signer.getAddress(); }catch(e){ account = null; }
           if(account) el('address').value = account;
-
           const net = await web3Provider.getNetwork(); el('network').value = net.name + ' (' + net.chainId + ')';
-          const bal = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal ? ethers.utils.formatEther(bal) + ' BNB' : '—';
+          const bnb = account ? await web3Provider.getBalance(account) : null; el('balance').value = bnb ? (fmt(ethers.utils.formatEther(bnb),6) + ' BNB') : '—';
+          if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke Binance Smart Chain (Mainnet).'); safeLog('Non-BSC network detected: '+net.chainId); }
 
-          if(Number(net.chainId) !== BSC_CHAIN_ID){ alert('Switch ke Binance Smart Chain (Mainnet) di wallet Anda. Bot tidak akan berjalan pada network lain.'); safeLog('Non-BSC network detected: ' + net.chainId); }
+          // Token metadata + balance fill
+          await refreshTokenMetaAndBalance();
 
-          // try fetch decimals for UI; if fail, keep Start disabled
-          try{ const decF = await readDecimals(el('tokenFrom').value); el('decFrom').value = decF; const decT = await readDecimals(el('tokenTo').value); el('decTo').value = decT; el('btnStart').disabled = false; }catch(e){ safeLog('decimals failed: ' + e); el('btnStart').disabled = true; alert('Gagal membaca decimals token — kemungkinan token address salah atau token tidak ada di jaringan ini. Periksa token.'); }
+          // Enable buttons
+          el('btnStart').disabled = false; el('btnStop').disabled = false;
 
-          // Poll account/network periodically instead of relying on provider.emit
+          // Pollers
           if(pollInterval) clearInterval(pollInterval);
           pollInterval = setInterval(async ()=>{
             try{
-              if(!web3Provider) return;
               const newNet = await web3Provider.getNetwork(); el('network').value = newNet.name + ' (' + newNet.chainId + ')';
-              if(signer){ try{ const newAccount = await signer.getAddress(); if(newAccount && newAccount !== account){ account = newAccount; el('address').value = account; safeLog('account changed'); } }catch(e){}
-                try{ const bal2 = account ? await web3Provider.getBalance(account) : null; el('balance').value = bal2 ? ethers.utils.formatEther(bal2) + ' BNB' : '—'; }catch(e){}
-              }
-            }catch(e){ /* ignore poll errors */ }
+              const newAcc = await signer.getAddress(); if(newAcc && newAcc !== account){ account = newAcc; el('address').value = account; safeLog('account changed'); await refreshTokenMetaAndBalance(); }
+              const bnb2 = await web3Provider.getBalance(account); el('balance').value = fmt(ethers.utils.formatEther(bnb2),6) + ' BNB';
+            }catch(e){}
           }, 3500);
 
-          el('btnStop').disabled = false;
+          if(balancePoll) clearInterval(balancePoll);
+          balancePoll = setInterval(async ()=>{ try{ await autoFillAmountFromBalance(100); }catch(e){} }, 10000);
+
           safeLog('Connected');
-        }catch(e){ safeLog('connect error: ' + e); }
+        }catch(e){ safeLog('connect error: '+e); }
       }
 
-      el('btnConnect').addEventListener('click', async ()=>{ if(!provider) await connect(); else { try{ if(provider && typeof provider.disconnect === 'function') await provider.disconnect(); }catch(e){} provider = null; safeProvider = null; web3Provider = null; signer = null; account = null; el('address').value=''; el('network').value=''; el('balance').value=''; el('btnStart').disabled=true; el('btnStop').disabled=true; if(pollInterval){ clearInterval(pollInterval); pollInterval=null; } safeLog('Disconnected'); } });
+      async function refreshTokenMetaAndBalance(){
+        try{
+          const mode = el('mode').value;
+          if(mode==='buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
+          else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
+          const decF = await readDecimals(el('tokenFrom').value); el('decFrom').value = decF;
+          const decT = await readDecimals(el('tokenTo').value); el('decTo').value = decT;
+          await autoFillAmountFromBalance(100); // FULL auto-fill
+        }catch(e){ safeLog('refresh meta/balance error: '+e); }
+      }
 
-      // bot logic
+      // ===== Bot Loop
       async function checkAndAct(){
         try{
           if(!web3Provider || !signer){ safeLog('Provider/signature not ready'); return; }
@@ -273,37 +327,69 @@
           const tokenFrom = el('tokenFrom').value; const tokenTo = el('tokenTo').value; if(!ethers.utils.isAddress(tokenFrom) || !ethers.utils.isAddress(tokenTo)){ safeLog('Invalid token addresses'); return; }
           const amount = Number(el('amount').value); if(!amount || amount<=0){ safeLog('Invalid amount'); return; }
 
-          let price;
-          try{ price = await getPrice(tokenFrom, tokenTo, 1); }catch(e){ safeLog('getPrice error: ' + e); return; }
-          safeLog('Market price (1 from → to): ' + price);
+          const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.1;
 
-          const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.8;
-          const mode = el('mode').value; // buy or sell
+          const prices = await getPriceUSDTperXRP(slippage);
+          const { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo } = prices;
+          const mode = el('mode').value;
+
+          if(mode === 'buy'){
+            safeLog(`Router: 1 USDT → ${oneFrom_toTo} XRP | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+          } else {
+            safeLog(`Router: 1 XRP → ${oneFrom_toTo} USDT | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+          }
 
           if(mode === 'sell'){
-            if(tp1 && price >= tp1){ safeLog('TP1 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; }
-            else if(tp2 && price >= tp2){ safeLog('TP2 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; }
-            else if(tp3 && price >= tp3){ safeLog('TP3 hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; }
-            else if(sl && price <= sl){ safeLog('SL hit — selling'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); }
+            if(tp1 && execUSDTperXRP >= tp1){ safeLog('TP1 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
+            if(tp2 && execUSDTperXRP >= tp2){ safeLog('TP2 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
+            if(tp3 && execUSDTperXRP >= tp3){ safeLog('TP3 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
+            if(sl && execUSDTperXRP <= sl){ safeLog('SL hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
           } else {
-            if(tp1 && price <= tp1){ safeLog('TP1 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; }
-            else if(tp2 && price <= tp2){ safeLog('TP2 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; }
-            else if(tp3 && price <= tp3){ safeLog('TP3 hit — buying'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; }
-            else if(sl && price >= sl){ safeLog('SL hit — buying (stop-loss)'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); }
+            if(tp1 && execUSDTperXRP <= tp1){ safeLog('TP1 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
+            if(tp2 && execUSDTperXRP <= tp2){ safeLog('TP2 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
+            if(tp3 && execUSDTperXRP <= tp3){ safeLog('TP3 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
+            if(sl && execUSDTperXRP >= sl){ safeLog('SL hit — BUY (stop)'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
           }
         }catch(e){ safeLog('bot error: ' + e); }
       }
 
-      el('btnStart').addEventListener('click', async function(){
-        if(!web3Provider || !signer){ alert('Connect wallet terlebih dahulu'); return; }
-        const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke BSC Mainnet di wallet Anda'); return; }
-        // validate decimals before starting
-        try{ await readDecimals(el('tokenFrom').value); await readDecimals(el('tokenTo').value); }catch(e){ alert('Token tidak valid di jaringan ini: ' + e); return; }
-        el('status').textContent = 'Bot running'; safeLog('Bot started'); botInterval = setInterval(checkAndAct, 8000); checkAndAct(); el('btnStart').disabled = true; el('btnStop').disabled = false;
+      // ===== UI Actions
+      document.querySelectorAll('.pct').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const pct = Number(btn.getAttribute('data-pct'))||100;
+          autoFillAmountFromBalance(pct).catch(e=>safeLog('pct click error: '+e));
+        });
       });
 
-      el('btnStop').addEventListener('click', function(){ if(botInterval){ clearInterval(botInterval); botInterval = null; el('status').textContent = 'Bot stopped'; safeLog('Bot stopped'); el('btnStop').disabled = true; el('btnStart').disabled = false; } else { alert('Bot tidak berjalan'); } });
+      el('btnConnect').addEventListener('click', async ()=>{
+        if(!provider) await connect();
+        else {
+          try{ if(provider && typeof provider.disconnect==='function') await provider.disconnect(); }catch(e){}
+          provider=null; safeProvider=null; web3Provider=null; signer=null; account=null;
+          el('address').value=''; el('network').value=''; el('balance').value='';
+          el('btnStart').disabled=true; el('btnStop').disabled=true; if(pollInterval){clearInterval(pollInterval);pollInterval=null;} if(balancePoll){clearInterval(balancePoll);balancePoll=null;}
+          safeLog('Disconnected');
+        }
+      });
 
+      el('btnStart').addEventListener('click', async ()=>{
+        if(!web3Provider || !signer){ alert('Connect wallet terlebih dahulu'); return; }
+        const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke BSC Mainnet di wallet Anda'); return; }
+        try{ await readDecimals(el('tokenFrom').value); await readDecimals(el('tokenTo').value);}catch(e){ alert('Token tidak valid di jaringan ini: '+e); return; }
+        el('status').textContent = 'Bot running'; safeLog('Bot started');
+        if(botInterval) clearInterval(botInterval);
+        botInterval = setInterval(checkAndAct, 8000);
+        checkAndAct();
+        el('btnStart').disabled = true; el('btnStop').disabled = false;
+      });
+
+      el('btnStop').addEventListener('click', ()=>{
+        if(botInterval){ clearInterval(botInterval); botInterval=null; el('status').textContent='Bot stopped'; safeLog('Bot stopped'); el('btnStop').disabled=true; el('btnStart').disabled=false; }
+        else { alert('Bot tidak berjalan'); }
+      });
+
+      // Init default UI
+      applyMode();
     });
   </script>
 </body>
