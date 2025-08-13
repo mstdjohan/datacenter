@@ -1,269 +1,396 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta http-equiv="refresh" content="540">
-  <title>Strategi Trading XRP - " XRP1 "</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script>
-    emailjs.init("aPZx0R9oxUbIQkLEv");
-  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Auto-Fill Saldo + Slippage</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{background:#071024;color:#e6eef8;margin:0;padding:20px}
+    .wrap{max-width:980px;margin:0 auto}
+    .card{background:linear-gradient(180deg,#081428,#06101a);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);}    
+    h1{margin:0 0 10px;font-size:20px}
+    label{display:block;margin-top:10px;color:#9fb0d0;font-size:13px}
+    input,select,button{width:100%;padding:10px;margin-top:6px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    .small{font-size:13px;color:#99b3d6}
+    pre{white-space:pre-wrap;word-break:break-word;background:transparent;padding:8px}
+    .muted{color:#7f9ec8}
+    .danger{color:#ffb4a2}
+    .pill{display:flex;gap:8px;margin-top:8px}
+    .pill button{flex:1;padding:8px;border-radius:999px}
+    @media(max-width:880px){.row{flex-direction:column}}
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <div class="card">
+      <h1>XRP ↔ USDT Auto Trader — Auto-Fill Saldo</h1>
+      <div class="small muted">Mainnet (real trades). Harga dari <code>router.getAmountsOut()</code>; perbandingan TP/SL memakai **execution price** (koreksi slippage, default 0,1%). Amount otomatis terisi **saldo token** sesuai mode.</div>
 
-<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
+      <label>Mode</label>
+      <select id="mode">
+        <option value="buy">Buy (USDT → XRP)</option>
+        <option value="sell">Sell (XRP → USDT)</option>
+      </select>
 
-<!-- MetaMask Info -->
-<div>👛 Wallet: <span id="walletAddress">Belum terhubung</span></div>
-<div>💵 Saldo: <span id="walletBalance">-</span> BNB</div>
-<button onclick="connectMetaMask()">🔗 Connect MetaMask</button>
+      <label>Connect Wallet</label>
+      <div class="row">
+        <input id="address" placeholder="Belum terhubung" readonly />
+        <div style="width:160px"><button id="btnConnect">Connect</button></div>
+      </div>
 
-<button id="resetBtn">🔁 Reset Simulasi</button>
+      <label>Network & BNB</label>
+      <div class="row">
+        <input id="network" placeholder="—" readonly />
+        <input id="balance" placeholder="—" readonly />
+      </div>
 
-<div id="log"></div>
+      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.08)" />
 
-<script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 1000;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-const chartCtx = document.getElementById('chart').getContext('2d');
+      <label>Auto-selected Tokens (BEP20 on BSC)</label>
+      <div class="row">
+        <div class="col"><input id="tokenFrom" readonly /></div>
+        <div style="width:220px"><input id="decFrom" placeholder="decimals" readonly /></div>
+      </div>
+      <div class="row">
+        <div class="col"><input id="tokenTo" readonly /></div>
+        <div style="width:220px"><input id="decTo" placeholder="decimals" readonly /></div>
+      </div>
 
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
+      <label>Saldo Token (otomatis)</label>
+      <div class="row">
+        <input id="tokenBalance" placeholder="—" readonly />
+        <div style="width:220px"><input id="tokenSymbol" placeholder="symbol" readonly /></div>
+      </div>
 
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
+      <label>Amount (amount of source token to trade)</label>
+      <input id="amount" placeholder="otomatis: 100% dari saldo" />
+      <div class="pill">
+        <button type="button" data-pct="25" class="pct">25%</button>
+        <button type="button" data-pct="50" class="pct">50%</button>
+        <button type="button" data-pct="75" class="pct">75%</button>
+        <button type="button" data-pct="100" class="pct">100%</button>
+      </div>
 
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
+      <label>Targets (harga USDT per 1 XRP)</label>
+      <div class="row">
+        <div class="col"><input id="tp1" placeholder="TP1" /></div>
+        <div class="col"><input id="tp2" placeholder="TP2 (optional)" /></div>
+        <div class="col"><input id="tp3" placeholder="TP3 (optional)" /></div>
+      </div>
+      <label>Stop Loss (SL)</label>
+      <input id="sl" placeholder="SL" />
 
-document.getElementById("resetBtn").addEventListener("click", () => {
-  localStorage.clear();
-  currentCapital = 1000;
-  lastBuy = null;
-  currentPositionAmount = 0;
-  updateCapitalDisplay();
-  log("🔄 Simulasi telah direset.");
-});
+      <label>Slippage tolerance (%)</label>
+      <input id="slippage" placeholder="0.1" value="0.1" />
 
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
+      <div class="row" style="margin-top:12px;">
+        <button id="btnStart" disabled>Start Bot</button>
+        <button id="btnStop" disabled>Stop Bot</button>
+      </div>
 
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
-  }
-  return result;
-}
+      <div style="margin-top:12px">
+        <div class="small muted">Status</div>
+        <div id="status">idle</div>
+        <label style="margin-top:8px">Logs</label>
+        <pre id="log">— ready —</pre>
+      </div>
 
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
-    }
-  }
-  return { upper, lower };
-}
+      <div style="margin-top:14px;color:#ffd1a9;font-size:13px">
+        <strong>PERINGATAN:</strong> Ini akan melakukan transaksi nyata di BSC Mainnet jika Anda menekan Start. Mulailah dengan nominal kecil dan uji terlebih dahulu. Saya tidak bertanggung jawab atas kehilangan dana.
+      </div>
+    </div>
+  </div>
 
-function sendEmail(subject, body) {
-  emailjs.send("service_d48312b", "service_d48312b", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
+  <!-- Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/web3modal@1.9.12/dist/index.js"></script>
 
-async function fetchInitialData() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
-    const data = await res.json();
-    data.prices.forEach(p => {
-      priceData.push(p[1]);
-      const date = new Date(p[0]);
-      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-    });
-    updateIndicators();
-    chart.update();
-    updateCapitalDisplay();
-  } catch (err) {
-    log("❌ Gagal ambil data historis XRP dari CoinGecko");
-  }
-}
+  <script>
+    window.addEventListener('load', function(){
+      // ===== Constants
+      const BSC_CHAIN_ID = 56;
+      const PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+      const WBNB = '0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+      const USDT = '0x55d398326f99059fF775485246999027B3197955';
+      const XRP_BEP20 = '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE';
+      const ERC20_ABI_MIN = [
+        'function decimals() view returns (uint8)',
+        'function symbol() view returns (string)',
+        'function balanceOf(address) view returns (uint256)',
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 amount) returns (bool)'
+      ];
 
-function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
+      // ===== Elements & utils
+      const el = id => document.getElementById(id);
+      function safeLog(msg){ try{ el('log').textContent = new Date().toLocaleTimeString() + ' — ' + String(msg) + '\n' + el('log').textContent; }catch(e){ console.log(msg); } console.log(msg); }
+      const fmt = (n, d=6) => Number(n).toLocaleString(undefined,{maximumFractionDigits:d});
 
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
+      // ===== State
+      let provider = null;      // raw provider
+      let safeProvider = null;  // normalized provider
+      let web3Provider = null;  // ethers provider
+      let signer = null;
+      let account = null;
+      let botInterval = null;
+      let pollInterval = null;
+      let balancePoll = null;
+      let lastSourceBalance = null; // in human units
 
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data.ripple.usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 25) {
-      priceData.shift();
-      timeLabels.shift();
-    }
-    updateIndicators();
-    chart.update();
-
-    const bb = calculateBollingerBands(priceData);
-    const lowerBB = bb.lower[bb.lower.length - 1];
-    const upperBB = bb.upper[bb.upper.length - 1];
-
-    if (!lastBuy && price <= lowerBB) {
-      lastBuy = price;
-      currentPositionAmount = qtyPerTrade / price;
-      currentCapital -= qtyPerTrade;
-      updateCapitalDisplay();
-      localStorage.setItem('capital', currentCapital);
-      localStorage.setItem('lastBuy', lastBuy);
-      localStorage.setItem('positionAmount', currentPositionAmount);
-      log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
-      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
-    } else if (lastBuy && price >= upperBB) {
-      const sellValue = price * currentPositionAmount;
-      currentCapital += sellValue;
-      updateCapitalDisplay();
-      log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
-      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
-      lastBuy = null;
-      currentPositionAmount = 0;
-      localStorage.setItem('capital', currentCapital);
-      localStorage.removeItem('lastBuy');
-      localStorage.removeItem('positionAmount');
-    } else {
-      log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
-    }
-
-  } catch (err) {
-    log("❌ Gagal ambil harga XRP live");
-    console.error(err);
-  }
-}
-
-// MetaMask Integration
-async function connectMetaMask() {
-  if (typeof window.ethereum === 'undefined') {
-    log("❌ MetaMask tidak terdeteksi");
-    return;
-  }
-
-  try {
-    await ethereum.request({ method: 'eth_requestAccounts' });
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const signer = provider.getSigner();
-    const address = await signer.getAddress();
-    document.getElementById("walletAddress").textContent = address;
-
-    // Switch ke BNB Smart Chain
-    try {
-      await ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
-      });
-      log("✅ Berhasil switch ke jaringan BNB Smart Chain");
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        try {
-          await ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x38',
-              chainName: 'BNB Smart Chain',
-              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-              rpcUrls: ['https://bsc-dataseed.binance.org/'],
-              blockExplorerUrls: ['https://bscscan.com']
-            }]
-          });
-        } catch (addError) {
-          log("❌ Gagal menambahkan jaringan BNB Smart Chain");
+      // ===== Web3Modal
+      const providerOptions = {
+        walletconnect: {
+          package: window.WalletConnectProvider && window.WalletConnectProvider.default ? window.WalletConnectProvider.default : window.WalletConnectProvider,
+          options: { rpc: { 56: 'https://bsc-dataseed.binance.org/' } }
         }
+      };
+      const Web3ModalCtor = window.Web3Modal && (window.Web3Modal.default || window.Web3Modal);
+      const web3Modal = Web3ModalCtor ? new Web3ModalCtor({ cacheProvider:false, providerOptions }) : null;
+
+      // ===== Provider normalizer (avoid emit undefined)
+      function normalizeProvider(p){
+        if(!p) return p;
+        try{
+          if(typeof p.on !== 'function') p.on = function(){};
+          if(typeof p.removeListener !== 'function') p.removeListener = function(){};
+          if(typeof p.off !== 'function') p.off = function(){};
+          if(typeof p.once !== 'function') p.once = function(){};
+          if(typeof p.emit !== 'function') p.emit = function(){};
+          if(!p.connector) p.connector = {};
+          if(typeof p.connector.emit !== 'function') p.connector.emit = function(){};
+          if(typeof p.connector.on !== 'function') p.connector.on = function(){};
+          if(typeof p.connector.off !== 'function') p.connector.off = function(){};
+          if(!p.wc) p.wc = {};
+          if(typeof p.wc.emit !== 'function') p.wc.emit = function(){};
+          return p;
+        }catch(e){ safeLog('normalizeProvider failed: '+e); return p; }
       }
-    }
 
-    const balanceWei = await provider.getBalance(address);
-    const balanceBNB = parseFloat(ethers.utils.formatEther(balanceWei));
-    document.getElementById("walletBalance").textContent = balanceBNB.toFixed(4);
-    log(`✅ Terhubung: ${address} | Saldo: ${balanceBNB.toFixed(4)} BNB`);
-  } catch (err) {
-    log("❌ Gagal konek MetaMask: " + err.message);
-  }
-}
+      // ===== Mode & tokens
+      function applyMode(){
+        const mode = el('mode').value;
+        if(mode === 'buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
+        else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
+        el('decFrom').value = '';
+        el('decTo').value = '';
+        // refresh metadata + balances
+        if(web3Provider && signer) { refreshTokenMetaAndBalance().catch(e=>safeLog('applyMode refresh error: '+e)); }
+      }
+      el('mode').addEventListener('change', applyMode);
 
-(async () => {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 30000);
-})();
-</script>
+      // ===== Read token metadata
+      async function readDecimals(token){
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
+        const d = await erc.decimals();
+        return Number(d);
+      }
+      async function readSymbol(token){
+        try{ const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider); return await erc.symbol(); }catch(e){ return token===USDT?'USDT':(token===XRP_BEP20?'XRP':'TOKEN'); }
+      }
+
+      // ===== Balance helpers
+      async function getTokenBalance(token, who){
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
+        const [dec, raw] = await Promise.all([
+          readDecimals(token),
+          erc.balanceOf(who)
+        ]);
+        const human = Number(ethers.utils.formatUnits(raw, dec));
+        return {dec, raw, human};
+      }
+      async function autoFillAmountFromBalance(percent=100){
+        try{
+          const mode = el('mode').value;
+          const source = (mode==='buy') ? USDT : XRP_BEP20;
+          const sym = await readSymbol(source);
+          const bal = await getTokenBalance(source, account);
+          lastSourceBalance = bal.human;
+          const take = (Number(percent)||100)/100 * bal.human;
+          el('tokenBalance').value = `${fmt(bal.human)} ${sym}`;
+          el('tokenSymbol').value = sym;
+          el('amount').value = take>0 ? String(take) : '';
+          el('decFrom').value = bal.dec; // also fill decimals for source
+          el('decTo').value = await readDecimals((mode==='buy')?XRP_BEP20:USDT);
+        }catch(e){ safeLog('autoFill error: '+e); }
+      }
+
+      // ===== Router price helpers
+      async function getPriceRaw(tokenIn, tokenOut, amountInHuman){
+        const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider);
+        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
+        const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
+        try{ const amounts = await router.getAmountsOut(amountIn, [tokenIn, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
+        catch(e){ const amounts = await router.getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
+      }
+      async function getPriceUSDTperXRP(slippagePct){
+        const mode = el('mode').value;
+        const tokenFrom = el('tokenFrom').value;
+        const tokenTo = el('tokenTo').value;
+        const oneFrom_toTo = await getPriceRaw(tokenFrom, tokenTo, 1);
+        let routerUSDTperXRP;
+        if(mode === 'buy') routerUSDTperXRP = 1 / oneFrom_toTo; else routerUSDTperXRP = oneFrom_toTo;
+        const slip = Math.max(0, Number(slippagePct) || 0);
+        const execUSDTperXRP = routerUSDTperXRP * (1 - slip/100); // fee Pancake sudah di formula router
+        return {routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo};
+      }
+
+      // ===== Approve & Swap
+      async function approveIfNeeded(token, spender, amountHuman){
+        const {dec} = await getTokenBalance(token, account);
+        const erc = new ethers.Contract(token, ERC20_ABI_MIN, signer);
+        const allowance = await erc.allowance(account, spender);
+        const amount = ethers.utils.parseUnits(String(amountHuman), dec);
+        if(allowance.gte(amount)) { safeLog('Allowance ok'); return true; }
+        const tx = await erc.approve(spender, ethers.constants.MaxUint256);
+        safeLog('Approve sent: ' + tx.hash);
+        await tx.wait(); safeLog('Approve confirmed'); return true;
+      }
+      async function swapExactTokens(tokenIn, tokenOut, amountInHuman, slippagePercent){
+        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
+        const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)','function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer);
+        const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
+        let path = [tokenIn, tokenOut];
+        try{ await router.getAmountsOut(amountIn, path); }
+        catch(e){ path = [tokenIn, WBNB, tokenOut]; }
+        const amountsOut = await router.getAmountsOut(amountIn, path);
+        const estOut = amountsOut[amountsOut.length-1];
+        const slipBps = Math.floor((Number(slippagePercent)||0.1) * 100);
+        const amountOutMin = estOut.mul(10000 - slipBps).div(10000);
+        await approveIfNeeded(tokenIn, PANCAKE_ROUTER, amountInHuman);
+        const deadline = Math.floor(Date.now()/1000) + 60*10;
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, amountOutMin, path, account, deadline, { gasLimit: 800000 });
+        safeLog('Swap sent: ' + tx.hash);
+        const receipt = await tx.wait();
+        safeLog('Swap confirmed: ' + receipt.transactionHash);
+        return receipt;
+      }
+
+      // ===== Connect
+      async function connect(){
+        if(!web3Modal){ alert('Web3Modal tidak tersedia'); return; }
+        try{
+          provider = await web3Modal.connect().catch(()=>null);
+          if(!provider && window.ethereum){ provider = window.ethereum; safeLog('Using window.ethereum fallback'); }
+          if(!provider){ alert('Provider tidak ditemukan. Pastikan Trust Wallet/MetaMask aktif.'); return; }
+          safeProvider = normalizeProvider(provider);
+          web3Provider = new ethers.providers.Web3Provider(safeProvider, 'any');
+          signer = web3Provider.getSigner();
+          try{ account = await signer.getAddress(); }catch(e){ account = null; }
+          if(account) el('address').value = account;
+          const net = await web3Provider.getNetwork(); el('network').value = net.name + ' (' + net.chainId + ')';
+          const bnb = account ? await web3Provider.getBalance(account) : null; el('balance').value = bnb ? (fmt(ethers.utils.formatEther(bnb),6) + ' BNB') : '—';
+          if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke Binance Smart Chain (Mainnet).'); safeLog('Non-BSC network detected: '+net.chainId); }
+
+          // Token metadata + balance fill
+          await refreshTokenMetaAndBalance();
+
+          // Enable buttons
+          el('btnStart').disabled = false; el('btnStop').disabled = false;
+
+          // Pollers
+          if(pollInterval) clearInterval(pollInterval);
+          pollInterval = setInterval(async ()=>{
+            try{
+              const newNet = await web3Provider.getNetwork(); el('network').value = newNet.name + ' (' + newNet.chainId + ')';
+              const newAcc = await signer.getAddress(); if(newAcc && newAcc !== account){ account = newAcc; el('address').value = account; safeLog('account changed'); await refreshTokenMetaAndBalance(); }
+              const bnb2 = await web3Provider.getBalance(account); el('balance').value = fmt(ethers.utils.formatEther(bnb2),6) + ' BNB';
+            }catch(e){}
+          }, 3500);
+
+          if(balancePoll) clearInterval(balancePoll);
+          balancePoll = setInterval(async ()=>{ try{ await autoFillAmountFromBalance(100); }catch(e){} }, 10000);
+
+          safeLog('Connected');
+        }catch(e){ safeLog('connect error: '+e); }
+      }
+
+      async function refreshTokenMetaAndBalance(){
+        try{
+          const mode = el('mode').value;
+          if(mode==='buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
+          else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
+          const decF = await readDecimals(el('tokenFrom').value); el('decFrom').value = decF;
+          const decT = await readDecimals(el('tokenTo').value); el('decTo').value = decT;
+          await autoFillAmountFromBalance(100); // FULL auto-fill
+        }catch(e){ safeLog('refresh meta/balance error: '+e); }
+      }
+
+      // ===== Bot Loop
+      async function checkAndAct(){
+        try{
+          if(!web3Provider || !signer){ safeLog('Provider/signature not ready'); return; }
+          const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ safeLog('Not on BSC — skipping check'); return; }
+          const tokenFrom = el('tokenFrom').value; const tokenTo = el('tokenTo').value; if(!ethers.utils.isAddress(tokenFrom) || !ethers.utils.isAddress(tokenTo)){ safeLog('Invalid token addresses'); return; }
+          const amount = Number(el('amount').value); if(!amount || amount<=0){ safeLog('Invalid amount'); return; }
+
+          const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.1;
+
+          const prices = await getPriceUSDTperXRP(slippage);
+          const { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo } = prices;
+          const mode = el('mode').value;
+
+          if(mode === 'buy'){
+            safeLog(`Router: 1 USDT → ${oneFrom_toTo} XRP | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+          } else {
+            safeLog(`Router: 1 XRP → ${oneFrom_toTo} USDT | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
+          }
+
+          if(mode === 'sell'){
+            if(tp1 && execUSDTperXRP >= tp1){ safeLog('TP1 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
+            if(tp2 && execUSDTperXRP >= tp2){ safeLog('TP2 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
+            if(tp3 && execUSDTperXRP >= tp3){ safeLog('TP3 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
+            if(sl && execUSDTperXRP <= sl){ safeLog('SL hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
+          } else {
+            if(tp1 && execUSDTperXRP <= tp1){ safeLog('TP1 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
+            if(tp2 && execUSDTperXRP <= tp2){ safeLog('TP2 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
+            if(tp3 && execUSDTperXRP <= tp3){ safeLog('TP3 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
+            if(sl && execUSDTperXRP >= sl){ safeLog('SL hit — BUY (stop)'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
+          }
+        }catch(e){ safeLog('bot error: ' + e); }
+      }
+
+      // ===== UI Actions
+      document.querySelectorAll('.pct').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const pct = Number(btn.getAttribute('data-pct'))||100;
+          autoFillAmountFromBalance(pct).catch(e=>safeLog('pct click error: '+e));
+        });
+      });
+
+      el('btnConnect').addEventListener('click', async ()=>{
+        if(!provider) await connect();
+        else {
+          try{ if(provider && typeof provider.disconnect==='function') await provider.disconnect(); }catch(e){}
+          provider=null; safeProvider=null; web3Provider=null; signer=null; account=null;
+          el('address').value=''; el('network').value=''; el('balance').value='';
+          el('btnStart').disabled=true; el('btnStop').disabled=true; if(pollInterval){clearInterval(pollInterval);pollInterval=null;} if(balancePoll){clearInterval(balancePoll);balancePoll=null;}
+          safeLog('Disconnected');
+        }
+      });
+
+      el('btnStart').addEventListener('click', async ()=>{
+        if(!web3Provider || !signer){ alert('Connect wallet terlebih dahulu'); return; }
+        const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke BSC Mainnet di wallet Anda'); return; }
+        try{ await readDecimals(el('tokenFrom').value); await readDecimals(el('tokenTo').value);}catch(e){ alert('Token tidak valid di jaringan ini: '+e); return; }
+        el('status').textContent = 'Bot running'; safeLog('Bot started');
+        if(botInterval) clearInterval(botInterval);
+        botInterval = setInterval(checkAndAct, 8000);
+        checkAndAct();
+        el('btnStart').disabled = true; el('btnStop').disabled = false;
+      });
+
+      el('btnStop').addEventListener('click', ()=>{
+        if(botInterval){ clearInterval(botInterval); botInterval=null; el('status').textContent='Bot stopped'; safeLog('Bot stopped'); el('btnStop').disabled=true; el('btnStart').disabled=false; }
+        else { alert('Bot tidak berjalan'); }
+      });
+
+      // Init default UI
+      applyMode();
+    });
+  </script>
 </body>
 </html>
