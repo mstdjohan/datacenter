@@ -1,213 +1,288 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta http-equiv="refresh" content="540">
-  <title>Strategi Trading XRP - " XRP1 "</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("aPZx0R9oxUbIQkLEv");
-  </script>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Autobot PancakeSwap — XRP ⇆ USDT (BSC)</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;
+         background:#0f1120;color:#e7e7ea;margin:0;padding:24px}
+    .card{max-width:720px;margin:0 auto;background:#171a2b;border:1px solid #2a2f4a;
+          border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h1{font-size:20px;margin:0 0 16px}
+    label{display:block;margin:8px 0 4px;color:#aab0d6}
+    input,select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #2b3254;
+                        background:#0f1327;color:#fff;outline:none}
+    input:disabled,button:disabled{opacity:.6}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .actions{display:flex;gap:12px;margin-top:12px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#232844;
+          color:#cdd2ff;font-size:12px;margin-left:6px}
+    .ok{color:#8ef39b}.bad{color:#ff8e8e}
+    .log{font-family:ui-monospace,Consolas,Monaco,monospace;background:#0b0e1b;border:1px solid #253;
+         padding:10px;border-radius:10px;height:160px;overflow:auto;margin-top:12px;white-space:pre-wrap}
+    .slim{font-size:12px;color:#97a0d1}
   </style>
 </head>
 <body>
+<div class="card">
+  <h1>⚡ Autobot PancakeSwap — XRP ⇆ USDT (BNB Chain)</h1>
 
-<h2>📊 Harga XRP " xrp1 " & Indikator (Real-time + Historis)</h2>
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
+  <div class="row">
+    <div>
+      <label>Dari (sell token)</label>
+      <select id="fromToken">
+        <option value="XRP">XRP (BEP-20)</option>
+        <option value="USDT">USDT (BEP-20)</option>
+      </select>
+    </div>
+    <div>
+      <label>Ke (buy token)</label>
+      <select id="toToken">
+        <option value="USDT">USDT (BEP-20)</option>
+        <option value="XRP">XRP (BEP-20)</option>
+      </select>
+    </div>
+  </div>
 
-<button id="resetBtn">🔁 Reset Simulasi</button>
+  <div class="row">
+    <div>
+      <label>Jumlah jual</label>
+      <input id="amountIn" type="number" min="0" step="any" placeholder="cth: 10" />
+    </div>
+    <div>
+      <label>Slippage (%)</label>
+      <input id="slippage" type="number" min="0" step="0.1" value="0.5" />
+    </div>
+  </div>
 
-<div id="log"></div>
+  <div class="row">
+    <div>
+      <label>TP1 (harga target)</label>
+      <input id="tp1" type="number" step="any" placeholder="cth: 3.30" />
+    </div>
+    <div>
+      <label>TP2 (opsional)</label>
+      <input id="tp2" type="number" step="any" placeholder="cth: 3.45" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Stop-Loss (harga)</label>
+      <input id="sl" type="number" step="any" placeholder="cth: 3.00" />
+    </div>
+    <div>
+      <label>Interval cek (detik)</label>
+      <input id="interval" type="number" min="5" value="15" />
+    </div>
+  </div>
+
+  <div style="margin-top:8px">
+    <span>Harga sekarang: <b id="px">$—</b></span>
+    <span class="pill" id="net">BSC</span>
+  </div>
+
+  <div class="actions">
+    <button id="btnConnect">🔌 Connect Wallet</button>
+    <button id="btnApprove" disabled>✅ Approve</button>
+    <button id="btnStart" disabled>▶️ Mulai Monitor</button>
+    <button id="btnStop" disabled>⏹️ Stop</button>
+  </div>
+
+  <div class="slim">
+    Router: PancakeSwap V2 — 0x10ED43C718714eb63d5aA57B78B54704E256024E • Perlu BNB kecil untuk gas.
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
 
 <script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 1000;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-const chartCtx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
-
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  localStorage.clear();
-  currentCapital = 1000;
-  lastBuy = null;
-  currentPositionAmount = 0;
-  updateCapitalDisplay();
-  log("🔄 Simulasi telah direset.");
-});
-
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
-
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
-  }
-  return result;
-}
-
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
-    }
-  }
-  return { upper, lower };
-}
-
-function sendEmail(subject, body) {
-  emailjs.send("service_d48312b", "service_d48312b", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
-
-async function fetchInitialData() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
-    const data = await res.json();
-    data.prices.forEach(p => {
-      priceData.push(p[1]);
-      const date = new Date(p[0]);
-      timeLabels.push(`${date.getMonth()+1}/${date.getDate()}`);
-    });
-    updateIndicators();
-    chart.update();
-    updateCapitalDisplay();
-  } catch (err) {
-    log("❌ Gagal ambil data historis XRP dari CoinGecko");
-  }
-}
-
-function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
-
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
-
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data.ripple.usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 25) {
-      priceData.shift();
-      timeLabels.shift();
-    }
-    updateIndicators();
-    chart.update();
-
-    const bb = calculateBollingerBands(priceData);
-    const lowerBB = bb.lower[bb.lower.length - 1];
-    const upperBB = bb.upper[bb.upper.length - 1];
-
-    if (!lastBuy && price <= lowerBB) {
-      lastBuy = price;
-      currentPositionAmount = qtyPerTrade / price;
-      currentCapital -= qtyPerTrade;
-      updateCapitalDisplay();
-      localStorage.setItem('capital', currentCapital);
-      localStorage.setItem('lastBuy', lastBuy);
-      localStorage.setItem('positionAmount', currentPositionAmount);
-      log(`📥 BUY di Lower BB $${price.toFixed(4)}`);
-      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
-    } else if (lastBuy && price >= upperBB) {
-      const sellValue = price * currentPositionAmount;
-      currentCapital += sellValue;
-      updateCapitalDisplay();
-      log(`📤 SELL di Upper BB $${price.toFixed(4)}`);
-      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
-      lastBuy = null;
-      currentPositionAmount = 0;
-      localStorage.setItem('capital', currentCapital);
-      localStorage.removeItem('lastBuy');
-      localStorage.removeItem('positionAmount');
-    } else {
-      log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Lower BB: $${lowerBB?.toFixed(4)} | Upper BB: $${upperBB?.toFixed(4)}`);
-    }
-
-  } catch (err) {
-    log("❌ Gagal ambil harga XRP live");
-    console.error(err);
-  }
-}
-
 (async () => {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 30000);
+  // ====== Konstanta BSC & Token ======
+  const BSC_CHAIN_ID = 56;
+  const ROUTER_V2 = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+
+  // Binance-Peg tokens (BSC mainnet)
+  const TOKENS = {
+    XRP:  { addr: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", decimals: 18 },
+    USDT: { addr: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }
+  };
+
+  // ====== Minimal ABI ======
+  const ERC20_ABI = [
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address) view returns (uint256)"
+  ];
+
+  const ROUTER_ABI = [
+    "function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts)",
+    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external"
+  ];
+
+  // ====== UI Elements ======
+  const $ = (id) => document.getElementById(id);
+  const log = (msg) => { const t = new Date().toLocaleTimeString(); $("log").textContent = `[${t}] ${msg}\n` + $("log").textContent; };
+
+  const btnConnect = $("btnConnect"), btnApprove = $("btnApprove"),
+        btnStart = $("btnStart"), btnStop = $("btnStop");
+
+  const elFrom = $("fromToken"), elTo = $("toToken"),
+        elAmt = $("amountIn"), elSlip = $("slippage"),
+        elTP1 = $("tp1"), elTP2 = $("tp2"), elSL = $("sl"),
+        elInterval = $("interval"), elPx = $("px"), elNet = $("net");
+
+  // ====== Ethers setup ======
+  let provider, signer, user, router;
+  let timer = null;
+
+  function getPath() {
+    const from = TOKENS[elFrom.value].addr;
+    const to   = TOKENS[elTo.value].addr;
+    return [from, to];
+  }
+
+  async function connect() {
+    if (!window.ethereum) { log("❌ Tidak ada wallet. Buka via Trust Wallet DApp browser / MetaMask."); return; }
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const network = await provider.getNetwork();
+    if (network.chainId !== BSC_CHAIN_ID) {
+      log("⚠️ Pastikan jaringan di wallet adalah BNB Smart Chain (Mainnet).");
+    }
+    signer = provider.getSigner();
+    user = await signer.getAddress();
+    router = new ethers.Contract(ROUTER_V2, ROUTER_ABI, signer);
+    btnApprove.disabled = false;
+    btnStart.disabled = false;
+    btnConnect.disabled = true;
+    elNet.textContent = `BSC #${network.chainId}`;
+    log(`🔌 Wallet terhubung: ${user}`);
+    updatePrice().catch(()=>{});
+  }
+
+  async function updatePrice() {
+    try {
+      const fromSym = elFrom.value, toSym = elTo.value;
+      const decIn = TOKENS[fromSym].decimals;
+      const amountIn = ethers.utils.parseUnits("1", decIn);
+      const path = getPath();
+      const amounts = await router.getAmountsOut(amountIn, path);
+      const out = amounts[amounts.length-1];
+      // price: to per 1 from
+      const price = Number(ethers.utils.formatUnits(out, TOKENS[toSym].decimals));
+      elPx.textContent = `${price.toFixed(6)} ${toSym} / ${fromSym}`;
+      return price;
+    } catch (e) {
+      log("❌ Gagal baca harga: "+ (e?.data?.message || e.message));
+      return null;
+    }
+  }
+
+  async function ensureAllowance() {
+    const fromSym = elFrom.value;
+    const token = new ethers.Contract(TOKENS[fromSym].addr, ERC20_ABI, signer);
+    const allowance = await token.allowance(user, ROUTER_V2);
+    const want = ethers.utils.parseUnits("1000000000", TOKENS[fromSym].decimals); // approve besar
+    if (allowance.gte(want.div(10))) { log("✅ Allowance cukup."); return; }
+    const tx = await token.approve(ROUTER_V2, want);
+    log("📝 Approve terkirim… TX: "+tx.hash);
+    await tx.wait();
+    log("✅ Approve selesai.");
+  }
+
+  async function doSwap() {
+    const fromSym = elFrom.value, toSym = elTo.value;
+    const amountInHuman = elAmt.value;
+    if (!amountInHuman || Number(amountInHuman) <= 0) { log("⚠️ Isi jumlah jual terlebih dahulu."); return; }
+
+    const decIn = TOKENS[fromSym].decimals, decOut = TOKENS[toSym].decimals;
+    const amountIn = ethers.utils.parseUnits(amountInHuman, decIn);
+    const path = getPath();
+
+    // slippage
+    const quote = await router.getAmountsOut(amountIn, path);
+    const outQuoted = quote[quote.length-1];
+    const sl = Math.max(0, Number(elSlip.value) || 0);
+    const minOut = outQuoted.mul(ethers.BigNumber.from(10000 - Math.floor(sl*100))).div(10000);
+
+    const deadline = Math.floor(Date.now()/1000) + 60 * 10;
+    log(`🚀 Swap ${amountInHuman} ${fromSym} → ${toSym} | minOut (slip ${sl}%): ${Number(ethers.utils.formatUnits(minOut, decOut)).toFixed(6)}`);
+
+    // Tx will trigger wallet confirmation
+    const tx = await router.swapExactTokensForTokens(
+      amountIn, minOut, path, user, deadline,
+      { gasLimit: 350000 }
+    );
+    log("📝 Swap terkirim… TX: "+tx.hash);
+    const rc = await tx.wait();
+    log("✅ Swap sukses. Block "+ rc.blockNumber);
+  }
+
+  function shouldSwap(currPx) {
+    // Harga yang dipakai: toToken per 1 fromToken
+    const tp1 = Number(elTP1.value || NaN);
+    const tp2 = Number(elTP2.value || NaN);
+    const sl  = Number(elSL.value  || NaN);
+
+    const from = elFrom.value, to = elTo.value;
+
+    // Contoh kebijakan:
+    // Jika dari = XRP, ke = USDT -> kita jual XRP saat harga XRP/USDT >= TP (ambillah profit).
+    // Jika dari = USDT, ke = XRP -> kita beli XRP saat harga XRP/USDT <= SL/TP sesuai arah.
+    if (from==="XRP" && to==="USDT") {
+      if (!isNaN(tp2) && currPx >= tp2) { log("🎯 Kena TP2"); return true; }
+      if (!isNaN(tp1) && currPx >= tp1) { log("🎯 Kena TP1"); return true; }
+      if (!isNaN(sl)  && currPx <= sl)  { log("🛑 Kena SL");  return true; }
+    } else if (from==="USDT" && to==="XRP") {
+      // Untuk beli XRP, kita ingin harga XRP/USDT turun ke target (lebih murah)
+      if (!isNaN(tp2) && currPx <= tp2) { log("🎯 Beli di TP2"); return true; }
+      if (!isNaN(tp1) && currPx <= tp1) { log("🎯 Beli di TP1"); return true; }
+      if (!isNaN(sl)  && currPx >= sl)  { log("🛑 Kena SL (naik di atas SL)—batasi FOMO"); return true; }
+    }
+    return false;
+  }
+
+  // ====== Event handlers ======
+  btnConnect.onclick = connect;
+
+  btnApprove.onclick = async () => {
+    try { await ensureAllowance(); } catch(e){ log("❌ Approve gagal: " + (e?.data?.message || e.message)); }
+  };
+
+  btnStart.onclick = async () => {
+    if (!signer) { await connect(); }
+    await ensureAllowance();
+    btnStart.disabled = true; btnStop.disabled = false;
+
+    const loop = async () => {
+      const px = await updatePrice();
+      if (px && shouldSwap(px)) {
+        try { await doSwap(); } catch(e){ log("❌ Swap gagal: " + (e?.data?.message || e.message)); }
+      }
+    };
+
+    await loop();
+    timer = setInterval(loop, Math.max(5, Number(elInterval.value)||15)*1000);
+    log("▶️ Monitor berjalan.");
+  };
+
+  btnStop.onclick = () => {
+    clearInterval(timer); timer = null;
+    btnStart.disabled = false; btnStop.disabled = true;
+    log("⏹️ Monitor dihentikan.");
+  };
+
+  // Sinkronisasi pilihan token (tidak boleh sama)
+  elFrom.onchange = () => { if (elFrom.value === elTo.value) elTo.value = elFrom.value === "XRP" ? "USDT" : "XRP"; updatePrice(); };
+  elTo.onchange   = () => { if (elFrom.value === elTo.value) elFrom.value = elTo.value === "XRP" ? "USDT" : "XRP"; updatePrice(); };
+
+  // Update harga awal jika wallet belum connect
+  setInterval(() => { if (router) updatePrice(); }, 20000);
 })();
 </script>
 </body>
