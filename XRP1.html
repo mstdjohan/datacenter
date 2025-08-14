@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Auto-Fill + Slippage + TrustWallet Price Filter</title>
+  <title>XRP↔USDT Auto Trader (BSC Mainnet) — TrustWallet + CoinGecko Fallback</title>
   <style>
     :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
     body{background:#071024;color:#e6eef8;margin:0;padding:20px}
@@ -20,13 +20,16 @@
     .pill{display:flex;gap:8px;margin-top:8px}
     .pill button{flex:1;padding:8px;border-radius:999px}
     @media(max-width:880px){.row{flex-direction:column}}
+    .ok{color:#9cffb0}
+    .warn{color:#ffd08a}
+    .err{color:#ff9b9b}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>XRP ↔ USDT Auto Trader — Auto-Fill + TrustWallet Price Filter</h1>
-      <div class="small muted">Mainnet (real trades). Harga utama dari <code>router.getAmountsOut()</code> PancakeSwap; verifikasi terhadap <strong>mid-price</strong> & <strong>TrustWallet API</strong>. Transaksi <u>dibatalkan otomatis</u> bila deviasi melewati ambang.</div>
+      <h1>XRP ↔ USDT Auto Trader — TrustWallet + CoinGecko Fallback</h1>
+      <div class="small muted">Mainnet (real trades). Harga router PancakeSwap divalidasi ke <strong>Mid</strong> & <strong>TrustWallet</strong> (fallback CoinGecko). Trade otomatis hanya jika deviasi wajar.</div>
 
       <label>Mode</label>
       <select id="mode">
@@ -48,7 +51,7 @@
 
       <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.08)" />
 
-      <label>Auto-selected Tokens (BEP20 on BSC)</label>
+      <label>Tokens (BEP20 on BSC, otomatis sesuai mode)</label>
       <div class="row">
         <div class="col"><input id="tokenFrom" readonly /></div>
         <div style="width:220px"><input id="decFrom" placeholder="decimals" readonly /></div>
@@ -58,7 +61,7 @@
         <div style="width:220px"><input id="decTo" placeholder="decimals" readonly /></div>
       </div>
 
-      <label>Saldo Token (otomatis)</label>
+      <label>Saldo Token (auto)</label>
       <div class="row">
         <input id="tokenBalance" placeholder="—" readonly />
         <div style="width:220px"><input id="tokenSymbol" placeholder="symbol" readonly /></div>
@@ -100,7 +103,7 @@
       <label>TrustWallet Price (USDT per XRP)</label>
       <div class="row">
         <div class="col"><input id="trustPrice" placeholder="(auto)" readonly /></div>
-        <div class="col"><input id="trustEndpoint" placeholder="(opsional) override endpoint TrustWallet API" /></div>
+        <div class="col"><input id="trustEndpoint" placeholder="(opsional) override endpoint TrustWallet API)" /></div>
         <div style="width:200px"><label><input type="checkbox" id="useTrust" checked /> Gunakan TrustWallet filter</label></div>
       </div>
 
@@ -117,7 +120,7 @@
       </div>
 
       <div style="margin-top:14px;color:#ffd1a9;font-size:13px">
-        <strong>PERINGATAN:</strong> Ini melakukan transaksi nyata di BSC Mainnet saat Start ditekan. Uji dengan nominal kecil dulu. Risiko tanggung sendiri.
+        <strong>PERINGATAN:</strong> Ini melakukan transaksi nyata di BSC Mainnet saat Start ditekan. Uji nominal kecil dulu. Risiko tanggung sendiri.
       </div>
     </div>
   </div>
@@ -161,7 +164,6 @@
     let botInterval = null;
     let pollInterval = null;
     let balancePoll = null;
-    let lastSourceBalance = null; // in human units
 
     // ===== Event API safety (fix for "read 'emit'")
     function addNoop(obj, name){ if(!obj) return; if(typeof obj[name] !== 'function'){ try{ obj[name] = function(){}; }catch(e){} } }
@@ -223,7 +225,6 @@
         const source = (mode==='buy') ? USDT : XRP_BEP20;
         const sym = await readSymbol(source);
         const bal = await getTokenBalance(source, account);
-        lastSourceBalance = bal.human;
         const take = (Number(percent)||100)/100 * bal.human;
         el('tokenBalance').value = `${fmt(bal.human)} ${sym}`;
         el('tokenSymbol').value = sym;
@@ -256,7 +257,7 @@
       const tokenTo = el('tokenTo').value;
       const decIn = await readDecimals(tokenFrom);
       const decOut = await readDecimals(tokenTo);
-      const amountHuman = Number(el('amount').value)||1; // gunakan amount sebenarnya agar simulasi realistis
+      const amountHuman = Number(el('amount').value)||1; // gunakan amount user agar simulasi realistis
       const amountInBN = ethers.utils.parseUnits(String(amountHuman), decIn);
 
       const bestDir = await getBestOut(tokenFrom, tokenTo, amountInBN);
@@ -294,45 +295,71 @@
       return { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo: outHuman, midUSDTperXRP, bestPath: bestDir.path };
     }
 
-    // ===== TrustWallet price fetcher (best-effort, beberapa endpoint umum)
-    async function fetchTrustPriceUSDTperXRP(){
+    // ===== TrustWallet API + CoinGecko fallback
+    const ADDR_XRP_BSC_TW = 'bnb-smart-chain:0x1d2f0da169ceb9fc7b3144628db156f3f6c60dbe';
+    async function fetchTrustWalletPriceUSDperXRP(){
       const override = el('trustEndpoint').value.trim();
-      const addr = 'bnb-smart-chain:0x1d2f0da169ceb9fc7b3144628db156f3f6c60dbe';
-      const candidates = [];
-      if(override) candidates.push(override.replace('{address}', addr));
-      // Beberapa pola endpoint publik yang umum dipakai TrustWallet infra (akan dicoba berurutan)
-      candidates.push(`https://prices.trustwallet.com/price?currency=USD&tokens=${encodeURIComponent(addr)}`);
-      candidates.push(`https://market-api.trustwallet.com/v1/market/price?asset=${encodeURIComponent(addr)}&currency=usd`);
-      candidates.push(`https://api.trustwallet.com/prices?assets=${encodeURIComponent(addr)}`);
-
-      for(const url of candidates){
+      const addr = ADDR_XRP_BSC_TW;
+      const urls = [];
+      if(override) urls.push(override.replace('{address}', addr));
+      // Kandidat endpoint yang sering digunakan
+      urls.push(`https://prices.trustwallet.com/price?currency=USD&tokens=${encodeURIComponent(addr)}`);
+      urls.push(`https://market-api.trustwallet.com/v1/market/price?asset=${encodeURIComponent(addr)}&currency=usd`);
+      urls.push(`https://api.trustwallet.com/prices?assets=${encodeURIComponent(addr)}`);
+      for(const url of urls){
         try{
           const r = await fetch(url, {mode:'cors'});
           if(!r.ok) continue;
           const j = await r.json();
-          // Coba beberapa bentuk struktur umum
-          // 1) { prices: { "bnb-smart-chain:addr": { price: 0.5 } } }
+          // Pola 1
           if(j && j.prices){
-            const p = j.prices[addr] || j.prices[addr.toUpperCase()] || j.prices[addr.toLowerCase()];
-            if(p && typeof p.price === 'number' && p.price>0) return p.price; // USD per XRP
+            const p = j.prices[addr] || j.prices[addr.toLowerCase()] || j.prices[addr.toUpperCase()];
+            if(p && typeof p.price==='number' && p.price>0) return {price:p.price, source:'trustwallet'};
           }
-          // 2) { asset:"...", price: 0.5 }
-          if(j && typeof j.price === 'number' && j.price>0) return j.price;
-          // 3) { data: { price: 0.5 } }
-          if(j && j.data && typeof j.data.price === 'number' && j.data.price>0) return j.data.price;
-          // 4) { [addr]: 0.5 }
-          if(j && typeof j[addr] === 'number' && j[addr]>0) return j[addr];
+          // Pola 2
+          if(j && typeof j.price==='number' && j.price>0) return {price:j.price, source:'trustwallet'};
+          // Pola 3
+          if(j && j.data && typeof j.data.price==='number' && j.data.price>0) return {price:j.data.price, source:'trustwallet'};
+          // Pola 4
+          if(j && typeof j[addr]==='number' && j[addr]>0) return {price:j[addr], source:'trustwallet'};
         }catch(e){ /* CORS/format mismatch — coba endpoint berikutnya */ }
       }
       throw new Error('TrustWallet price unavailable');
     }
 
+    async function fetchCoinGeckoUSDperXRP(){
+      // XRP pada BSC via CoinGecko chain id "binance-smart-chain" (alamat kontrak XRP BEP20)
+      const cgChain = 'binance-smart-chain';
+      const addr = XRP_BEP20.toLowerCase();
+      const url = `https://api.coingecko.com/api/v3/simple/token_price/${cgChain}?contract_addresses=${addr}&vs_currencies=usd`;
+      const r = await fetch(url, {mode:'cors'});
+      if(!r.ok) throw new Error('CoinGecko HTTP '+r.status);
+      const j = await r.json();
+      const px = j && j[addr] && j[addr].usd;
+      if(typeof px==='number' && px>0) return {price:px, source:'coingecko'};
+      throw new Error('CoinGecko price unavailable');
+    }
+
     async function readAndShowTrustPrice(){
+      // USDT per XRP ~= USD per XRP (diasumsikan USDT ~ $1)
       try{
-        const usdPerXrp = await fetchTrustPriceUSDTperXRP();
-        el('trustPrice').value = usdPerXrp;
-        return usdPerXrp;
-      }catch(e){ el('trustPrice').value = '(unavailable)'; safeLog('Trust price error: '+e.message); return null; }
+        const t = await fetchTrustWalletPriceUSDperXRP();
+        el('trustPrice').value = t.price;
+        safeLog(`Trust source: ${t.source}`);
+        return t.price;
+      }catch(e1){
+        safeLog('Trust price error: '+e1.message+' — fallback to CoinGecko');
+        try{
+          const c = await fetchCoinGeckoUSDperXRP();
+          el('trustPrice').value = c.price;
+          safeLog(`Trust fallback source: ${c.source}`);
+          return c.price;
+        }catch(e2){
+          el('trustPrice').value = '(unavailable)';
+          safeLog('Fallback error: '+e2.message);
+          return null;
+        }
+      }
     }
 
     // ===== Approve & Swap (best route/DEX)
@@ -407,7 +434,7 @@
         if(balancePoll) clearInterval(balancePoll);
         balancePoll = setInterval(async ()=>{ try{ if(account) await autoFillAmountFromBalance(100); }catch(e){} }, 10000);
 
-        // Baca Trust price pertama kali
+        // Baca Trust price pertama kali (dengan fallback)
         readAndShowTrustPrice();
 
         safeLog('Connected');
@@ -443,25 +470,29 @@
           return;
         }
 
-        // TrustWallet price (optional)
-        let trust = null;
-        if(useTrust){ trust = await readAndShowTrustPrice(); }
+        // TrustWallet price (with fallback)
+        let trust = null; let trustSource = 'none';
+        if(useTrust){
+          const before = el('trustPrice').value;
+          const t = await readAndShowTrustPrice();
+          trust = t; trustSource = (before!==String(t))? 'refreshed' : 'cached';
+        }
 
         const mode = el('mode').value;
         const devMid = (midUSDTperXRP? pctDiff(routerUSDTperXRP, midUSDTperXRP) : null);
         const devTrust = (trust? pctDiff(routerUSDTperXRP, trust) : null);
 
         if(mode === 'buy'){
-          safeLog(`Best: ${displayPath(bestPath)} | 1 USDT → ${oneFrom_toTo} XRP | Dir ${routerUSDTperXRP} | Mid ~ ${midUSDTperXRP} | Trust ${trust??'(n/a)'} | Exec ${execUSDTperXRP} (slip ${slippage}%) | DevMid ${devMid?.toFixed?devMid.toFixed(3):'(n/a)'}% | DevTrust ${devTrust?.toFixed?devTrust.toFixed(3):'(n/a)'}%`);
+          safeLog(`Best: ${displayPath(bestPath)} | 1 USDT → ${oneFrom_toTo} XRP | Dir ${routerUSDTperXRP} | Mid ~ ${midUSDTperXRP} | Trust ${trust??'(n/a)'} (${trustSource}) | Exec ${execUSDTperXRP} (slip ${slippage}%) | DevMid ${devMid?.toFixed?devMid.toFixed(3):'(n/a)'}% | DevTrust ${devTrust?.toFixed?devTrust.toFixed(3):'(n/a)'}%`);
         } else {
-          safeLog(`Best: ${displayPath(bestPath)} | 1 XRP → ${oneFrom_toTo} USDT | Dir ${routerUSDTperXRP} | Mid ~ ${midUSDTperXRP} | Trust ${trust??'(n/a)'} | Exec ${execUSDTperXRP} (slip ${slippage}%) | DevMid ${devMid?.toFixed?devMid.toFixed(3):'(n/a)'}% | DevTrust ${devTrust?.toFixed?devTrust.toFixed(3):'(n/a)'}%`);
+          safeLog(`Best: ${displayPath(bestPath)} | 1 XRP → ${oneFrom_toTo} USDT | Dir ${routerUSDTperXRP} | Mid ~ ${midUSDTperXRP} | Trust ${trust??'(n/a)'} (${trustSource}) | Exec ${execUSDTperXRP} (slip ${slippage}%) | DevMid ${devMid?.toFixed?devMid.toFixed(3):'(n/a)'}% | DevTrust ${devTrust?.toFixed?devTrust.toFixed(3):'(n/a)'}%`);
         }
 
-        // ==== Guards: batalkan bila deviasi berlebihan
+        // Guards: batalkan bila deviasi berlebihan
         if(isFinite(devMid) && Math.abs(devMid) > maxDevMid){ safeLog(`Skip: deviation vs mid ${devMid.toFixed(3)}% > ${maxDevMid}%`); return; }
         if(useTrust && isFinite(devTrust) && Math.abs(devTrust) > maxDevTrust){ safeLog(`Skip: deviation vs Trust ${devTrust.toFixed(3)}% > ${maxDevTrust}%`); return; }
 
-        // ==== TP/SL logic
+        // TP/SL logic
         if(mode === 'sell'){
           if(tp1 && execUSDTperXRP >= tp1){ safeLog('TP1 hit — SELL'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
           if(tp2 && execUSDTperXRP >= tp2){ safeLog('TP2 hit — SELL'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
@@ -470,7 +501,7 @@
         } else {
           if(tp1 && execUSDTperXRP <= tp1){ safeLog('TP1 hit — BUY'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
           if(tp2 && execUSDTperXRP <= tp2){ safeLog('TP2 hit — BUY'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
-          if(tp3 && execUSDTperXRP <= tp3){ safeLog('TP3 hit — BUY'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
+          if(tp3 && execUSDTperXRP <= tp3){ safeLog('TP3 hit — BUY'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); return; }
           if(sl && execUSDTperXRP >= sl){ safeLog('SL hit — BUY (stop)'); await swapExactTokensBest(tokenFrom, tokenTo, amount, slippage); return; }
         }
       }catch(e){ safeLog('bot error: ' + e); }
