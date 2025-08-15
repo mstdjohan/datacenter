@@ -1,396 +1,374 @@
-<!doctype html>
-<html lang="id">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>XRP↔USDT Auto Trader (BSC Mainnet) — Auto-Fill Saldo + Slippage</title>
-  <style>
-    :root{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
-    body{background:#071024;color:#e6eef8;margin:0;padding:20px}
-    .wrap{max-width:980px;margin:0 auto}
-    .card{background:linear-gradient(180deg,#081428,#06101a);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);}    
-    h1{margin:0 0 10px;font-size:20px}
-    label{display:block;margin-top:10px;color:#9fb0d0;font-size:13px}
-    input,select,button{width:100%;padding:10px;margin-top:6px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
-    .row{display:flex;gap:12px}
-    .col{flex:1}
-    .small{font-size:13px;color:#99b3d6}
-    pre{white-space:pre-wrap;word-break:break-word;background:transparent;padding:8px}
-    .muted{color:#7f9ec8}
-    .danger{color:#ffb4a2}
-    .pill{display:flex;gap:8px;margin-top:8px}
-    .pill button{flex:1;padding:8px;border-radius:999px}
-    @media(max-width:880px){.row{flex-direction:column}}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AutoSwap Pancake — USDT ↔ XRP (BSC)</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;background:#0b1220;color:#e5e7eb;margin:0;padding:0}
+  .wrap{max-width:980px;margin:24px auto;padding:16px}
+  h1{font-size:18px;margin:0 0 8px}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:12px}
+  .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px}
+  label{font-size:12px;color:#9ca3af}
+  input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:#e5e7eb}
+  button{cursor:pointer}
+  .muted{color:#9ca3af;font-size:12px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pct{display:flex;gap:6px;margin-top:6px}
+  .pct button{flex:1}
+  .ok{background:#065f46;border-color:#065f46}
+  .danger{background:#7f1d1d;border-color:#7f1d1d}
+  #log{white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;height:230px;overflow:auto;background:#0b1220;border:1px dashed #374151;border-radius:10px;padding:10px}
+  .stat{display:flex;justify-content:space-between;gap:8px;background:#0b1220;border:1px solid #1f2937;border-radius:10px;padding:8px;margin:6px 0}
+</style>
 </head>
 <body>
-  <div class="wrap">
+<div class="wrap">
+  <h1>🔁 AutoSwap Pancake — USDT ↔ XRP (BSC)</h1>
+  <div class="muted">Router price real-time (getAmountsOut), slippage default 0.1%, Start/Stop bot + TP/SL.</div>
+
+  <div class="grid" style="margin-top:12px">
+    <!-- Left controls -->
     <div class="card">
-      <h1>XRP ↔ USDT Auto Trader — Auto-Fill Saldo</h1>
-      <div class="small muted">Mainnet (real trades). Harga dari <code>router.getAmountsOut()</code>; perbandingan TP/SL memakai **execution price** (koreksi slippage, default 0,1%). Amount otomatis terisi **saldo token** sesuai mode.</div>
-
-      <label>Mode</label>
-      <select id="mode">
-        <option value="buy">Buy (USDT → XRP)</option>
-        <option value="sell">Sell (XRP → USDT)</option>
-      </select>
-
-      <label>Connect Wallet</label>
       <div class="row">
-        <input id="address" placeholder="Belum terhubung" readonly />
-        <div style="width:160px"><button id="btnConnect">Connect</button></div>
+        <button id="btnConnect" class="ok">🔗 Connect Wallet</button>
+        <button id="btnDisconnect">⛔ Disconnect</button>
       </div>
 
-      <label>Network & BNB</label>
-      <div class="row">
-        <input id="network" placeholder="—" readonly />
-        <input id="balance" placeholder="—" readonly />
+      <div class="stat"><div>Address</div><div id="address">—</div></div>
+      <div class="stat"><div>Network</div><div id="network">—</div></div>
+      <div class="stat"><div>BNB</div><div id="bnb">—</div></div>
+
+      <div style="margin-top:8px">
+        <label>Mode</label>
+        <select id="mode">
+          <option value="buy">BUY (USDT → XRP)</option>
+          <option value="sell">SELL (XRP → USDT)</option>
+        </select>
       </div>
 
-      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.08)" />
-
-      <label>Auto-selected Tokens (BEP20 on BSC)</label>
-      <div class="row">
-        <div class="col"><input id="tokenFrom" readonly /></div>
-        <div style="width:220px"><input id="decFrom" placeholder="decimals" readonly /></div>
-      </div>
-      <div class="row">
-        <div class="col"><input id="tokenTo" readonly /></div>
-        <div style="width:220px"><input id="decTo" placeholder="decimals" readonly /></div>
-      </div>
-
-      <label>Saldo Token (otomatis)</label>
-      <div class="row">
-        <input id="tokenBalance" placeholder="—" readonly />
-        <div style="width:220px"><input id="tokenSymbol" placeholder="symbol" readonly /></div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>Token From</label>
+          <input id="tokenFrom" value="0x55d398326f99059fF775485246999027B3197955"/>
+        </div>
+        <div>
+          <label>Token To</label>
+          <input id="tokenTo" value="0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE"/>
+        </div>
       </div>
 
-      <label>Amount (amount of source token to trade)</label>
-      <input id="amount" placeholder="otomatis: 100% dari saldo" />
-      <div class="pill">
-        <button type="button" data-pct="25" class="pct">25%</button>
-        <button type="button" data-pct="50" class="pct">50%</button>
-        <button type="button" data-pct="75" class="pct">75%</button>
-        <button type="button" data-pct="100" class="pct">100%</button>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>Decimals From</label>
+          <input id="decFrom" value="18" disabled/>
+        </div>
+        <div>
+          <label>Decimals To</label>
+          <input id="decTo" value="18" disabled/>
+        </div>
       </div>
 
-      <label>Targets (harga USDT per 1 XRP)</label>
-      <div class="row">
-        <div class="col"><input id="tp1" placeholder="TP1" /></div>
-        <div class="col"><input id="tp2" placeholder="TP2 (optional)" /></div>
-        <div class="col"><input id="tp3" placeholder="TP3 (optional)" /></div>
-      </div>
-      <label>Stop Loss (SL)</label>
-      <input id="sl" placeholder="SL" />
-
-      <label>Slippage tolerance (%)</label>
-      <input id="slippage" placeholder="0.1" value="0.1" />
-
-      <div class="row" style="margin-top:12px;">
-        <button id="btnStart" disabled>Start Bot</button>
-        <button id="btnStop" disabled>Stop Bot</button>
+      <div style="margin-top:8px">
+        <label>Amount (From)</label>
+        <input id="amount" placeholder="e.g. 10"/>
+        <div class="pct">
+          <button data-pct="25">25%</button>
+          <button data-pct="50">50%</button>
+          <button data-pct="75">75%</button>
+          <button data-pct="100">100%</button>
+        </div>
       </div>
 
-      <div style="margin-top:12px">
-        <div class="small muted">Status</div>
-        <div id="status">idle</div>
-        <label style="margin-top:8px">Logs</label>
-        <pre id="log">— ready —</pre>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>Slippage (%)</label>
+          <input id="slippage" value="0.1"/>
+        </div>
+        <div>
+          <label>Deadline (min)</label>
+          <input id="deadline" value="5"/>
+        </div>
       </div>
 
-      <div style="margin-top:14px;color:#ffd1a9;font-size:13px">
-        <strong>PERINGATAN:</strong> Ini akan melakukan transaksi nyata di BSC Mainnet jika Anda menekan Start. Mulailah dengan nominal kecil dan uji terlebih dahulu. Saya tidak bertanggung jawab atas kehilangan dana.
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>TP (take profit)</label>
+          <input id="tp" placeholder="USDT/XRP for SELL, or USDT per XRP for BUY"/>
+        </div>
+        <div>
+          <label>SL (stop loss)</label>
+          <input id="sl" placeholder="USDT/XRP for SELL, or USDT per XRP for BUY"/>
+        </div>
       </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="btnQuote">🔍 Get Quote</button>
+        <button id="btnSwap" class="ok">⚡ Swap Now</button>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button id="btnStart" class="ok">▶️ Start Bot</button>
+        <button id="btnStop" class="danger" disabled>⏸️ Stop Bot</button>
+      </div>
+
+      <div class="stat"><div>Router DirPrice</div><div id="dir">—</div></div>
+      <div class="stat"><div>Exec (with slippage)</div><div id="exec">—</div></div>
+      <div class="stat"><div>Path</div><div id="path">—</div></div>
+    </div>
+
+    <!-- Right log -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="muted">Activity Log</div>
+        <button id="btnClear">🧹 Clear</button>
+      </div>
+      <div id="log"></div>
     </div>
   </div>
+</div>
 
-  <!-- Dependencies -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/web3modal@1.9.12/dist/index.js"></script>
+<script>
+/* ====== CONSTS ====== */
+const BSC_CHAIN_ID = 56;
+const ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E"; // Pancake V2
+const USDT = "0x55d398326f99059fF775485246999027B3197955";
+const XRP  = "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE";
 
-  <script>
-    window.addEventListener('load', function(){
-      // ===== Constants
-      const BSC_CHAIN_ID = 56;
-      const PANCAKE_ROUTER = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
-      const WBNB = '0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
-      const USDT = '0x55d398326f99059fF775485246999027B3197955';
-      const XRP_BEP20 = '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE';
-      const ERC20_ABI_MIN = [
-        'function decimals() view returns (uint8)',
-        'function symbol() view returns (string)',
-        'function balanceOf(address) view returns (uint256)',
-        'function allowance(address owner, address spender) view returns (uint256)',
-        'function approve(address spender, uint256 amount) returns (bool)'
-      ];
+const routerAbi = [
+  "function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory)",
+  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external"
+];
+const erc20Abi = [
+  "function decimals() view returns(uint8)",
+  "function balanceOf(address) view returns(uint256)",
+  "function allowance(address,address) view returns(uint256)",
+  "function approve(address,uint256) returns(bool)"
+];
 
-      // ===== Elements & utils
-      const el = id => document.getElementById(id);
-      function safeLog(msg){ try{ el('log').textContent = new Date().toLocaleTimeString() + ' — ' + String(msg) + '\n' + el('log').textContent; }catch(e){ console.log(msg); } console.log(msg); }
-      const fmt = (n, d=6) => Number(n).toLocaleString(undefined,{maximumFractionDigits:d});
+/* ====== STATE ====== */
+let rawProvider=null, web3p=null, signer=null, account=null;
+let botTimer=null;
 
-      // ===== State
-      let provider = null;      // raw provider
-      let safeProvider = null;  // normalized provider
-      let web3Provider = null;  // ethers provider
-      let signer = null;
-      let account = null;
-      let botInterval = null;
-      let pollInterval = null;
-      let balancePoll = null;
-      let lastSourceBalance = null; // in human units
+/* ====== UI helpers ====== */
+const el = id => document.getElementById(id);
+function log(msg){ const t = new Date().toLocaleTimeString(); el('log').textContent = `[${t}] ${msg}\n` + el('log').textContent; }
+function fmt(n, d=6){ const x = Number(n); if(!isFinite(x)) return String(n); return x.toFixed(d); }
 
-      // ===== Web3Modal
-      const providerOptions = {
-        walletconnect: {
-          package: window.WalletConnectProvider && window.WalletConnectProvider.default ? window.WalletConnectProvider.default : window.WalletConnectProvider,
-          options: { rpc: { 56: 'https://bsc-dataseed.binance.org/' } }
-        }
-      };
-      const Web3ModalCtor = window.Web3Modal && (window.Web3Modal.default || window.Web3Modal);
-      const web3Modal = Web3ModalCtor ? new Web3ModalCtor({ cacheProvider:false, providerOptions }) : null;
+/* ====== Provider connect ====== */
+function patchProvider(p){
+  // Some injected providers miss EventEmitter bits
+  if(!p) return;
+  if(typeof p.on!=='function'){ p.on = ()=>{}; }
+  if(typeof p.removeListener!=='function'){ p.removeListener=()=>{}; }
+  if(typeof p.addListener!=='function'){ p.addListener=()=>{}; }
+  return p;
+}
 
-      // ===== Provider normalizer (avoid emit undefined)
-      function normalizeProvider(p){
-        if(!p) return p;
-        try{
-          if(typeof p.on !== 'function') p.on = function(){};
-          if(typeof p.removeListener !== 'function') p.removeListener = function(){};
-          if(typeof p.off !== 'function') p.off = function(){};
-          if(typeof p.once !== 'function') p.once = function(){};
-          if(typeof p.emit !== 'function') p.emit = function(){};
-          if(!p.connector) p.connector = {};
-          if(typeof p.connector.emit !== 'function') p.connector.emit = function(){};
-          if(typeof p.connector.on !== 'function') p.connector.on = function(){};
-          if(typeof p.connector.off !== 'function') p.connector.off = function(){};
-          if(!p.wc) p.wc = {};
-          if(typeof p.wc.emit !== 'function') p.wc.emit = function(){};
-          return p;
-        }catch(e){ safeLog('normalizeProvider failed: '+e); return p; }
+async function connect(){
+  if(!window.ethereum){ alert('Wallet tidak ditemukan. Install MetaMask/Trust Wallet Browser.'); return; }
+  try{
+    rawProvider = patchProvider(window.ethereum);
+    web3p = new ethers.providers.Web3Provider(rawProvider, 'any');
+    await web3p.send('eth_requestAccounts', []);
+    signer = web3p.getSigner();
+    account = await signer.getAddress();
+    el('address').textContent = account;
+    const net = await web3p.getNetwork();
+    el('network').textContent = `${net.name} (${net.chainId})`;
+    if(Number(net.chainId)!==BSC_CHAIN_ID) alert('Switch ke Binance Smart Chain Mainnet');
+    const bnb = await web3p.getBalance(account);
+    el('bnb').textContent = `${fmt(ethers.utils.formatEther(bnb),6)} BNB`;
+    await refreshMeta();
+    log('✅ Connected');
+  }catch(e){ log('Connect error: '+(e.message||e)); }
+}
+
+async function disconnect(){
+  try{
+    if(rawProvider && typeof rawProvider.disconnect==='function'){ await rawProvider.disconnect(); }
+  }catch(e){}
+  rawProvider=null; web3p=null; signer=null; account=null;
+  ['address','network','bnb','dir','exec','path'].forEach(id=>el(id).textContent='—');
+  log('Disconnected');
+}
+
+/* ====== Token meta & balance ====== */
+async function readDecimals(addr){
+  const c = new ethers.Contract(addr, erc20Abi, web3p);
+  return await c.decimals();
+}
+
+async function refreshMeta(){
+  try{
+    const mode = el('mode').value;
+    if(mode==='buy'){ el('tokenFrom').value=USDT; el('tokenTo').value=XRP; }
+    else { el('tokenFrom').value=XRP; el('tokenTo').value=USDT; }
+    const dF = await readDecimals(el('tokenFrom').value);
+    const dT = await readDecimals(el('tokenTo').value);
+    el('decFrom').value = dF; el('decTo').value = dT;
+  }catch(e){ log('refreshMeta error: '+(e.message||e)); }
+}
+
+async function getBalanceHuman(addr){
+  if(!account) return 0;
+  const c = new ethers.Contract(addr, erc20Abi, web3p);
+  const dec = await c.decimals();
+  const bal = await c.balanceOf(account);
+  return parseFloat(ethers.utils.formatUnits(bal, dec));
+}
+
+async function autoFillAmountFromBalance(pct=100){
+  try{
+    const bal = await getBalanceHuman(el('tokenFrom').value);
+    const val = bal * (pct/100);
+    el('amount').value = (val>0? val.toString() : '');
+    log(`Auto-fill ${pct}%: ${val}`);
+  }catch(e){ log('autoFill error: '+(e.message||e)); }
+}
+
+/* ====== Quote & swap ====== */
+function pctDiff(a,b){ return ( (a-b)/b )*100; }
+
+async function quote(){
+  try{
+    const tokenFrom = el('tokenFrom').value;
+    const tokenTo   = el('tokenTo').value;
+    const decF = Number(el('decFrom').value)||18;
+    const amt = parseFloat(el('amount').value||'0');
+    if(!amt || amt<=0){ log('Masukkan amount'); return; }
+    const router = new ethers.Contract(ROUTER, routerAbi, web3p);
+    const path=[tokenFrom, tokenTo];
+    const amountIn = ethers.utils.parseUnits(amt.toString(), decF);
+    const outs = await router.getAmountsOut(amountIn, path);
+    const outHuman = parseFloat(ethers.utils.formatUnits(outs[outs.length-1], Number(el('decTo').value)||18));
+
+    // Directional price display (USDT per XRP OR USDT/XRP)
+    let dirPrice, execPrice;
+    if(tokenFrom.toLowerCase()===USDT.toLowerCase()){
+      // BUY: 1 USDT -> x XRP, so USDT/XRP = 1 / x
+      const xrpPerUsdt = outHuman/amt;
+      dirPrice = 1 / xrpPerUsdt; // USDT per 1 XRP
+      const slip = (parseFloat(el('slippage').value)||0.1)/100;
+      execPrice = dirPrice * (1 + slip); // slippage worsens price
+    }else{
+      // SELL: 1 XRP -> x USDT, so USDT/XRP = x / 1
+      const usdtPerXrp = outHuman/amt;
+      dirPrice = usdtPerXrp;
+      const slip = (parseFloat(el('slippage').value)||0.1)/100;
+      execPrice = dirPrice * (1 - slip);
+    }
+
+    el('dir').textContent  = `${fmt(dirPrice,6)} USDT/XRP`;
+    el('exec').textContent = `${fmt(execPrice,6)} USDT/XRP`;
+    el('path').textContent = path.map(p=>p.slice(0,6)+'…'+p.slice(-4)).join(' → ');
+    return {dirPrice, execPrice, outHuman, path, amountIn};
+  }catch(e){ log('Quote error: '+(e.message||e)); return null; }
+}
+
+async function ensureAllowance(token, owner, spender, needed){
+  const c = new ethers.Contract(token, erc20Abi, signer);
+  const allow = await c.allowance(owner, spender);
+  if(allow.gte(needed)) return;
+  log('Approving max allowance…');
+  const tx = await c.approve(spender, ethers.constants.MaxUint256);
+  await tx.wait();
+  log('Approve confirmed');
+}
+
+async function doSwap(){
+  try{
+    if(!signer || !account){ alert('Connect wallet dulu'); return; }
+    const q = await quote(); if(!q) return;
+
+    const tokenFrom = el('tokenFrom').value;
+    const tokenTo   = el('tokenTo').value;
+    const router = new ethers.Contract(ROUTER, routerAbi, signer);
+    const slip = (parseFloat(el('slippage').value)||0.1)/100;
+    const deadlineMin = Math.max(1, parseInt(el('deadline').value||'5',10));
+    const dl = Math.floor(Date.now()/1000) + 60*deadlineMin;
+
+    // Min out (conservative for both directions)
+    const amountOutMin = 0;
+
+    await ensureAllowance(tokenFrom, account, ROUTER, q.amountIn);
+    const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+      q.amountIn,
+      amountOutMin,
+      [tokenFrom, tokenTo],
+      account,
+      dl
+    );
+    log('Swap sent: '+tx.hash);
+    await tx.wait();
+    log('✅ Swap confirmed');
+  }catch(e){ log('Swap error: '+(e.data?.message || e.message || e)); }
+}
+
+/* ====== Bot loop (simple TP/SL) ====== */
+async function checkAndAct(){
+  try{
+    const q = await quote(); if(!q) return;
+    const tp = parseFloat(el('tp').value||'');
+    const sl = parseFloat(el('sl').value||'');
+    const mode = el('mode').value;
+    if(mode==='sell'){
+      if(isFinite(tp) && q.execPrice >= tp){ log(`TP hit (≥ ${tp}) → SELL`); await doSwap(); return; }
+      if(isFinite(sl) && q.execPrice <= sl){ log(`SL hit (≤ ${sl}) → SELL`); await doSwap(); return; }
+    }else{
+      if(isFinite(tp) && q.execPrice <= tp){ log(`TP hit (≤ ${tp}) → BUY`); await doSwap(); return; }
+      if(isFinite(sl) && q.execPrice >= sl){ log(`SL hit (≥ ${sl}) → BUY`); await doSwap(); return; }
+    }
+    log(`HOLD | Exec ${fmt(q.execPrice)} USDT/XRP`);
+  }catch(e){ log('bot error: '+(e.message||e)); }
+}
+
+/* ====== Events ====== */
+el('btnConnect').addEventListener('click', connect);
+el('btnDisconnect').addEventListener('click', disconnect);
+el('btnQuote').addEventListener('click', quote);
+el('btnSwap').addEventListener('click', doSwap);
+el('btnStart').addEventListener('click', ()=>{
+  if(botTimer) return;
+  botTimer = setInterval(checkAndAct, 8000);
+  el('btnStart').disabled=true; el('btnStop').disabled=false;
+  log('Bot started');
+});
+el('btnStop').addEventListener('click', ()=>{
+  if(botTimer){ clearInterval(botTimer); botTimer=null; log('Bot stopped'); }
+  el('btnStart').disabled=false; el('btnStop').disabled=true;
+});
+el('btnClear').addEventListener('click', ()=>{ el('log').textContent=''; });
+
+document.querySelectorAll('.pct button').forEach(b=>{
+  b.addEventListener('click', ()=> autoFillAmountFromBalance(Number(b.getAttribute('data-pct'))||100) );
+});
+
+el('mode').addEventListener('change', refreshMeta);
+
+/* ====== Init ====== */
+(async ()=>{
+  // attempt passive connection info (no popups)
+  if(window.ethereum){
+    try{
+      rawProvider = patchProvider(window.ethereum);
+      web3p = new ethers.providers.Web3Provider(rawProvider, 'any');
+      const accs = await web3p.listAccounts();
+      if(accs.length){
+        signer = web3p.getSigner();
+        account = accs[0];
+        el('address').textContent = account;
+        const net = await web3p.getNetwork();
+        el('network').textContent = `${net.name} (${net.chainId})`;
+        const bnb = await web3p.getBalance(account);
+        el('bnb').textContent = `${fmt(ethers.utils.formatEther(bnb),6)} BNB`;
       }
-
-      // ===== Mode & tokens
-      function applyMode(){
-        const mode = el('mode').value;
-        if(mode === 'buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
-        else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
-        el('decFrom').value = '';
-        el('decTo').value = '';
-        // refresh metadata + balances
-        if(web3Provider && signer) { refreshTokenMetaAndBalance().catch(e=>safeLog('applyMode refresh error: '+e)); }
-      }
-      el('mode').addEventListener('change', applyMode);
-
-      // ===== Read token metadata
-      async function readDecimals(token){
-        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
-        const d = await erc.decimals();
-        return Number(d);
-      }
-      async function readSymbol(token){
-        try{ const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider); return await erc.symbol(); }catch(e){ return token===USDT?'USDT':(token===XRP_BEP20?'XRP':'TOKEN'); }
-      }
-
-      // ===== Balance helpers
-      async function getTokenBalance(token, who){
-        const erc = new ethers.Contract(token, ERC20_ABI_MIN, web3Provider);
-        const [dec, raw] = await Promise.all([
-          readDecimals(token),
-          erc.balanceOf(who)
-        ]);
-        const human = Number(ethers.utils.formatUnits(raw, dec));
-        return {dec, raw, human};
-      }
-      async function autoFillAmountFromBalance(percent=100){
-        try{
-          const mode = el('mode').value;
-          const source = (mode==='buy') ? USDT : XRP_BEP20;
-          const sym = await readSymbol(source);
-          const bal = await getTokenBalance(source, account);
-          lastSourceBalance = bal.human;
-          const take = (Number(percent)||100)/100 * bal.human;
-          el('tokenBalance').value = `${fmt(bal.human)} ${sym}`;
-          el('tokenSymbol').value = sym;
-          el('amount').value = take>0 ? String(take) : '';
-          el('decFrom').value = bal.dec; // also fill decimals for source
-          el('decTo').value = await readDecimals((mode==='buy')?XRP_BEP20:USDT);
-        }catch(e){ safeLog('autoFill error: '+e); }
-      }
-
-      // ===== Router price helpers
-      async function getPriceRaw(tokenIn, tokenOut, amountInHuman){
-        const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)'], web3Provider);
-        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
-        const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
-        try{ const amounts = await router.getAmountsOut(amountIn, [tokenIn, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
-        catch(e){ const amounts = await router.getAmountsOut(amountIn, [tokenIn, WBNB, tokenOut]); return Number(ethers.utils.formatUnits(amounts[amounts.length-1], decOut)); }
-      }
-      async function getPriceUSDTperXRP(slippagePct){
-        const mode = el('mode').value;
-        const tokenFrom = el('tokenFrom').value;
-        const tokenTo = el('tokenTo').value;
-        const oneFrom_toTo = await getPriceRaw(tokenFrom, tokenTo, 1);
-        let routerUSDTperXRP;
-        if(mode === 'buy') routerUSDTperXRP = 1 / oneFrom_toTo; else routerUSDTperXRP = oneFrom_toTo;
-        const slip = Math.max(0, Number(slippagePct) || 0);
-        const execUSDTperXRP = routerUSDTperXRP * (1 - slip/100); // fee Pancake sudah di formula router
-        return {routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo};
-      }
-
-      // ===== Approve & Swap
-      async function approveIfNeeded(token, spender, amountHuman){
-        const {dec} = await getTokenBalance(token, account);
-        const erc = new ethers.Contract(token, ERC20_ABI_MIN, signer);
-        const allowance = await erc.allowance(account, spender);
-        const amount = ethers.utils.parseUnits(String(amountHuman), dec);
-        if(allowance.gte(amount)) { safeLog('Allowance ok'); return true; }
-        const tx = await erc.approve(spender, ethers.constants.MaxUint256);
-        safeLog('Approve sent: ' + tx.hash);
-        await tx.wait(); safeLog('Approve confirmed'); return true;
-      }
-      async function swapExactTokens(tokenIn, tokenOut, amountInHuman, slippagePercent){
-        const decIn = await readDecimals(tokenIn); const decOut = await readDecimals(tokenOut);
-        const router = new ethers.Contract(PANCAKE_ROUTER, ['function getAmountsOut(uint amountIn, address[] memory path) view returns (uint[] memory amounts)','function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external'], signer);
-        const amountIn = ethers.utils.parseUnits(String(amountInHuman), decIn);
-        let path = [tokenIn, tokenOut];
-        try{ await router.getAmountsOut(amountIn, path); }
-        catch(e){ path = [tokenIn, WBNB, tokenOut]; }
-        const amountsOut = await router.getAmountsOut(amountIn, path);
-        const estOut = amountsOut[amountsOut.length-1];
-        const slipBps = Math.floor((Number(slippagePercent)||0.1) * 100);
-        const amountOutMin = estOut.mul(10000 - slipBps).div(10000);
-        await approveIfNeeded(tokenIn, PANCAKE_ROUTER, amountInHuman);
-        const deadline = Math.floor(Date.now()/1000) + 60*10;
-        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, amountOutMin, path, account, deadline, { gasLimit: 800000 });
-        safeLog('Swap sent: ' + tx.hash);
-        const receipt = await tx.wait();
-        safeLog('Swap confirmed: ' + receipt.transactionHash);
-        return receipt;
-      }
-
-      // ===== Connect
-      async function connect(){
-        if(!web3Modal){ alert('Web3Modal tidak tersedia'); return; }
-        try{
-          provider = await web3Modal.connect().catch(()=>null);
-          if(!provider && window.ethereum){ provider = window.ethereum; safeLog('Using window.ethereum fallback'); }
-          if(!provider){ alert('Provider tidak ditemukan. Pastikan Trust Wallet/MetaMask aktif.'); return; }
-          safeProvider = normalizeProvider(provider);
-          web3Provider = new ethers.providers.Web3Provider(safeProvider, 'any');
-          signer = web3Provider.getSigner();
-          try{ account = await signer.getAddress(); }catch(e){ account = null; }
-          if(account) el('address').value = account;
-          const net = await web3Provider.getNetwork(); el('network').value = net.name + ' (' + net.chainId + ')';
-          const bnb = account ? await web3Provider.getBalance(account) : null; el('balance').value = bnb ? (fmt(ethers.utils.formatEther(bnb),6) + ' BNB') : '—';
-          if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke Binance Smart Chain (Mainnet).'); safeLog('Non-BSC network detected: '+net.chainId); }
-
-          // Token metadata + balance fill
-          await refreshTokenMetaAndBalance();
-
-          // Enable buttons
-          el('btnStart').disabled = false; el('btnStop').disabled = false;
-
-          // Pollers
-          if(pollInterval) clearInterval(pollInterval);
-          pollInterval = setInterval(async ()=>{
-            try{
-              const newNet = await web3Provider.getNetwork(); el('network').value = newNet.name + ' (' + newNet.chainId + ')';
-              const newAcc = await signer.getAddress(); if(newAcc && newAcc !== account){ account = newAcc; el('address').value = account; safeLog('account changed'); await refreshTokenMetaAndBalance(); }
-              const bnb2 = await web3Provider.getBalance(account); el('balance').value = fmt(ethers.utils.formatEther(bnb2),6) + ' BNB';
-            }catch(e){}
-          }, 3500);
-
-          if(balancePoll) clearInterval(balancePoll);
-          balancePoll = setInterval(async ()=>{ try{ await autoFillAmountFromBalance(100); }catch(e){} }, 10000);
-
-          safeLog('Connected');
-        }catch(e){ safeLog('connect error: '+e); }
-      }
-
-      async function refreshTokenMetaAndBalance(){
-        try{
-          const mode = el('mode').value;
-          if(mode==='buy'){ el('tokenFrom').value = USDT; el('tokenTo').value = XRP_BEP20; }
-          else { el('tokenFrom').value = XRP_BEP20; el('tokenTo').value = USDT; }
-          const decF = await readDecimals(el('tokenFrom').value); el('decFrom').value = decF;
-          const decT = await readDecimals(el('tokenTo').value); el('decTo').value = decT;
-          await autoFillAmountFromBalance(100); // FULL auto-fill
-        }catch(e){ safeLog('refresh meta/balance error: '+e); }
-      }
-
-      // ===== Bot Loop
-      async function checkAndAct(){
-        try{
-          if(!web3Provider || !signer){ safeLog('Provider/signature not ready'); return; }
-          const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ safeLog('Not on BSC — skipping check'); return; }
-          const tokenFrom = el('tokenFrom').value; const tokenTo = el('tokenTo').value; if(!ethers.utils.isAddress(tokenFrom) || !ethers.utils.isAddress(tokenTo)){ safeLog('Invalid token addresses'); return; }
-          const amount = Number(el('amount').value); if(!amount || amount<=0){ safeLog('Invalid amount'); return; }
-
-          const tp1 = Number(el('tp1').value) || null; const tp2 = Number(el('tp2').value) || null; const tp3 = Number(el('tp3').value) || null; const sl = Number(el('sl').value) || null; const slippage = Number(el('slippage').value) || 0.1;
-
-          const prices = await getPriceUSDTperXRP(slippage);
-          const { routerUSDTperXRP, execUSDTperXRP, oneFrom_toTo } = prices;
-          const mode = el('mode').value;
-
-          if(mode === 'buy'){
-            safeLog(`Router: 1 USDT → ${oneFrom_toTo} XRP | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
-          } else {
-            safeLog(`Router: 1 XRP → ${oneFrom_toTo} USDT | Router ${routerUSDTperXRP} USDT/XRP | Exec ${execUSDTperXRP} (slip ${slippage}%)`);
-          }
-
-          if(mode === 'sell'){
-            if(tp1 && execUSDTperXRP >= tp1){ safeLog('TP1 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
-            if(tp2 && execUSDTperXRP >= tp2){ safeLog('TP2 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
-            if(tp3 && execUSDTperXRP >= tp3){ safeLog('TP3 hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
-            if(sl && execUSDTperXRP <= sl){ safeLog('SL hit — SELL'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
-          } else {
-            if(tp1 && execUSDTperXRP <= tp1){ safeLog('TP1 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp1').value=''; return; }
-            if(tp2 && execUSDTperXRP <= tp2){ safeLog('TP2 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp2').value=''; return; }
-            if(tp3 && execUSDTperXRP <= tp3){ safeLog('TP3 hit — BUY'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); el('tp3').value=''; return; }
-            if(sl && execUSDTperXRP >= sl){ safeLog('SL hit — BUY (stop)'); await swapExactTokens(tokenFrom, tokenTo, amount, slippage); return; }
-          }
-        }catch(e){ safeLog('bot error: ' + e); }
-      }
-
-      // ===== UI Actions
-      document.querySelectorAll('.pct').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pct = Number(btn.getAttribute('data-pct'))||100;
-          autoFillAmountFromBalance(pct).catch(e=>safeLog('pct click error: '+e));
-        });
-      });
-
-      el('btnConnect').addEventListener('click', async ()=>{
-        if(!provider) await connect();
-        else {
-          try{ if(provider && typeof provider.disconnect==='function') await provider.disconnect(); }catch(e){}
-          provider=null; safeProvider=null; web3Provider=null; signer=null; account=null;
-          el('address').value=''; el('network').value=''; el('balance').value='';
-          el('btnStart').disabled=true; el('btnStop').disabled=true; if(pollInterval){clearInterval(pollInterval);pollInterval=null;} if(balancePoll){clearInterval(balancePoll);balancePoll=null;}
-          safeLog('Disconnected');
-        }
-      });
-
-      el('btnStart').addEventListener('click', async ()=>{
-        if(!web3Provider || !signer){ alert('Connect wallet terlebih dahulu'); return; }
-        const net = await web3Provider.getNetwork(); if(Number(net.chainId)!==BSC_CHAIN_ID){ alert('Switch ke BSC Mainnet di wallet Anda'); return; }
-        try{ await readDecimals(el('tokenFrom').value); await readDecimals(el('tokenTo').value);}catch(e){ alert('Token tidak valid di jaringan ini: '+e); return; }
-        el('status').textContent = 'Bot running'; safeLog('Bot started');
-        if(botInterval) clearInterval(botInterval);
-        botInterval = setInterval(checkAndAct, 8000);
-        checkAndAct();
-        el('btnStart').disabled = true; el('btnStop').disabled = false;
-      });
-
-      el('btnStop').addEventListener('click', ()=>{
-        if(botInterval){ clearInterval(botInterval); botInterval=null; el('status').textContent='Bot stopped'; safeLog('Bot stopped'); el('btnStop').disabled=true; el('btnStart').disabled=false; }
-        else { alert('Bot tidak berjalan'); }
-      });
-
-      // Init default UI
-      applyMode();
-    });
-  </script>
+    }catch(e){}
+  }
+  await refreshMeta();
+})();
+</script>
 </body>
 </html>
