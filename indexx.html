@@ -1,500 +1,377 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { AlertCircle, Activity, Play, Pause, Wallet, Settings, LineChart } from "lucide-react";
-import { ethers } from "ethers";
-
-/**
- * PancakeSwap AutoBot — Linear Regression Channel + UT Bot Alerts (ATR-based)
- * Single-file React component (client-side) designed to run in the browser.
- *
- * What it does:
- * - Connects to MetaMask (BSC Mainnet by default)
- * - Lets you pick a token (default WBNB/USDT pair via router path)
- * - Samples on-chain price at a fixed interval, builds local OHLCV bars
- * - Computes Linear Regression Channel (length=100, devUp=2, devDn=2)
- * - Computes UT Bot Alerts (atrPeriod=1, factor=10)
- * - Generates buy/sell signals and can auto-execute swaps on PancakeSwap V2
- * - Includes paper-trading mode for safe testing
- *
- * IMPORTANT: This is provided for educational purposes. Use at your own risk.
- * Always test in paper mode first. Crypto trading involves risk.
- */
-
-// ======= BSC / PancakeSwap constants =======
-const PCS_V2_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E"; // PancakeSwap V2 Router
-const WBNB = "0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
-const USDT = "0x55d398326f99059fF775485246999027B3197955";
-
-// Minimal ABIs
-const ERC20_ABI = [
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)",
-  "function balanceOf(address) view returns (uint256)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)"
-];
-
-const ROUTER_ABI = [
-  // Swaps
-  "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
-  "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
-  "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
-  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
-];
-
-// ======= Helpers: math & indicators =======
-function linearRegression(y) {
-  // y: number[]
-  const n = y.length;
-  if (n === 0) return { slope: 0, intercept: 0 };
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    const xi = i + 1; // 1..n
-    const yi = y[i];
-    sumX += xi; sumY += yi; sumXY += xi * yi; sumXX += xi * xi;
-  }
-  const denom = (n * sumXX - sumX * sumX) || 1e-12;
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  return { slope, intercept };
-}
-
-function stdev(vals) {
-  const n = vals.length; if (!n) return 0;
-  const mean = vals.reduce((a, b) => a + b, 0) / n;
-  const v = vals.reduce((acc, x) => acc + (x - mean) ** 2, 0) / n;
-  return Math.sqrt(v);
-}
-
-// Build OHLC from ticks
-function aggregateBar(existingBar, price, volume) {
-  if (!existingBar) return { open: price, high: price, low: price, close: price, volume: volume ?? 0 };
-  return {
-    open: existingBar.open,
-    high: Math.max(existingBar.high, price),
-    low: Math.min(existingBar.low, price),
-    close: price,
-    volume: (existingBar.volume ?? 0) + (volume ?? 0)
-  };
-}
-
-// ATR with period p over OHLC array
-function computeATR(ohlc, period = 14) {
-  if (ohlc.length < 2) return [];
-  const trs = [];
-  for (let i = 1; i < ohlc.length; i++) {
-    const h = ohlc[i].high, l = ohlc[i].low, pc = ohlc[i - 1].close;
-    const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
-    trs.push(tr);
-  }
-  const atr = [];
-  let ema = null;
-  const k = 2 / (period + 1);
-  for (let i = 0; i < trs.length; i++) {
-    if (i === 0) ema = trs[0]; else ema = k * trs[i] + (1 - k) * ema;
-    atr.push(ema);
-  }
-  return [null, ...atr]; // align with ohlc length
-}
-
-// UT Bot Alerts (approximation of popular TradingView script)
-// params: atrPeriod, factor
-function computeUTBotSignals(ohlc, atrPeriod = 1, factor = 10) {
-  // Returns array of signals: 'buy' | 'sell' | null and trailing stop values
-  if (ohlc.length === 0) return { signals: [], trail: [] };
-  const atrArr = computeATR(ohlc, atrPeriod);
-  const signals = new Array(ohlc.length).fill(null);
-  const trail = new Array(ohlc.length).fill(null);
-
-  let trend = 0; // 1 bull, -1 bear, 0 none
-  let ts = null; // trailing stop
-
-  for (let i = 0; i < ohlc.length; i++) {
-    const c = ohlc[i].close;
-    const atr = atrArr[i] ?? 0;
-    const buyTs = c - factor * atr;
-    const sellTs = c + factor * atr;
-
-    if (trend >= 0) {
-      // bullish or none -> update bullish trail
-      ts = ts == null ? buyTs : Math.max(ts, buyTs);
-      trail[i] = ts;
-      if (c < ts) { trend = -1; signals[i] = 'sell'; ts = sellTs; trail[i] = ts; }
-      else { trend = 1; }
-    } else {
-      // bearish -> update bearish trail
-      ts = ts == null ? sellTs : Math.min(ts, sellTs);
-      trail[i] = ts;
-      if (c > ts) { trend = 1; signals[i] = 'buy'; ts = buyTs; trail[i] = ts; }
-      else { trend = -1; }
-    }
-  }
-  return { signals, trail };
-}
-
-// Linear Regression Channel
-function computeLRC(closes, length = 100, devUp = 2, devDn = 2) {
-  const n = closes.length;
-  if (n < length) return { mid: [], upper: [], lower: [] };
-  const mid = new Array(n).fill(null);
-  const upper = new Array(n).fill(null);
-  const lower = new Array(n).fill(null);
-
-  for (let i = length - 1; i < n; i++) {
-    const window = closes.slice(i - length + 1, i + 1);
-    const { slope, intercept } = linearRegression(window);
-    // last x is length
-    const midVal = slope * length + intercept;
-    const resid = window.map((v, idx) => v - (slope * (idx + 1) + intercept));
-    const sd = stdev(resid);
-    mid[i] = midVal;
-    upper[i] = midVal + devUp * sd;
-    lower[i] = midVal - devDn * sd;
-  }
-  return { mid, upper, lower };
-}
-
-// ======= UI helpers =======
-function Stat({ label, value }) {
-  return (
-    <div className="p-4 rounded-2xl shadow bg-white/70 backdrop-blur border border-gray-200">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-// ======= Main Component =======
-export default function PancakeAutoBot() {
-  const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
-  const [address, setAddress] = useState(null);
-
-  // Trading config
-  const [base, setBase] = useState(USDT); // Quote token for pricing (USDT)
-  const [token, setToken] = useState(WBNB); // Target token to trade
-  const [intervalSec, setIntervalSec] = useState(60); // sampling interval -> builds 1 bar per interval
-  const [barsToKeep, setBarsToKeep] = useState(500);
-  const [autoTrade, setAutoTrade] = useState(false);
-  const [paper, setPaper] = useState(true);
-  const [amountIn, setAmountIn] = useState("0.01"); // amount in base token (e.g., 0.01 USDT if base==USDT with decimals)
-  const [slippage, setSlippage] = useState(0.005); // 0.5%
-
-  // Indicator params
-  const [lrcLen, setLrcLen] = useState(100);
-  const [lrcUp, setLrcUp] = useState(2);
-  const [lrcDn, setLrcDn] = useState(2);
-  const [utAtr, setUtAtr] = useState(1);
-  const [utFactor, setUtFactor] = useState(10);
-
-  const [log, setLog] = useState([]);
-  const [status, setStatus] = useState("Idle");
-
-  // Local series state
-  const barsRef = useRef([]); // each: {time, open, high, low, close}
-  const [lastPrice, setLastPrice] = useState(null);
-
-  // derived
-  const router = useMemo(() => {
-    if (!provider) return null;
-    return new ethers.Contract(PCS_V2_ROUTER, ROUTER_ABI, signer || provider);
-  }, [provider, signer]);
-
-  const pathBuy = useMemo(() => [base, token], [base, token]);
-  const pathSell = useMemo(() => [token, base], [base, token]);
-
-  // ======= Wallet connect =======
-  async function connectWallet() {
-    if (!window.ethereum) { alert("MetaMask not found"); return; }
-    const prov = new ethers.BrowserProvider(window.ethereum);
-    const net = await prov.send("eth_requestAccounts", []);
-    const s = await prov.getSigner();
-    const addr = await s.getAddress();
-    setProvider(prov); setSigner(s); setAddress(addr);
-  }
-
-  // ======= Price sampling via getAmountsOut =======
-  async function fetchPrice() {
-    try {
-      if (!router) return null;
-      const decimalsBase = 18; // assume 18 for simplicity; fetch real decimals in a robust app
-      const one = ethers.parseUnits("1", decimalsBase);
-      const amounts = await router.getAmountsOut(one, pathBuy);
-      const out = Number(ethers.formatUnits(amounts[amounts.length - 1], decimalsBase));
-      return out; // price: 1 base -> out token; we’ll invert to token/base if needed
-    } catch (e) {
-      console.error(e);
-      setStatus(`Price error: ${e.message ?? e}`);
-      return null;
-    }
-  }
-
-  // Build OHLC bars on a clock
-  useEffect(() => {
-    let t = null; let barStart = Date.now(); let currentBar = null;
-    const loop = async () => {
-      const p = await fetchPrice();
-      if (p != null) setLastPrice(p);
-      const now = Date.now();
-      if (!currentBar) currentBar = aggregateBar(null, p ?? lastPrice ?? 0, 0);
-      else currentBar = aggregateBar(currentBar, p ?? lastPrice ?? currentBar.close, 0);
-
-      if (now - barStart >= intervalSec * 1000) {
-        barsRef.current = [...barsRef.current, { time: new Date().toISOString(), ...currentBar }].slice(-barsToKeep);
-        currentBar = null; barStart = now;
-      }
-      t = setTimeout(loop, Math.max(1500, Math.min(intervalSec * 1000 / 3, 5000)));
-    };
-    loop();
-    return () => t && clearTimeout(t);
-  }, [router, intervalSec, barsToKeep, base, token]);
-
-  // ======= Strategy evaluation =======
-  const computed = useMemo(() => {
-    const bars = barsRef.current;
-    const closes = bars.map(b => b.close);
-    const lrc = computeLRC(closes, lrcLen, lrcUp, lrcDn);
-    const ut = computeUTBotSignals(bars, utAtr, utFactor);
-    return { bars, closes, lrc, ut };
-  }, [barsRef.current, lrcLen, lrcUp, lrcDn, utAtr, utFactor]);
-
-  const lastSignal = useMemo(() => {
-    const s = computed.ut.signals; if (!s || !s.length) return null;
-    for (let i = s.length - 1; i >= 0; i--) if (s[i]) return { index: i, type: s[i] };
-    return null;
-  }, [computed]);
-
-  function pushLog(msg) {
-    setLog(prev => [
-      { time: new Date().toLocaleTimeString(), msg },
-      ...prev
-    ].slice(0, 200));
-  }
-
-  // ======= Trading actions =======
-  async function ensureApproval(tokenAddr, spender, amount) {
-    const erc = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
-    const allowance = await erc.allowance(address, spender);
-    if (allowance < amount) {
-      const tx = await erc.approve(spender, amount);
-      pushLog(`Approve ${tokenAddr} → ${spender} (tx: ${tx.hash})`);
-      await tx.wait();
-    }
-  }
-
-  async function executeTrade(direction) {
-    if (!router || !signer) { alert("Connect wallet first"); return; }
-
-    const baseDecimals = 18; // NOTE: for production, query decimals from token contracts
-    const amountInUnits = ethers.parseUnits(amountIn, baseDecimals);
-    const deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 minutes
-    const amountsOut = await router.getAmountsOut(amountInUnits, direction === 'buy' ? pathBuy : pathSell);
-    const outMin = amountsOut[amountsOut.length - 1] * BigInt(1 - slippage);
-
-    if (paper) {
-      pushLog(`[PAPER] ${direction.toUpperCase()} amountIn=${amountIn} path=${direction === 'buy' ? 'BASE→TOKEN' : 'TOKEN→BASE'} outMin≈${ethers.formatUnits(outMin, baseDecimals)}`);
-      return;
-    }
-
-    try {
-      let tx;
-      if (direction === 'buy') {
-        // Spend BASE to buy TOKEN
-        // If BASE is not native BNB, we route Tokens→Tokens
-        if (base === ethers.ZeroAddress) {
-          tx = await router.swapExactETHForTokens(outMin, pathBuy, address, deadline, { value: amountInUnits });
-        } else {
-          await ensureApproval(base, PCS_V2_ROUTER, amountInUnits);
-          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, pathBuy, address, deadline);
-        }
-      } else {
-        // Sell TOKEN to BASE
-        const erc = new ethers.Contract(token, ERC20_ABI, signer);
-        const balance = await erc.balanceOf(address);
-        const sellAmt = balance < amountInUnits ? balance : amountInUnits;
-        await ensureApproval(token, PCS_V2_ROUTER, sellAmt);
-        if (base === ethers.ZeroAddress) {
-          tx = await router.swapExactTokensForETH(sellAmt, outMin, pathSell, address, deadline);
-        } else {
-          tx = await router.swapExactTokensForTokens(sellAmt, outMin, pathSell, address, deadline);
-        }
-      }
-      pushLog(`${direction.toUpperCase()} sent (tx: ${tx.hash})`);
-      await tx.wait();
-      pushLog(`${direction.toUpperCase()} confirmed.`);
-    } catch (e) {
-      pushLog(`Trade failed: ${e.message ?? e}`);
-    }
-  }
-
-  // Auto executor
-  useEffect(() => {
-    if (!autoTrade) return;
-    let ticking = false;
-    const h = setInterval(() => {
-      if (ticking) return; ticking = true;
-      try {
-        const { bars, lrc, ut } = computed;
-        if (!bars.length) return;
-        const i = bars.length - 1;
-        const sig = ut.signals[i];
-        const c = bars[i].close;
-        const up = lrc.upper[i]; const lo = lrc.lower[i];
-
-        // Rule example:
-        // - BUY when UT Bot says 'buy' AND price < LRC mid (value zone)
-        // - SELL when UT Bot says 'sell' OR price > LRC upper (overextended)
-        if (sig === 'buy' && c <= (lrc.mid[i] ?? Infinity)) {
-          pushLog(`Signal BUY @ ${c.toFixed(8)}`);
-          executeTrade('buy');
-        } else if (sig === 'sell' || (up != null && c > up)) {
-          pushLog(`Signal SELL @ ${c.toFixed(8)}`);
-          executeTrade('sell');
-        }
-      } finally {
-        ticking = false;
-      }
-    }, 3000);
-    return () => clearInterval(h);
-  }, [autoTrade, computed, amountIn, slippage, paper]);
-
-  // ======= Simple sparkline chart (SVG) =======
-  function MiniChart() {
-    const closes = computed.closes;
-    if (closes.length < 5) return <div className="text-xs text-gray-400">waiting for data…</div>;
-    const w = 600, h = 160, pad = 12;
-    const min = Math.min(...closes), max = Math.max(...closes);
-    const scaleX = (i) => pad + (i / (closes.length - 1)) * (w - pad * 2);
-    const scaleY = (v) => pad + (1 - (v - min) / (max - min || 1)) * (h - pad * 2);
-
-    const last = closes.length - 1;
-    const path = closes.map((v, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(v)}`).join(' ');
-
-    // LRC bands
-    const { upper, lower, mid } = computed.lrc;
-    const bandPath = (arr) => arr.map((v, i) => v == null ? null : `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(v)}`).filter(Boolean).join(' ');
-
-    return (
-      <svg width={w} height={h} className="rounded-2xl bg-white/60 border border-gray-200">
-        {/* Bands */}
-        <path d={bandPath(lower)} strokeWidth="1" strokeDasharray="4 2" fill="none" />
-        <path d={bandPath(upper)} strokeWidth="1" strokeDasharray="4 2" fill="none" />
-        <path d={bandPath(mid)} strokeWidth="1.5" fill="none" />
-        {/* Price */}
-        <path d={path} strokeWidth="2" fill="none" />
-        {/* Last point */}
-        <circle cx={scaleX(last)} cy={scaleY(closes[last])} r={3} />
-      </svg>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white text-gray-900">
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <LineChart className="w-8 h-8" />
-            <h1 className="text-2xl font-bold">PancakeSwap AutoBot — LRC(100,2,2) + UTBot(1,10)</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PancakeSwap AutoBot — USDT↔CAKE (LRC + UTBot)</title>
+  <style>
+    :root { --bg:#fffaf2; --card:#ffffffcc; --border:#e8e2d9; --text:#1e1b16; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; color:var(--text); background:linear-gradient(#fff7e6,#fff); }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .row { display:grid; grid-template-columns: 1.8fr 1fr; gap:16px; }
+    h1 { font-size: 20px; margin:0 0 12px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow: 0 8px 20px rgba(0,0,0,.04); }
+    .controls { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    .controls label { font-size:12px; opacity:.8; }
+    .controls input { width:100%; padding:8px 10px; border-radius:12px; border:1px solid #ddd; background:#fff; }
+    .controls .col3 { grid-column: span 2; }
+    .btn { border:0; border-radius:16px; padding:10px 14px; font-weight:600; cursor:pointer; }
+    .btn.primary{ background:#111; color:#fff; }
+    .btn.buy{ background:#2563eb; color:#fff; }
+    .btn.sell{ background:#f59e0b; color:#fff; }
+    .btn.auto{ background:#16a34a; color:#fff; }
+    .btn.stop{ background:#dc2626; color:#fff; }
+    .statgrid{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+    .stat{ background:#ffffff80; border:1px solid var(--border); border-radius:14px; padding:12px; }
+    .stat .lbl{ font-size:12px; opacity:.7 }
+    .stat .val{ font-size:18px; font-weight:700 }
+    .log{ max-height:220px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:#fff; font-size:12px }
+    .tests li.pass{ color:#15803d } .tests li.fail{ color:#b91c1c }
+    #chart{ height:420px; }
+  </style>
+  <!-- Ethers v6 -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <!-- Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <div class="card">
+          <h1>PancakeSwap AutoBot — USDT↔CAKE · LRC(100,2,2) + UTBot(1,10)</h1>
+          <div id="chart"></div>
+          <div class="statgrid" style="margin-top:12px">
+            <div class="stat"><div class="lbl">Price (1 USDT → CAKE)</div><div class="val" id="statPrice">—</div></div>
+            <div class="stat"><div class="lbl">Bars</div><div class="val" id="statBars">0</div></div>
+            <div class="stat"><div class="lbl">Last Signal</div><div class="val" id="statSignal">—</div></div>
           </div>
-          <button onClick={connectWallet} className="px-4 py-2 rounded-2xl shadow bg-black text-white flex items-center gap-2">
-            <Wallet className="w-4 h-4" />
-            {address ? `${address.slice(0,6)}…${address.slice(-4)}` : "Connect"}
-          </button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          <Stat label="Price (1 BASE → TOKEN)" value={lastPrice ? lastPrice.toFixed(8) : "—"} />
-          <Stat label="Bars" value={barsRef.current.length} />
-          <Stat label="Last Signal" value={lastSignal ? lastSignal.type.toUpperCase() : "—"} />
+        <div class="card" style="margin-top:12px">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <button class="btn primary" id="btnConnect">Connect (TrustWallet/MetaMask)</button>
+            <span class="pill">Addr: <span id="addr">—</span></span>
+            <button class="btn auto" id="btnAuto">Start Auto</button>
+            <button class="btn buy" id="btnBuy">Manual BUY</button>
+            <button class="btn sell" id="btnSell">Manual SELL</button>
+            <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
+          </div>
+          <div class="controls" style="margin-top:10px">
+            <div>
+              <label>BASE (USDT)</label>
+              <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
+            </div>
+            <div>
+              <label>TOKEN (CAKE)</label>
+              <input id="token" value="0x0E09FABB73Bd3Ade0a17ECC321fD13a19e81cE82" />
+            </div>
+            <div>
+              <label>Interval (sec)</label>
+              <input id="interval" type="number" value="60" />
+            </div>
+            <div>
+              <label>Bars to keep</label>
+              <input id="barsKeep" type="number" value="600" />
+            </div>
+            <div>
+              <label>Amount In (BASE)</label>
+              <input id="amountIn" value="1.0" />
+            </div>
+            <div>
+              <label>Slippage (e.g. 0.005)</label>
+              <input id="slippage" value="0.005" />
+            </div>
+            <div>
+              <label>LRC length</label>
+              <input id="lrcLen" type="number" value="100" />
+            </div>
+            <div>
+              <label>LRC dev up/down</label>
+              <input id="lrcDev" type="number" value="2" />
+            </div>
+            <div>
+              <label>UT ATR</label>
+              <input id="utAtr" type="number" value="1" />
+            </div>
+            <div>
+              <label>UT Factor</label>
+              <input id="utFactor" type="number" value="10" />
+            </div>
+            <div class="col3">
+              <small>Notes: Uses PancakeSwap V2 Router for quotes and swaps. For safety, start in <b>Paper mode</b>. Candles are built locally from sampled prices.</small>
+            </div>
+          </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2">
-            <MiniChart />
-          </div>
-          <div className="space-y-4">
-            <div className="p-4 rounded-2xl shadow bg-white/70 border">
-              <div className="flex items-center gap-2 mb-3 font-semibold"><Settings className="w-4 h-4"/> Trading Settings</div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <label className="flex flex-col">Base (quote)
-                  <input className="input" value={base} onChange={e=>setBase(e.target.value)} />
-                </label>
-                <label className="flex flex-col">Token
-                  <input className="input" value={token} onChange={e=>setToken(e.target.value)} />
-                </label>
-                <label className="flex flex-col">Interval (sec)
-                  <input type="number" className="input" value={intervalSec} onChange={e=>setIntervalSec(+e.target.value||1)} />
-                </label>
-                <label className="flex flex-col">Bars to keep
-                  <input type="number" className="input" value={barsToKeep} onChange={e=>setBarsToKeep(+e.target.value||100)} />
-                </label>
-                <label className="flex flex-col">Amount In (BASE)
-                  <input className="input" value={amountIn} onChange={e=>setAmountIn(e.target.value)} />
-                </label>
-                <label className="flex flex-col">Slippage (e.g. 0.005)
-                  <input className="input" value={slippage} onChange={e=>setSlippage(parseFloat(e.target.value)||0)} />
-                </label>
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-sm mt-3">
-                <label className="flex flex-col">LRC len
-                  <input type="number" className="input" value={lrcLen} onChange={e=>setLrcLen(+e.target.value||10)} />
-                </label>
-                <label className="flex flex-col">LRC dev Up
-                  <input type="number" className="input" value={lrcUp} onChange={e=>setLrcUp(+e.target.value||1)} />
-                </label>
-                <label className="flex flex-col">LRC dev Dn
-                  <input type="number" className="input" value={lrcDn} onChange={e=>setLrcDn(+e.target.value||1)} />
-                </label>
-                <label className="flex flex-col">UT ATR
-                  <input type="number" className="input" value={utAtr} onChange={e=>setUtAtr(+e.target.value||1)} />
-                </label>
-                <label className="flex flex-col">UT Factor
-                  <input type="number" className="input" value={utFactor} onChange={e=>setUtFactor(+e.target.value||1)} />
-                </label>
-              </div>
-              <div className="flex gap-3 mt-4">
-                <button onClick={()=>setAutoTrade(s=>!s)} className={`px-4 py-2 rounded-2xl shadow flex items-center gap-2 ${autoTrade? 'bg-red-600 text-white':'bg-green-600 text-white'}`}>
-                  {autoTrade ? <Pause className="w-4 h-4"/> : <Play className="w-4 h-4"/>}
-                  {autoTrade ? 'Stop Auto' : 'Start Auto'}
-                </button>
-                <button onClick={()=>executeTrade('buy')} className="px-4 py-2 rounded-2xl shadow bg-blue-600 text-white">Manual BUY</button>
-                <button onClick={()=>executeTrade('sell')} className="px-4 py-2 rounded-2xl shadow bg-yellow-500 text-white">Manual SELL</button>
-                <label className="ml-auto flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={paper} onChange={e=>setPaper(e.target.checked)} /> Paper mode
-                </label>
-              </div>
-            </div>
+        <div class="card" style="margin-top:12px">
+          <b>Logs</b>
+          <div class="log" id="logs"></div>
+        </div>
 
-            <div className="p-4 rounded-2xl shadow bg-white/70 border max-h-64 overflow-auto text-sm">
-              <div className="flex items-center gap-2 mb-2 font-semibold"><Activity className="w-4 h-4"/> Logs</div>
-              <ul className="space-y-1">
-                {log.map((l, idx) => (
-                  <li key={idx} className="font-mono"><span className="text-xs text-gray-500">[{l.time}]</span> {l.msg}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-4 rounded-2xl shadow bg-white/70 border text-sm flex gap-2">
-              <AlertCircle className="w-4 h-4 mt-0.5"/>
-              <div>
-                <div className="font-semibold">Notes & Disclaimers</div>
-                <ul className="list-disc ml-5">
-                  <li>Test in <b>Paper mode</b> first. Real trades require gas and carry risk.</li>
-                  <li>Addresses default to USDT→WBNB. You can paste any BEP-20 addresses.</li>
-                  <li>Decimals are assumed as 18 for brevity. For production, query decimals and handle non-18 tokens correctly.</li>
-                  <li>Sampling builds local OHLC bars; results won’t match exchange candles 1:1.</li>
-                  <li>Strategy logic provided as a starting point. Tune as needed.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+        <div class="card" style="margin-top:12px">
+          <b>Self‑Tests</b>
+          <ul class="tests" id="tests"></ul>
         </div>
       </div>
 
-      {/* Styles for inputs */}
-      <style>{`
-        .input { @apply mt-1 px-3 py-2 rounded-xl border border-gray-300 bg-white/80; }
-      `}</style>
+      <div>
+        <div class="card">
+          <b>How it trades</b>
+          <ol>
+            <li>BUY if UT Bot = <i>buy</i> and price ≤ LRC mid.</li>
+            <li>SELL if UT Bot = <i>sell</i> or price &gt; LRC upper.</li>
+          </ol>
+          <p>Default pair: <b>USDT ↔ CAKE</b> (BSC mainnet).</p>
+          <p>Connect button will prefer TrustWallet provider if present, else fallback to MetaMask or any EIP‑1193 provider.</p>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <b>Disclaimers</b>
+          <ul>
+            <li>Educational sample. Use at your own risk.</li>
+            <li>Gas fees apply for real trades. Check liquidity and tokens.</li>
+            <li>Decimals assumed 18 for simplicity; production should query decimals.</li>
+          </ul>
+        </div>
+      </div>
     </div>
-  );
-}
+  </div>
+
+<script>
+(() => {
+  const { BrowserProvider, JsonRpcProvider, Contract, ZeroAddress, formatUnits, parseUnits } = ethers;
+
+  // ---------- Config ----------
+  const PCS_V2_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
+  const ROUTER_ABI = [
+    "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
+    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
+    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
+    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
+  ];
+  const ERC20_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ];
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const elPrice = $("statPrice"), elBars = $("statBars"), elSignal = $("statSignal"), elLogs = $("logs");
+  const elBase = $("base"), elToken = $("token"), elInterval = $("interval"), elBarsKeep = $("barsKeep"), elAmountIn=$("amountIn"), elSlip=$("slippage");
+  const elLrcLen=$("lrcLen"), elLrcDev=$("lrcDev"), elUtAtr=$("utAtr"), elUtFactor=$("utFactor"), elAddr=$("addr"), elPaper=$("paper");
+  const btnConn=$("btnConnect"), btnAuto=$("btnAuto"), btnBuy=$("btnBuy"), btnSell=$("btnSell");
+
+  // ---------- Providers ----------
+  const readProvider = new JsonRpcProvider(DEFAULT_RPC);
+  let walletProvider = null; // BrowserProvider
+  let signer = null; let address = null;
+
+  // ---------- Chart ----------
+  const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
+    rightPriceScale: { borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } },
+    crosshair:{ mode:1 }, width: document.getElementById('chart').clientWidth, height:420
+  });
+  const candleSeries = chart.addCandlestickSeries();
+  const upperLine = chart.addLineSeries({ lineWidth:1, lineStyle:1 });
+  const lowerLine = chart.addLineSeries({ lineWidth:1, lineStyle:1 });
+  const midLine   = chart.addLineSeries({ lineWidth:2 });
+  const trailLine = chart.addLineSeries({ lineWidth:1, lineStyle:3 });
+  window.addEventListener('resize', () => chart.applyOptions({ width: document.getElementById('chart').clientWidth }));
+
+  // ---------- State ----------
+  let bars = []; // {t, open, high, low, close}
+  let lastPrice = null;
+  let auto = false;
+  let samplerTimer = null;
+
+  const routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
+  const getPathBuy = () => [elBase.value, elToken.value];
+  const getPathSell = () => [elToken.value, elBase.value];
+
+  // ---------- Utils ----------
+  function log(msg){ const line = `[${new Date().toLocaleTimeString()}] ${msg}`; elLogs.innerText = line + "\n" + elLogs.innerText; }
+  function aggregateBar(existingBar, price){
+    if (!existingBar) return { open: price, high: price, low: price, close: price };
+    return { open: existingBar.open, high: Math.max(existingBar.high, price), low: Math.min(existingBar.low, price), close: price };
+  }
+  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
+  function stdev(vals){ const n=vals.length; if(!n) return 0; const mean=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-mean)**2,0)/n; return Math.sqrt(v); }
+  function computeLRC(closes, length=100, devUp=2, devDn=2){ const n=closes.length; const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null); if(n<length) return {mid,upper,lower}; for(let i=length-1;i<n;i++){ const win=closes.slice(i-length+1,i+1); const {slope,intercept}=linearRegression(win); const midVal=slope*length+intercept; const resid=win.map((v,idx)=>v-(slope*(idx+1)+intercept)); const sd=stdev(resid); mid[i]=midVal; upper[i]=midVal+devUp*sd; lower[i]=midVal-devDn*sd; } return {mid,upper,lower}; }
+  function computeATR(ohlc, period=14){ if(ohlc.length<2) return []; const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high,l=ohlc[i].low,pc=ohlc[i-1].close; const tr=Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)); trs.push(tr);} const atr=[]; let ema=null; const k=2/(period+1); for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i]+(1-k)*ema; atr.push(ema);} return [null,...atr]; }
+  function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){ const atrArr=computeATR(ohlc, atrPeriod); const signals=new Array(ohlc.length).fill(null); const trail=new Array(ohlc.length).fill(null); let trend=0; let ts=null; for(let i=0;i<ohlc.length;i++){ const c=ohlc[i].close; const atr=atrArr[i] ?? 0; const buyTs=c - factor*atr; const sellTs=c + factor*atr; if(trend>=0){ ts = ts==null? buyTs: Math.max(ts,buyTs); trail[i]=ts; if(c<ts){ trend=-1; signals[i]='sell'; ts=sellTs; trail[i]=ts; } else { trend=1; } } else { ts = ts==null? sellTs: Math.min(ts,sellTs); trail[i]=ts; if(c>ts){ trend=1; signals[i]='buy'; ts=buyTs; trail[i]=ts; } else { trend=-1; } } } return {signals, trail}; }
+
+  function calcOutMin(amountOut, slipFloat){ const bps=10000n; const slipBps = BigInt(Math.floor(slipFloat*10000)); return (amountOut * (bps - slipBps))/bps; }
+
+  async function detectWalletProvider(){
+    const any = window.ethereum;
+    if (!any) return null;
+    // Prefer TrustWallet if present
+    if (window.trustwallet) return new BrowserProvider(window.trustwallet);
+    if (any.providers && Array.isArray(any.providers)){
+      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
+      if (trust) return new BrowserProvider(trust);
+      const mm = any.providers.find(p=>p.isMetaMask);
+      if (mm) return new BrowserProvider(mm);
+      return new BrowserProvider(any.providers[0]);
+    }
+    return new BrowserProvider(any);
+  }
+
+  async function connectWallet(){
+    walletProvider = await detectWalletProvider();
+    if (!walletProvider){ alert('EIP-1193 wallet not found'); return; }
+    await walletProvider.send('eth_requestAccounts', []);
+    signer = await walletProvider.getSigner();
+    address = await signer.getAddress();
+    elAddr.textContent = address.slice(0,6)+"…"+address.slice(-4);
+    log('Wallet connected.');
+  }
+
+  async function fetchPrice(){
+    try{
+      const one = parseUnits('1', 18); // assume 18 for USDT just for quoting
+      const amounts = await routerRead.getAmountsOut(one, getPathBuy());
+      const out = Number(formatUnits(amounts[amounts.length-1], 18));
+      return out;
+    }catch(e){ log('Price error: '+(e.message||e)); return null; }
+  }
+
+  function updateChart(){
+    const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
+    candleSeries.setData(cand);
+    const closes = bars.map(b=>b.close);
+    const lrc = computeLRC(closes, Number(elLrcLen.value||100), Number(elLrcDev.value||2), Number(elLrcDev.value||2));
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const toSeries = (arr) => bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
+    upperLine.setData(toSeries(lrc.upper));
+    lowerLine.setData(toSeries(lrc.lower));
+    midLine.setData(toSeries(lrc.mid));
+    trailLine.setData(toSeries(ut.trail));
+  }
+
+  async function sampleLoop(){
+    let barStart = Date.now(); let currentBar = null;
+    const intervalMs = Math.max(1000, Number(elInterval.value||60)*1000);
+    const keep = Number(elBarsKeep.value||600);
+    async function tick(){
+      const p = await fetchPrice();
+      if (p!=null){ lastPrice = p; elPrice.textContent = p.toFixed(8); }
+      const now = Date.now();
+      if (!currentBar) currentBar = aggregateBar(null, p ?? lastPrice ?? 0);
+      else currentBar = aggregateBar(currentBar, p ?? lastPrice ?? currentBar.close);
+      if (now - barStart >= intervalMs){
+        bars = [...bars, { t: now, ...currentBar }].slice(-keep);
+        elBars.textContent = bars.length;
+        updateChart();
+        // Evaluate strategy + maybe trade
+        evaluateAndMaybeTrade();
+        currentBar = null; barStart = now;
+      }
+      samplerTimer = setTimeout(tick, Math.min(intervalMs/3, 5000));
+    }
+    if (samplerTimer) clearTimeout(samplerTimer);
+    tick();
+  }
+
+  function lastSignalOf(ut){ for(let i=ut.signals.length-1;i>=0;i--){ if(ut.signals[i]) return { index:i, type:ut.signals[i] }; } return null; }
+
+  async function evaluateAndMaybeTrade(){
+    if (!auto) return;
+    if (!bars.length) return;
+    const i = bars.length-1;
+    const closes = bars.map(b=>b.close);
+    const lrc = computeLRC(closes, Number(elLrcLen.value||100), Number(elLrcDev.value||2), Number(elLrcDev.value||2));
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const sig = ut.signals[i];
+    const price = bars[i].close;
+    let decided = null;
+    if (sig === 'buy' && price <= (lrc.mid[i] ?? Infinity)) decided = 'buy';
+    else if (sig === 'sell' || (lrc.upper[i]!=null && price > lrc.upper[i])) decided = 'sell';
+
+    if (decided){
+      elSignal.textContent = decided.toUpperCase();
+      log(`Signal ${decided.toUpperCase()} @ ${price.toFixed(8)}`);
+      await executeTrade(decided);
+    }
+  }
+
+  async function ensureApproval(tokenAddr, spender, amount){
+    if (!signer) return;
+    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
+    const allowance = await erc.allowance(address, spender);
+    if (allowance < amount){ const tx = await erc.approve(spender, amount); log('Approve tx '+tx.hash); await tx.wait(); }
+  }
+
+  async function executeTrade(direction){
+    if (elPaper.checked){ log('[PAPER] '+direction.toUpperCase()); return; }
+    if (!signer){ alert('Connect wallet first'); return; }
+    const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
+    const baseDecimals = 18; // simplify
+    const amountInUnits = parseUnits(String(elAmountIn.value||'0'), baseDecimals);
+    const deadline = Math.floor(Date.now()/1000) + 300;
+    const path = direction==='buy' ? getPathBuy() : getPathSell();
+    const amountsOut = await router.getAmountsOut(amountInUnits, path);
+    const outMin = calcOutMin(amountsOut[amountsOut.length-1], Number(elSlip.value||0));
+
+    try{
+      let tx;
+      if (direction==='buy'){
+        if (path[0] === ZeroAddress){
+          tx = await router.swapExactETHForTokens(outMin, path, address, deadline, { value: amountInUnits });
+        } else {
+          await ensureApproval(path[0], PCS_V2_ROUTER, amountInUnits);
+          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
+        }
+      } else {
+        const sellToken = path[0];
+        await ensureApproval(sellToken, PCS_V2_ROUTER, amountInUnits);
+        if (path[path.length-1] === ZeroAddress){
+          tx = await router.swapExactTokensForETH(amountInUnits, outMin, path, address, deadline);
+        } else {
+          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
+        }
+      }
+      log(direction.toUpperCase()+" sent: "+tx.hash);
+      await tx.wait();
+      log(direction.toUpperCase()+" confirmed");
+    }catch(e){ log('Trade failed: '+(e.reason||e.message||e)); }
+  }
+
+  // ---------- Events ----------
+  btnConn.onclick = connectWallet;
+  btnAuto.onclick = () => { auto = !auto; btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto'; btnAuto.className = 'btn ' + (auto? 'stop' : 'auto'); log('Auto: '+(auto?'ON':'OFF')); };
+  btnBuy.onclick = () => executeTrade('buy');
+  btnSell.onclick = () => executeTrade('sell');
+
+  // Start sampler immediately
+  sampleLoop();
+
+  // ---------- Self Tests ----------
+  (function runTests(){
+    const tests = [];
+    // linearRegression on y=2x+3, x=1..5
+    const lr = linearRegression([5,7,9,11,13]);
+    tests.push({name:'LR slope≈2', pass: Math.abs(lr.slope-2) < 1e-9});
+    tests.push({name:'LR intercept≈3', pass: Math.abs(lr.intercept-3) < 1e-9});
+    // LRC last mid defined
+    const lrc = computeLRC([5,7,9,11,13], 5, 2, 2);
+    tests.push({name:'LRC mid defined', pass: lrc.mid[4]!=null});
+    // UT on flat series → no signals
+    const flat = Array.from({length:20},()=>({open:1,high:1,low:1,close:1}));
+    const ut = computeUTBotSignals(flat, 1, 10);
+    tests.push({name:'UT flat has no signals', pass: ut.signals.every(x=>x==null)});
+
+    const ul = document.getElementById('tests');
+    ul.innerHTML = tests.map(t=>`<li class="${t.pass?'pass':'fail'}">${t.name}: ${t.pass?'PASS':'FAIL'}</li>`).join('');
+  })();
+})();
+</script>
+</body>
+</html>
