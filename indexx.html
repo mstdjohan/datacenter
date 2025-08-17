@@ -1,136 +1,371 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="id">
 <head>
-  <meta charset="utf-8">
-  <title>PancakeSwap Auto Bot — USDT↔CAKE</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoBot PancakeSwap — USDT↔CAKE · LRC(open,100,2,2) + UTBot(1,10)</title>
   <style>
-    body { font-family: Arial, sans-serif; background:#111; color:#eee; }
-    #chart { width:100%; height:400px; }
-    button { margin:5px; padding:10px; border-radius:8px; border:none; cursor:pointer; }
-    .buy { background:#2ecc71; color:#fff; }
-    .sell { background:#e74c3c; color:#fff; }
+    :root { --bg:#fffaf2; --card:#ffffffcc; --border:#e8e2d9; --text:#1e1b16; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; color:var(--text); background:linear-gradient(#fff7e6,#fff); }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .row { display:grid; grid-template-columns: 1.8fr 1fr; gap:16px; }
+    h1 { font-size: 20px; margin:0 0 12px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow: 0 8px 20px rgba(0,0,0,.04); }
+    .controls { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    .controls label { font-size:12px; opacity:.8; }
+    .controls input { width:100%; padding:8px 10px; border-radius:12px; border:1px solid #ddd; background:#fff; }
+    .controls .col3 { grid-column: span 2; }
+    .btn { border:0; border-radius:16px; padding:10px 14px; font-weight:600; cursor:pointer; }
+    .btn.primary{ background:#111; color:#fff; }
+    .btn.buy{ background:#2563eb; color:#fff; }
+    .btn.sell{ background:#f59e0b; color:#fff; }
+    .btn.auto{ background:#16a34a; color:#fff; }
+    .btn.stop{ background:#dc2626; color:#fff; }
+    .statgrid{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+    .stat{ background:#ffffff80; border:1px solid var(--border); border-radius:14px; padding:12px; }
+    .stat .lbl{ font-size:12px; opacity:.7 }
+    .stat .val{ font-size:18px; font-weight:700 }
+    .log{ max-height:220px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; white-space:pre-wrap }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:#fff; font-size:12px }
+    .tests li.pass{ color:#15803d } .tests li.fail{ color:#b91c1c }
+    #chart{ height:460px; }
   </style>
+  <!-- Ethers v6 UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <!-- TradingView Lightweight Charts (candles ready out of the box) -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-  <h2>PancakeSwap Auto Bot — USDT ↔ CAKE</h2>
-  <button onclick="connectWallet()">Connect TrustWallet/MetaMask</button>
-  <button class="buy" onclick="manualBuy()">Manual BUY</button>
-  <button class="sell" onclick="manualSell()">Manual SELL</button>
-  <button onclick="toggleAuto()">Start/Stop Auto</button>
-  <canvas id="chart"></canvas>
-  <pre id="log"></pre>
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <div class="card">
+          <h1>AutoBot — USDT↔CAKE · LRC(<b>open</b>,100,2,2) + UTBot(1,10)</h1>
+          <div id="chart"></div>
+          <div class="statgrid" style="margin-top:12px">
+            <div class="stat"><div class="lbl">Price (1 USDT → CAKE)</div><div class="val" id="statPrice">—</div></div>
+            <div class="stat"><div class="lbl">Bars</div><div class="val" id="statBars">0</div></div>
+            <div class="stat"><div class="lbl">Last Signal</div><div class="val" id="statSignal">—</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <button class="btn primary" id="btnConnect">Connect (TrustWallet/MetaMask)</button>
+            <span class="pill">Addr: <span id="addr">—</span></span>
+            <button class="btn auto" id="btnAuto">Start Auto</button>
+            <button class="btn buy" id="btnBuy">Manual BUY</button>
+            <button class="btn sell" id="btnSell">Manual SELL</button>
+            <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
+          </div>
+          <div class="controls" style="margin-top:10px">
+            <div>
+              <label>BASE (USDT)</label>
+              <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
+            </div>
+            <div>
+              <label>TOKEN (CAKE)</label>
+              <input id="token" value="0x0E09FABB73Bd3Ade0a17ECC321fD13a19e81cE82" />
+            </div>
+            <div>
+              <label>Interval (sec)</label>
+              <input id="interval" type="number" value="60" />
+            </div>
+            <div>
+              <label>Bars to keep</label>
+              <input id="barsKeep" type="number" value="600" />
+            </div>
+            <div>
+              <label>Amount In (BASE)</label>
+              <input id="amountIn" value="1.0" />
+            </div>
+            <div>
+              <label>Slippage (e.g. 0.005)</label>
+              <input id="slippage" value="0.005" />
+            </div>
+            <div>
+              <label>UT ATR</label>
+              <input id="utAtr" type="number" value="1" />
+            </div>
+            <div>
+              <label>UT Factor</label>
+              <input id="utFactor" type="number" value="10" />
+            </div>
+            <div class="col3">
+              <small>Catatan: Gunakan <b>Paper mode</b> dahulu. Candle dibangun dari sampling on-chain (bukan data exchange). LRC memakai <b>open</b> price sesuai permintaan.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <b>Logs</b>
+          <div class="log" id="logs"></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <b>Self‑Tests</b>
+          <ul class="tests" id="tests"></ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <b>Aturan Eksekusi</b>
+          <ol>
+            <li><b>BUY</b> jika UT Bot = <i>buy</i> dan harga ≤ LRC mid.</li>
+            <li><b>SELL</b> jika UT Bot = <i>sell</i> atau harga &gt; LRC upper.</li>
+          </ol>
+          <p>Default pair: <b>USDT ↔ CAKE</b> (BSC mainnet).</p>
+          <p>Connect memprioritaskan TrustWallet bila tersedia, lalu MetaMask / penyedia EIP‑1193 lain.</p>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <b>Disclaimer</b>
+          <ul>
+            <li>Contoh edukasi. Risiko ditanggung pengguna.</li>
+            <li>Biaya gas berlaku untuk trade nyata. Pastikan likuiditas & token benar.</li>
+            <li>Desimal disederhanakan 18; produksi sebaiknya query decimals token.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
-const log = (msg) => {
-  const ts = new Date().toLocaleTimeString();
-  document.getElementById('log').textContent += `\n[${ts}] ${msg}`;
-};
+(() => {
+  const { BrowserProvider, JsonRpcProvider, Contract, ZeroAddress, formatUnits, parseUnits, getAddress } = ethers;
 
-let provider;
-let signer;
-let router;
-let auto = false;
-let bars = [];
+  // ---------- Konstanta ----------
+  const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
+  const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
+  const ROUTER_ABI = [
+    "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
+    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
+    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
+    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
+  ];
+  const ERC20_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ];
 
-// Addresses (normalized with getAddress)
-const USDT = ethers.getAddress("0x55d398326f99059fF775485246999027B3197955");
-const CAKE = ethers.getAddress("0x0E09FABB73Bd3Ade0a17ECC321fD13a19e81cE82");
-const ROUTER = ethers.getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const elPrice = $("statPrice"), elBars = $("statBars"), elSignal = $("statSignal"), elLogs = $("logs");
+  const elBase = $("base"), elToken = $("token"), elInterval = $("interval"), elBarsKeep = $("barsKeep"), elAmountIn=$("amountIn"), elSlip=$("slippage");
+  const elUtAtr=$("utAtr"), elUtFactor=$("utFactor"), elAddr=$("addr"), elPaper=$("paper");
+  const btnConn=$("btnConnect"), btnAuto=$("btnAuto"), btnBuy=$("btnBuy"), btnSell=$("btnSell");
 
-const routerAbi = [
-  "function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint256[] memory amounts)",
-  "function swapExactTokensForTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external returns (uint[] memory amounts)"
-];
+  // ---------- Provider ----------
+  const readProvider = new JsonRpcProvider(DEFAULT_RPC);
+  let walletProvider = null; // BrowserProvider
+  let signer = null; let address = null;
 
-async function connectWallet(){
-  if(window.trustwallet){
-    provider = new ethers.BrowserProvider(window.trustwallet);
-  } else if(window.ethereum){
-    provider = new ethers.BrowserProvider(window.ethereum);
-  } else {
-    log("No wallet detected");
-    return;
+  // ---------- Chart ----------
+  const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
+    rightPriceScale: { borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } },
+    crosshair:{ mode:1 }, width: document.getElementById('chart').clientWidth, height:460
+  });
+  const candleSeries = chart.addCandlestickSeries();
+  const upperLine = chart.addLineSeries({ lineWidth:1, lineStyle:1 });
+  const lowerLine = chart.addLineSeries({ lineWidth:1, lineStyle:1 });
+  const midLine   = chart.addLineSeries({ lineWidth:2 });
+  const trailLine = chart.addLineSeries({ lineWidth:1, lineStyle:3 });
+  window.addEventListener('resize', () => chart.applyOptions({ width: document.getElementById('chart').clientWidth }));
+
+  // ---------- State ----------
+  let bars = []; // {t, open, high, low, close}
+  let lastPrice = null;
+  let auto = false;
+  let samplerTimer = null;
+
+  const routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
+  const safeAddr = (v) => { try { return getAddress(String(v).trim()); } catch(e){ log('Alamat tidak valid: '+v); return null; } };
+  const getPathBuy = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [a,b]: null; };
+  const getPathSell = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [b,a]: null; };
+
+  // ---------- Utils ----------
+  function log(msg){ const line = `[${new Date().toLocaleTimeString()}] ${msg}`; elLogs.textContent = line + "\n" + elLogs.textContent; }
+  function aggregateBar(existingBar, price){
+    // Open is the first price — LRC uses OPEN later
+    if (!existingBar) return { open: price, high: price, low: price, close: price };
+    return { open: existingBar.open, high: Math.max(existingBar.high, price), low: Math.min(existingBar.low, price), close: price };
   }
-  signer = await provider.getSigner();
-  router = new ethers.Contract(ROUTER, routerAbi, signer);
-  log("Wallet connected");
-}
+  // Linear regression over array y using x=1..n
+  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
+  function stdev(vals){ const n=vals.length; if(!n) return 0; const mean=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-mean)**2,0)/n; return Math.sqrt(v); }
+  // LRC over OPEN prices
+  function computeLRC_Open(bars, length=100, devUp=2, devDn=2){ const opens=bars.map(b=>b.open); const n=opens.length; const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null); if(n<length) return {mid,upper,lower}; for(let i=length-1;i<n;i++){ const win=opens.slice(i-length+1,i+1); const {slope,intercept}=linearRegression(win); const midVal=slope*length+intercept; const resid=win.map((v,idx)=>v-(slope*(idx+1)+intercept)); const sd=stdev(resid); mid[i]=midVal; upper[i]=midVal+devUp*sd; lower[i]=midVal-devDn*sd; } return {mid,upper,lower}; }
+  // ATR(period=1) = TR
+  function computeATR(ohlc, period=14){ if(ohlc.length<2) return []; const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high,l=ohlc[i].low,pc=ohlc[i-1].close; const tr=Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)); trs.push(tr);} const atr=[]; let ema=null; const k=2/(period+1); for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i]+(1-k)*ema; atr.push(ema);} return [null,...atr]; }
+  function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){ const atrArr=computeATR(ohlc, atrPeriod); const signals=new Array(ohlc.length).fill(null); const trail=new Array(ohlc.length).fill(null); let trend=0; let ts=null; for(let i=0;i<ohlc.length;i++){ const c=ohlc[i].close; const atr=atrArr[i] ?? 0; const buyTs=c - factor*atr; const sellTs=c + factor*atr; if(trend>=0){ ts = ts==null? buyTs: Math.max(ts,buyTs); trail[i]=ts; if(c<ts){ trend=-1; signals[i]='sell'; ts=sellTs; trail[i]=ts; } else { trend=1; } } else { ts = ts==null? sellTs: Math.min(ts,sellTs); trail[i]=ts; if(c>ts){ trend=1; signals[i]='buy'; ts=buyTs; trail[i]=ts; } else { trend=-1; } } } return {signals, trail}; }
+  function calcOutMin(amountOut, slipFloat){ const bps=10000n; const slipBps = BigInt(Math.floor((slipFloat||0)*10000)); return (amountOut * (bps - slipBps))/bps; }
 
-async function fetchPrice(){
-  try{
-    const contract = new ethers.Contract(ROUTER, routerAbi, provider);
-    const amtIn = ethers.parseUnits("1", 18);
-    const out = await contract.getAmountsOut(amtIn,[USDT,CAKE]);
-    const price = Number(out[1]) / 1e18;
-    return price;
-  }catch(e){ log("Price error: "+e.message); return null; }
-}
-
-function updateBars(price){
-  const now = Date.now();
-  if(bars.length===0 || now - bars[bars.length-1].t > 60000){
-    bars.push({t:now,o:price,h:price,l:price,c:price});
-    if(bars.length>200) bars.shift();
-  } else {
-    let b = bars[bars.length-1];
-    b.h = Math.max(b.h,price);
-    b.l = Math.min(b.l,price);
-    b.c = price;
+  async function detectWalletProvider(){
+    const any = window.ethereum;
+    if (!any) return null;
+    if (window.trustwallet) return new BrowserProvider(window.trustwallet);
+    if (any.providers && Array.isArray(any.providers)){
+      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
+      if (trust) return new BrowserProvider(trust);
+      const mm = any.providers.find(p=>p.isMetaMask);
+      if (mm) return new BrowserProvider(mm);
+      return new BrowserProvider(any.providers[0]);
+    }
+    return new BrowserProvider(any);
   }
-}
 
-function calcLRC(){
-  const n=100; if(bars.length<n) return null;
-  let xs = bars.slice(-n).map((_,i)=>i);
-  let ys = bars.slice(-n).map(b=>b.c);
-  let xmean=xs.reduce((a,b)=>a+b)/n;
-  let ymean=ys.reduce((a,b)=>a+b)/n;
-  let num=0,den=0;
-  for(let i=0;i<n;i++){ num+=(xs[i]-xmean)*(ys[i]-ymean); den+=(xs[i]-xmean)**2; }
-  let slope=num/den; let intercept=ymean-slope*xmean;
-  let mid = slope*(n-1)+intercept;
-  let dev = Math.sqrt(ys.map(y=>(y-ymean)**2).reduce((a,b)=>a+b)/n);
-  return {mid,upper:mid+2*dev,lower:mid-2*dev};
-}
-
-function calcUT(){
-  if(bars.length<20) return null;
-  let atrPeriod=1; let factor=10;
-  let atr=0; for(let i=1;i<bars.length;i++) atr+=Math.abs(bars[i].c-bars[i-1].c);
-  atr/=bars.length-1;
-  let stop=bars[bars.length-1].c - factor*atr;
-  return {signal: stop<bars[bars.length-1].c?"buy":"sell", stop};
-}
-
-async function autoLoop(){
-  if(!auto) return;
-  const p=await fetchPrice(); if(!p){setTimeout(autoLoop,5000);return;}
-  updateBars(p);
-  const lrc=calcLRC(); const ut=calcUT();
-  if(lrc && ut){
-    if(ut.signal==="buy" && p<=lrc.mid){ log(`AUTO BUY @ ${p}`); /* executeBuy() */ }
-    if(ut.signal==="sell" || p>lrc.upper){ log(`AUTO SELL @ ${p}`); /* executeSell() */ }
+  async function connectWallet(){
+    walletProvider = await detectWalletProvider();
+    if (!walletProvider){ alert('EIP-1193 wallet tidak ditemukan'); return; }
+    await walletProvider.send('eth_requestAccounts', []);
+    signer = await walletProvider.getSigner();
+    address = await signer.getAddress();
+    elAddr.textContent = address.slice(0,6)+"…"+address.slice(-4);
+    log('Wallet terhubung.');
   }
-  drawChart();
-  setTimeout(autoLoop,5000);
-}
 
-function toggleAuto(){ auto=!auto; if(auto){ log("Auto started"); autoLoop(); } else log("Auto stopped"); }
+  async function fetchPrice(){
+    try{
+      const one = parseUnits('1', 18); // asumsikan 18 untuk quote USDT (sederhana untuk quoting)
+      const path = getPathBuy(); if(!path){ return null; }
+      const amounts = await routerRead.getAmountsOut(one, path);
+      const out = Number(formatUnits(amounts[amounts.length-1], 18));
+      return out; // 1 USDT → CAKE
+    }catch(e){ log('Price error: '+(e.message||e)); return null; }
+  }
 
-function manualBuy(){ log("Manual BUY clicked"); }
-function manualSell(){ log("Manual SELL clicked"); }
+  function updateChart(){
+    const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
+    candleSeries.setData(cand);
+    const lrc = computeLRC_Open(bars, 100, 2, 2); // OPEN based
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const toSeries = (arr) => bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
+    upperLine.setData(toSeries(lrc.upper));
+    lowerLine.setData(toSeries(lrc.lower));
+    midLine.setData(toSeries(lrc.mid));
+    trailLine.setData(toSeries(ut.trail));
+  }
 
-// Chart
-const ctx=document.getElementById('chart');
-const chart=new Chart(ctx,{type:'candlestick',data:{datasets:[{label:'Price',data:[]}]} ,options:{}});
+  async function sampleLoop(){
+    let barStart = Date.now(); let currentBar = null;
+    const intervalMs = Math.max(1000, Number(elInterval.value||60)*1000);
+    const keep = Number(elBarsKeep.value||600);
+    async function tick(){
+      const p = await fetchPrice();
+      if (p!=null){ lastPrice = p; elPrice.textContent = p.toFixed(8); }
+      const now = Date.now();
+      if (!currentBar) currentBar = aggregateBar(null, p ?? lastPrice ?? 0);
+      else currentBar = aggregateBar(currentBar, p ?? lastPrice ?? currentBar.close);
+      if (now - barStart >= intervalMs){
+        bars = [...bars, { t: now, ...currentBar }].slice(-keep);
+        elBars.textContent = bars.length;
+        updateChart();
+        evaluateAndMaybeTrade();
+        currentBar = null; barStart = now;
+      }
+      samplerTimer = setTimeout(tick, Math.min(intervalMs/3, 5000));
+    }
+    if (samplerTimer) clearTimeout(samplerTimer);
+    tick();
+  }
 
-function drawChart(){
-  const data=bars.map(b=>({x:new Date(b.t),o:b.o,h:b.h,l:b.l,c:b.c}));
-  chart.data.datasets[0].data=data;
-  chart.update();
-}
+  function lastSignalOf(ut){ for(let i=ut.signals.length-1;i>=0;i--){ if(ut.signals[i]) return { index:i, type:ut.signals[i] }; } return null; }
+
+  async function evaluateAndMaybeTrade(){
+    if (!auto || !bars.length) return;
+    const i = bars.length-1;
+    const lrc = computeLRC_Open(bars, 100, 2, 2);
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const sig = ut.signals[i];
+    const price = bars[i].close;
+    let decided = null;
+    if (sig === 'buy' && price <= (lrc.mid[i] ?? Infinity)) decided = 'buy';
+    else if (sig === 'sell' || (lrc.upper[i]!=null && price > lrc.upper[i])) decided = 'sell';
+
+    if (decided){
+      elSignal.textContent = decided.toUpperCase();
+      log(`Signal ${decided.toUpperCase()} @ ${price.toFixed(8)}`);
+      await executeTrade(decided);
+    }
+  }
+
+  async function ensureApproval(tokenAddr, spender, amount){
+    if (!signer) return;
+    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
+    const allowance = await erc.allowance(address, spender);
+    if (allowance < amount){ const tx = await erc.approve(spender, amount); log('Approve: '+tx.hash); await tx.wait(); }
+  }
+
+  async function executeTrade(direction){
+    if (elPaper.checked){ log('[PAPER] '+direction.toUpperCase()); return; }
+    if (!signer){ alert('Connect wallet dulu'); return; }
+    const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
+    const base = safeAddr(elBase.value), token = safeAddr(elToken.value);
+    if (!base || !token){ alert('Alamat token tidak valid'); return; }
+
+    const baseDecimals = 18; // sederhanakan; produksi: query decimals()
+    const amountInUnits = parseUnits(String(elAmountIn.value||'0'), baseDecimals);
+    const deadline = Math.floor(Date.now()/1000) + 300;
+    const path = direction==='buy' ? [base, token] : [token, base];
+    const amountsOut = await router.getAmountsOut(amountInUnits, path);
+    const outMin = calcOutMin(amountsOut[amountsOut.length-1], Number(elSlip.value||0));
+
+    try{
+      let tx;
+      if (direction==='buy'){
+        if (path[0] === ZeroAddress){
+          tx = await router.swapExactETHForTokens(outMin, path, address, deadline, { value: amountInUnits });
+        } else {
+          await ensureApproval(path[0], PCS_V2_ROUTER, amountInUnits);
+          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
+        }
+      } else {
+        await ensureApproval(path[0], PCS_V2_ROUTER, amountInUnits);
+        if (path[path.length-1] === ZeroAddress){
+          tx = await router.swapExactTokensForETH(amountInUnits, outMin, path, address, deadline);
+        } else {
+          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
+        }
+      }
+      log(direction.toUpperCase()+" sent: "+tx.hash);
+      await tx.wait();
+      log(direction.toUpperCase()+" confirmed");
+    }catch(e){ log('Trade failed: '+(e.reason||e.message||e)); }
+  }
+
+  // ---------- Events ----------
+  btnConn.onclick = connectWallet;
+  btnAuto.onclick = () => { auto = !auto; btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto'; btnAuto.className = 'btn ' + (auto? 'stop' : 'auto'); log('Auto: '+(auto?'ON':'OFF')); };
+  btnBuy.onclick = () => executeTrade('buy');
+  btnSell.onclick = () => executeTrade('sell');
+
+  // Mulai sampler
+  sampleLoop();
+
+  // ---------- Self Tests ----------
+  (function runTests(){
+    const tests = [];
+    const lr = (arr)=>{ const {slope,intercept} = (function(y){ const n=y.length; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; })(arr); return {slope,intercept}; };
+    const lrRes = lr([5,7,9,11,13]);
+    tests.push({name:'LR slope≈2', pass: Math.abs(lrRes.slope-2) < 1e-9});
+    tests.push({name:'LR intercept≈3', pass: Math.abs(lrRes.intercept-3) < 1e-9});
+    const dummyBars = Array.from({length:100}, (_,i)=>({open:i, high:i, low:i, close:i}));
+    const lrc = computeLRC_Open(dummyBars, 100, 2, 2);
+    tests.push({name:'LRC(open) mid defined', pass: lrc.mid[lrc.mid.length-1]!=null});
+    const flat = Array.from({length:20},()=>({open:1,high:1,low:1,close:1}));
+    const ut = computeUTBotSignals(flat, 1, 10);
+    tests.push({name:'UT(flat) no signals', pass: ut.signals.every(x=>x==null)});
+
+    const ul = document.getElementById('tests');
+    ul.innerHTML = tests.map(t=>`<li class="${t.pass?'pass':'fail'}">${t.name}: ${t.pass?'PASS':'FAIL'}</li>`).join('');
+  })();
+})();
 </script>
 </body>
 </html>
