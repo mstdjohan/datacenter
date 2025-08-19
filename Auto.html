@@ -140,8 +140,22 @@
 
   function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
 
-  async function getKlines(symbol,interval,limit){const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;const r=await fetch(url);if(!r.ok) throw new Error('Fetch klines gagal');const raw=await r.json();return raw.map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}
-
+  async function getKlines(symbol,interval,limit){
+  const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  // gunakan proxy agar tidak blocked CORS
+  const proxiedUrl = "https://corsproxy.io/?" + encodeURIComponent(url);
+  const r=await fetch(proxiedUrl);
+  if(!r.ok) throw new Error('Fetch klines gagal');
+  const raw=await r.json();
+  return raw.map(k=>({
+    time:Math.floor(k[0]/1000),
+    open:+k[1],
+    high:+k[2],
+    low:+k[3],
+    close:+k[4],
+    volume:+k[5]
+  }));
+}
   function trueRange(c){const t=[NaN];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];const m1=a.high-a.low,m2=Math.abs(a.high-b.close),m3=Math.abs(a.low-b.close);t.push(Math.max(m1,m2,m3))}return t}
   function atr(c,p=10){const t=trueRange(c);let o=new Array(c.length).fill(NaN);let s=0,i=1;while(i<=p&&i<t.length){s+=t[i];i++}if(i<=p)return o;o[p]=s/p;for(let j=p+1;j<t.length;j++){o[j]=(o[j-1]*(p-1)+t[j])/p}return o}
   function utBot(c,kv=2,aP=10){const n=c.length;const r={trend:new Array(n).fill(0),upper:new Array(n).fill(NaN),lower:new Array(n).fill(NaN),line:new Array(n).fill(NaN)};const A=atr(c,aP);let tr=1,up=NaN,dn=NaN;for(let i=0;i<n;i++){const x=c[i];const hl2=(x.high+x.low)/2;const nLoss=kv*A[i];if(!isFinite(nLoss)){r.trend[i]=0;continue}const bU=hl2+nLoss,bL=hl2-nLoss;if(i===0){up=bU;dn=bL}else{const pU=r.upper[i-1];const pL=r.lower[i-1];up=(bU<pU||x.close>pU)?bU:pU;dn=(bL>pL||x.close<pL)?bL:pL}const pT=i>0?r.trend[i-1]:1;tr=x.close>up?1:x.close<dn?-1:pT;const line=tr===1?dn:up;r.trend[i]=tr;r.upper[i]=up;r.lower[i]=dn;r.line[i]=line}return r}
