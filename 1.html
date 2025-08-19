@@ -2,128 +2,185 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>XRPUSDT Auto Signals (100R + LRC + UTBot)</title>
+  <title>Auto Bot — UT Bot + LRC</title>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
-    body { background:#111; color:#eee; font-family: Arial; }
+    body { font-family: Arial, sans-serif; background: #111; color: #eee; }
     #chart { height: 500px; }
+    button { margin: 5px; padding: 10px; border-radius: 8px; }
+    pre { background: #222; padding: 10px; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h2>XRPUSDT — Range 100R + LRC + UT Bot</h2>
+  <h2>Trading Bot — UT Bot Alerts + Linear Regression Channel</h2>
+  <button id="start">Start Bot</button>
+  <button id="stop">Stop Bot</button>
   <div id="chart"></div>
   <pre id="log"></pre>
 
 <script>
-// --- Logger ---
 const log = (msg) => {
-  const ts = new Date().toLocaleTimeString();
-  document.getElementById("log").textContent += `[${ts}] ${msg}\n`;
+  const ts = new Date().toLocaleString();
+  document.getElementById('log').textContent += `[${ts}] ${msg}\n`;
 };
 
-// --- Init Chart ---
+let auto = false;
+
+// ====================
+// Fetch Binance Klines
+// ====================
+async function getKlines(symbol, interval, limit) {
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  const proxiedUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(url);
+  const r = await fetch(proxiedUrl);
+  if (!r.ok) throw new Error("Fetch klines gagal");
+
+  let raw = await r.json();
+
+  // ✅ pastikan parse kalau ada .contents
+  if (raw && typeof raw === "object" && "contents" in raw) {
+    try {
+      raw = JSON.parse(raw.contents);
+    } catch (e) {
+      throw new Error("Gagal parse isi klines: " + e.message);
+    }
+  }
+
+  if (!Array.isArray(raw)) {
+    throw new Error("Format klines tidak valid: " + JSON.stringify(raw));
+  }
+
+  return raw.map(k => ({
+    time: Math.floor(k[0] / 1000),
+    open: +k[1],
+    high: +k[2],
+    low: +k[3],
+    close: +k[4],
+    volume: +k[5]
+  }));
+}
+
+// ====================
+// Chart Init
+// ====================
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout: { background: { color: '#111' }, textColor: '#ddd' },
+  layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+  timeScale: { timeVisible: true, secondsVisible: false }
 });
 const candleSeries = chart.addCandlestickSeries();
-const markers = [];
+const buySeries = chart.addLineSeries({ color: 'lime', lineWidth: 2 });
+const sellSeries = chart.addLineSeries({ color: 'red', lineWidth: 2 });
+const midLine = chart.addLineSeries({ color: 'yellow', lineWidth: 1 });
+const upperLine = chart.addLineSeries({ color: 'orange', lineWidth: 1 });
+const lowerLine = chart.addLineSeries({ color: 'orange', lineWidth: 1 });
 
-// --- Data buffer ---
-let candles = [];
-let currentCandle = null;
-const RANGE_SIZE = 100; // 100R
-
-// --- Linear Regression ---
-function linearRegression(data, length=100) {
-  if (data.length < length) return null;
+// ====================
+// Linear Regression Channel (LRC)
+// ====================
+function calcLRC(data, length = 100, deviations = 2) {
+  if (data.length < length) return { mid: [], upper: [], lower: [] };
   const slice = data.slice(-length);
   const n = slice.length;
-  let sumX=0,sumY=0,sumXY=0,sumX2=0;
-  for (let i=0;i<n;i++) {
-    sumX += i;
-    sumY += slice[i].close;
-    sumXY += i*slice[i].close;
-    sumX2 += i*i;
-  }
-  const slope = (n*sumXY - sumX*sumY)/(n*sumX2 - sumX*sumX);
-  const intercept = (sumY - slope*sumX)/n;
-  return slice.map((c,i)=>({time:c.time,value:intercept+slope*i}));
+  const x = slice.map((_, i) => i);
+  const y = slice.map(c => c.close);
+
+  // regresi linier y = a + bx
+  const meanX = x.reduce((a,b)=>a+b,0)/n;
+  const meanY = y.reduce((a,b)=>a+b,0)/n;
+  const b = x.reduce((sum, xi, i)=>sum+(xi-meanX)*(y[i]-meanY),0) /
+            x.reduce((sum, xi)=>sum+(xi-meanX)**2,0);
+  const a = meanY - b*meanX;
+
+  const mid = slice.map((c,i)=>({ time:c.time, value:a+b*i }));
+  const residuals = slice.map((c,i)=>(c.close-(a+b*i))**2);
+  const std = Math.sqrt(residuals.reduce((s,v)=>s+v,0)/n);
+  const upper = mid.map(p=>({ time:p.time, value:p.value+deviations*std }));
+  const lower = mid.map(p=>({ time:p.time, value:p.value-deviations*std }));
+
+  return { mid, upper, lower };
 }
 
-// --- ATR (for UT Bot) ---
-function calcATR(data, length=14) {
-  if (data.length < length+1) return null;
-  let trs=[];
-  for (let i=1;i<data.length;i++) {
-    const high=data[i].high, low=data[i].low, closePrev=data[i-1].close;
-    trs.push(Math.max(high-low, Math.abs(high-closePrev), Math.abs(low-closePrev)));
+// ====================
+// UT Bot Alerts (ATR=1, Factor=10)
+// ====================
+function calcUTBot(data, atrPeriod=1, factor=10) {
+  if (data.length < atrPeriod+2) return [];
+
+  // ATR sederhana
+  let atr = [];
+  for (let i=1;i<data.length;i++){
+    const prev = data[i-1], curr = data[i];
+    const tr = Math.max(curr.high-curr.low,
+                        Math.abs(curr.high-prev.close),
+                        Math.abs(curr.low-prev.close));
+    if (i<atrPeriod) atr.push(tr);
+    else atr.push((atr[atr.length-1]*(atrPeriod-1)+tr)/atrPeriod);
   }
-  let atr=trs.slice(-length).reduce((a,b)=>a+b,0)/length;
-  return atr;
+
+  let signals = [];
+  let trend = null;
+  for (let i=atrPeriod;i<data.length;i++){
+    const c = data[i];
+    const stop = c.close - factor*atr[i-1];
+    const up = c.close + factor*atr[i-1];
+
+    if (trend !== 'long' && c.close > up) {
+      trend = 'long';
+      signals.push({ time:c.time, type:'buy', price:c.close });
+    } else if (trend !== 'short' && c.close < stop) {
+      trend = 'short';
+      signals.push({ time:c.time, type:'sell', price:c.close });
+    }
+  }
+  return signals;
 }
 
-// --- UT Bot Alerts ---
-let trend=null;
-function utBotSignal(data, atrPeriod=2, factor=10) {
-  if (data.length < atrPeriod+2) return null;
-  const atr = calcATR(data, atrPeriod);
-  if (!atr) return null;
-  const last = data[data.length-1];
-  const prev = data[data.length-2];
-  const buyLine = prev.close - factor*atr;
-  const sellLine = prev.close + factor*atr;
+// ====================
+// Main Bot Logic
+// ====================
+async function runBot() {
+  try {
+    const data = await getKlines("XRPUSDT","1m",200);
+    candleSeries.setData(data);
 
-  if (last.close > sellLine && trend!=="buy") {
-    trend="buy"; return {type:"buy", price:last.close, time:last.time};
-  }
-  if (last.close < buyLine && trend!=="sell") {
-    trend="sell"; return {type:"sell", price:last.close, time:last.time};
-  }
-  return null;
-}
+    const lrc = calcLRC(data,100,2);
+    midLine.setData(lrc.mid);
+    upperLine.setData(lrc.upper);
+    lowerLine.setData(lrc.lower);
 
-// --- Update Candle (simulate 100R range) ---
-function updatePrice(price) {
-  const t = Math.floor(Date.now()/1000);
-  if (!currentCandle) {
-    currentCandle = {time:t, open:price, high:price, low:price, close:price};
-    return;
-  }
-  currentCandle.high = Math.max(currentCandle.high, price);
-  currentCandle.low = Math.min(currentCandle.low, price);
-  currentCandle.close = price;
+    const ut = calcUTBot(data,1,10);
+    buySeries.setData(ut.filter(s=>s.type==='buy').map(s=>({time:s.time,value:s.price})));
+    sellSeries.setData(ut.filter(s=>s.type==='sell').map(s=>({time:s.time,value:s.price})));
 
-  if (Math.abs(currentCandle.close - currentCandle.open) >= RANGE_SIZE) {
-    candles.push(currentCandle);
-    candleSeries.setData(candles);
-
-    // Signals
-    const sig = utBotSignal(candles,2,10);
-    if (sig) {
-      markers.push({
-        time:sig.time,
-        position:sig.type==="buy"?"belowBar":"aboveBar",
-        color:sig.type==="buy"?"#0f0":"#f00",
-        shape:"arrow"+(sig.type==="buy"?"Up":"Down"),
-        text:sig.type.toUpperCase()
-      });
-      candleSeries.setMarkers(markers);
-      log(`Signal ${sig.type.toUpperCase()} at ${sig.price}`);
+    if (ut.length) {
+      const last = ut[ut.length-1];
+      if (last.type==='buy' && last.price <= (lrc.mid.at(-1)?.value||last.price)) {
+        log("BUY signal — price ≤ LRC mid");
+      }
+      if (last.type==='sell' || last.price > (lrc.upper.at(-1)?.value||last.price)) {
+        log("SELL signal — UT Bot sell or price > LRC upper");
+      }
     }
 
-    currentCandle=null;
+  } catch(e) {
+    log("Error: " + e.message);
   }
 }
 
-// --- Fetch price from Binance ---
-const ws = new WebSocket("wss://stream.binance.com:9443/ws/xrpusdt@trade");
-ws.onmessage = (ev) => {
-  const trade = JSON.parse(ev.data);
-  const price = parseFloat(trade.p);
-  updatePrice(price);
+let loop;
+document.getElementById('start').onclick=()=>{
+  if (loop) clearInterval(loop);
+  auto=true;
+  runBot();
+  loop=setInterval(runBot,60000); // update tiap 1 menit
+  log("Bot started");
 };
-
+document.getElementById('stop').onclick=()=>{
+  auto=false;
+  if (loop) clearInterval(loop);
+  log("Bot stopped");
+};
 </script>
 </body>
 </html>
