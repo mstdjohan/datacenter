@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Auto Bot — UT Bot + LRC</title>
+  <title>Trading Bot — UT Bot + LRC</title>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #111; color: #eee; }
     #chart { height: 500px; }
-    button { margin: 5px; padding: 10px; border-radius: 8px; }
-    pre { background: #222; padding: 10px; border-radius: 8px; }
+    button { margin: 5px; padding: 10px; border-radius: 8px; cursor: pointer; }
+    pre { background: #222; padding: 10px; border-radius: 8px; height: 200px; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -21,31 +21,20 @@
 <script>
 const log = (msg) => {
   const ts = new Date().toLocaleString();
-  document.getElementById('log').textContent += `[${ts}] ${msg}\n`;
+  const el = document.getElementById('log');
+  el.textContent += `[${ts}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
 };
-
-let auto = false;
 
 // ====================
 // Fetch Binance Klines
 // ====================
 async function getKlines(symbol, interval, limit) {
   const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  const proxiedUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(url);
-  const r = await fetch(proxiedUrl);
+  const r = await fetch(url, { mode: 'cors' });
   if (!r.ok) throw new Error("Fetch klines gagal");
 
-  let raw = await r.json();
-
-  // ✅ pastikan parse kalau ada .contents
-  if (raw && typeof raw === "object" && "contents" in raw) {
-    try {
-      raw = JSON.parse(raw.contents);
-    } catch (e) {
-      throw new Error("Gagal parse isi klines: " + e.message);
-    }
-  }
-
+  const raw = await r.json();
   if (!Array.isArray(raw)) {
     throw new Error("Format klines tidak valid: " + JSON.stringify(raw));
   }
@@ -85,7 +74,6 @@ function calcLRC(data, length = 100, deviations = 2) {
   const x = slice.map((_, i) => i);
   const y = slice.map(c => c.close);
 
-  // regresi linier y = a + bx
   const meanX = x.reduce((a,b)=>a+b,0)/n;
   const meanY = y.reduce((a,b)=>a+b,0)/n;
   const b = x.reduce((sum, xi, i)=>sum+(xi-meanX)*(y[i]-meanY),0) /
@@ -107,7 +95,6 @@ function calcLRC(data, length = 100, deviations = 2) {
 function calcUTBot(data, atrPeriod=1, factor=10) {
   if (data.length < atrPeriod+2) return [];
 
-  // ATR sederhana
   let atr = [];
   for (let i=1;i<data.length;i++){
     const prev = data[i-1], curr = data[i];
@@ -156,10 +143,10 @@ async function runBot() {
     if (ut.length) {
       const last = ut[ut.length-1];
       if (last.type==='buy' && last.price <= (lrc.mid.at(-1)?.value||last.price)) {
-        log("BUY signal — price ≤ LRC mid");
+        log("✅ BUY signal — price ≤ LRC mid");
       }
       if (last.type==='sell' || last.price > (lrc.upper.at(-1)?.value||last.price)) {
-        log("SELL signal — UT Bot sell or price > LRC upper");
+        log("❌ SELL signal — UT Bot sell or price > LRC upper");
       }
     }
 
@@ -168,16 +155,17 @@ async function runBot() {
   }
 }
 
+// ====================
+// Controls
+// ====================
 let loop;
 document.getElementById('start').onclick=()=>{
   if (loop) clearInterval(loop);
-  auto=true;
   runBot();
   loop=setInterval(runBot,60000); // update tiap 1 menit
   log("Bot started");
 };
 document.getElementById('stop').onclick=()=>{
-  auto=false;
   if (loop) clearInterval(loop);
   log("Bot stopped");
 };
