@@ -140,7 +140,6 @@
 
   function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
   
-  const url = `https://api.binanceproxy.cc/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
   
   async function getKlines(symbol, interval, limit) {
   // DexScreener API untuk XRP/USDT (BSC atau lain tergantung pair)
