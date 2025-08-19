@@ -145,8 +145,18 @@
   const proxiedUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(url);
   const r = await fetch(proxiedUrl);
   if (!r.ok) throw new Error("Fetch klines gagal");
-  const rawWrapper = await r.json();
-  const raw = JSON.parse(rawWrapper.contents); // 👈 parse isi
+
+  let raw = await r.json();
+
+  // ✅ deteksi kalau ada `contents`
+  if (raw.contents) {
+    raw = JSON.parse(raw.contents);
+  }
+
+  if (!Array.isArray(raw)) {
+    throw new Error("Format klines tidak valid: " + JSON.stringify(raw));
+  }
+
   return raw.map(k => ({
     time: Math.floor(k[0] / 1000),
     open: +k[1],
