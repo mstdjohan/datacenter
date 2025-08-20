@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TV-like • UT Bot (2,10) + LRC (100,2,2) • 100R • EmailJS Alerts</title>
+  <title>TV-like • UT Bot (2,10) + LRC (100,2,2) • 100R • EmailJS Alerts (CoinGecko)</title>
   <script src="https://s3.tradingview.com/tv.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
@@ -30,7 +30,7 @@
 </head>
 <body>
 <header>
-  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R</h1>
+  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
   <div class="row">
     <span class="badge" id="status">Idle</span>
     <button class="primary" id="btnToggle">Start</button>
@@ -41,12 +41,14 @@
   <aside class="card">
     <div class="row" style="justify-content:space-between">
       <label>Exchange / Pair</label>
-      <span class="badge" id="pairBadge">BINANCE:CAKEUSDT</span>
+      <span class="badge" id="pairBadge">BINANCE:XRPUSDT</span>
     </div>
 
     <div class="row" style="margin-top:8px">
       <label>Symbol</label>
-      <input id="symbol" value="CAKEUSDT" style="width:130px">
+      <input id="symbol" value="XRPUSDT" style="width:130px">
+      <label>CG ID</label>
+      <input id="cgid" value="ripple" style="width:150px">
       <button id="applySymbol">Terapkan</button>
     </div>
 
@@ -114,7 +116,7 @@
       <span id="emailStatus" class="badge">EmailJS: Not set</span>
     </div>
 
-    <div class="muted" style="margin-top:10px">Sinyal dihitung lokal dari data Binance. Tampilan chart dari TradingView.</div>
+    <div class="muted" style="margin-top:10px">Sumber data: CoinGecko market_chart (USD). Candle dibentuk dari agregasi ke TF yang dipilih.</div>
   </aside>
 
   <main class="card">
@@ -131,7 +133,12 @@
 
 <script>
 (function(){
-  const state={running:false,alarmOn:true,symbol:"CAKEUSDT",interval:"5m",limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
+  const symbolToCgId={
+    'XRPUSDT':'ripple',
+    'CAKEUSDT':'pancakeswap-token'
+  };
+  const tfToMinutes={'1m':1,'3m':3,'5m':5,'15m':15,'1h':60};
+  const state={running:false,alarmOn:true,symbol:'XRPUSDT',cgid:'ripple',interval:'5m',limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
   const $=id=>document.getElementById(id);
   function log(msg){const el=$("log");el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML;}
   function setStatus(s){$("status").textContent=s;}
@@ -143,20 +150,25 @@
   function updateEmailBadge(){const ok=state.email.service&&state.email.template&&state.email.user&&state.email.to;$("emailStatus").textContent= ok? 'EmailJS: Ready':'EmailJS: Not set'}
 
   function syncInputs(){state.interval=$("interval").value;state.limit=+$("limit").value;state.kv=+$("kv").value;state.atr=+$("atr").value;state.lrLen=+$("lrLen").value;state.devUp=+$("devUp").value;state.devDn=+$("devDn").value}
-  function applySymbol(){const s=$("symbol").value.trim().toUpperCase();if(!s) return;state.symbol=s;$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log('Symbol diterapkan: '+s);}
+  function applySymbol(){const s=$("symbol").value.trim().toUpperCase();if(!s) return;state.symbol=s;const mapped=symbolToCgId[s];state.cgid=$("cgid").value.trim()||mapped||'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`);}  
 
   function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
 
-  async function getKlines(symbol,interval,limit){const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;const r=await fetch(url);if(!r.ok) throw new Error('Fetch klines gagal');const raw=await r.json();return raw.map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));}
+  async function getPricesFromCG(id, days){const url=`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;const r=await fetch(url,{cache:'no-store'});if(!r.ok) throw new Error('CoinGecko fetch gagal');const raw=await r.json();return raw.prices;}
+
+  function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
+    const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
+
+  async function getKlinesFromCG(id, interval, limit){const tfMin=tfToMinutes[interval]||5;const minutesNeeded=tfMin*limit;let days=Math.ceil(minutesNeeded/1440)+1;days=Math.min(Math.max(days,1),30);const prices=await getPricesFromCG(id, days);return aggregateToCandles(prices, tfMin, limit);}
 
   function trueRange(c){const t=[NaN];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];const m1=a.high-a.low,m2=Math.abs(a.high-b.close),m3=Math.abs(a.low-b.close);t.push(Math.max(m1,m2,m3))}return t}
   function atr(c,p=10){const t=trueRange(c);let o=new Array(c.length).fill(NaN);let s=0,i=1;while(i<=p&&i<t.length){s+=t[i];i++}if(i<=p)return o;o[p]=s/p;for(let j=p+1;j<t.length;j++){o[j]=(o[j-1]*(p-1)+t[j])/p}return o}
   function utBot(c,kv=2,aP=10){const n=c.length;const r={trend:new Array(n).fill(0),upper:new Array(n).fill(NaN),lower:new Array(n).fill(NaN),line:new Array(n).fill(NaN)};const A=atr(c,aP);let tr=1,up=NaN,dn=NaN;for(let i=0;i<n;i++){const x=c[i];const hl2=(x.high+x.low)/2;const nLoss=kv*A[i];if(!isFinite(nLoss)){r.trend[i]=0;continue}const bU=hl2+nLoss,bL=hl2-nLoss;if(i===0){up=bU;dn=bL}else{const pU=r.upper[i-1];const pL=r.lower[i-1];up=(bU<pU||x.close>pU)?bU:pU;dn=(bL>pL||x.close<pL)?bL:pL}const pT=i>0?r.trend[i-1]:1;tr=x.close>up?1:x.close<dn?-1:pT;const line=tr===1?dn:up;r.trend[i]=tr;r.upper[i]=up;r.lower[i]=dn;r.line[i]=line}return r}
-  function linRegChannel(c,l=100,u=2,d=2){const n=c.length;const m=new Array(n).fill(NaN),up=new Array(n).fill(NaN),dn=new Array(n).fill(NaN);for(let i=l-1;i<n;i++){const sl=c.slice(i-l+1,i+1);const y=sl.map(z=>z.close);const M=y.length;const X=[...Array(M).keys()];const SX=X.reduce((a,b)=>a+b,0);const SY=y.reduce((a,b)=>a+b,0);const SXX=X.reduce((a,b)=>a+b*b,0);const SXY=X.reduce((a,b,j)=>a+b*y[j],0);const D=M*SXX-SX*SX;const slope=D!==0?(M*SXY-SX*SY)/D:0;const intercept=(SY-slope*SX)/M;const yHat=intercept+slope*(M-1);const res=y.map((v,j)=>v-(intercept+slope+j-1));const s2=y.reduce((a,v,j)=>{const est=intercept+slope*j;return a+(v-est)*(v-est)},0)/M;const sd=Math.sqrt(s2);m[i]=yHat;up[i]=yHat+u*sd;dn[i]=yHat-d*sd}return{mid:m,up, dn}}
+  function linRegChannel(c,l=100,u=2,d=2){const n=c.length;const m=new Array(n).fill(NaN),up=new Array(n).fill(NaN),dn=new Array(n).fill(NaN);for(let i=l-1;i<n;i++){const sl=c.slice(i-l+1,i+1);const y=sl.map(z=>z.close);const M=y.length;const X=[...Array(M).keys()];const SX=X.reduce((a,b)=>a+b,0);const SY=y.reduce((a,b)=>a+b,0);const SXX=X.reduce((a,b)=>a+b*b,0);const SXY=X.reduce((a,b,j)=>a+b*y[j],0);const D=M*SXX-SX*SX;const slope=D!==0?(M*SXY-SX*SY)/D:0;const intercept=(SY-slope*SX)/M;const yHat=intercept+slope*(M-1);const s2=y.reduce((a,v,j)=>{const est=intercept+slope*j;return a+(v-est)*(v-est)},0)/M;const sd=Math.sqrt(s2);m[i]=yHat;up[i]=yHat+u*sd;dn[i]=yHat-d*sd}return{mid:m,up, dn}}
 
-  async function step(){try{syncInputs();const candles=await getKlines(state.symbol,state.interval,state.limit);if(!candles.length) return;const ut=utBot(candles,state.kv,state.atr);const lr=linRegChannel(candles,state.lrLen,state.devUp,state.devDn);const last=candles[candles.length-1];const prevTrend=ut.trend[ut.trend.length-2]??null;const lastTrend=ut.trend[ut.trend.length-1];$("live").textContent=`${fmt(last.close)} USDT`;$("lastUpdate").textContent=`TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;$("trendBadge").textContent=`Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;const barKey=last.time; if(state.alarmOn){ if(state.lastTrend!==null && state.lastAlertBar!==barKey){ if(prevTrend===-1 && lastTrend===1){fireAlert('BUY', last, lr);} else if(prevTrend===1 && lastTrend===-1){fireAlert('SELL', last, lr);} } } state.lastTrend=lastTrend; state.lastAlertBar=barKey; }catch(e){log('Error: '+e.message);} }
+  async function step(){try{syncInputs();const candles=await getKlinesFromCG(state.cgid,state.interval,state.limit);if(!candles.length) return;const ut=utBot(candles,state.kv,state.atr);const lr=linRegChannel(candles,state.lrLen,state.devUp,state.devDn);const last=candles[candles.length-1];const prevTrend=ut.trend[ut.trend.length-2]??null;const lastTrend=ut.trend[ut.trend.length-1];$("live").textContent=`${fmt(last.close)} USD`;$("lastUpdate").textContent=`TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;$("trendBadge").textContent=`Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;const barKey=last.time; if(state.alarmOn){ if(state.lastTrend!==null && state.lastAlertBar!==barKey){ if(prevTrend===-1 && lastTrend===1){fireAlert('BUY', last, lr);} else if(prevTrend===1 && lastTrend===-1){fireAlert('SELL', last, lr);} } } state.lastTrend=lastTrend; state.lastAlertBar=barKey; }catch(e){log('Error: '+e.message);} }
 
-  function fireAlert(side,last,lr){beep();log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USDT`); if(state.email.service&&state.email.template&&state.email.user&&state.email.to){ const params={ side, price: fmt(last.close), time: new Date(last.time*1000).toLocaleString(), pair:`${state.symbol.replace('USDT','')}/USDT`, interval: state.interval, dev_up: fmt(lr.up.at(-1)), dev_dn: fmt(lr.dn.at(-1)), to: state.email.to}; emailjs.send(state.email.service,state.email.template,params).then(()=>{log('Email terkirim')}).catch(err=>{log('Email gagal: '+(err?.text||err?.message||'unknown'))}) } }
+  function fireAlert(side,last,lr){beep();log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`); if(state.email.service&&state.email.template&&state.email.user&&state.email.to){ const params={ side, price: fmt(last.close), time: new Date(last.time*1000).toLocaleString(), pair:`${state.symbol.replace('USDT','')}/USD`, interval: state.interval, dev_up: fmt(lr.up.at(-1)), dev_dn: fmt(lr.dn.at(-1)), to: state.email.to}; emailjs.send(state.email.service,state.email.template,params).then(()=>{log('Email terkirim')}).catch(err=>{log('Email gagal: '+(err?.text||err?.message||'unknown'))}) } }
 
   const btnToggle=$("btnToggle");
   const btnAlarm=$("btnToggleAlarm");
@@ -168,10 +180,11 @@
   btnAlarm.onclick=()=>{state.alarmOn=!state.alarmOn;btnAlarm.textContent=state.alarmOn? '🔔 Alarm ON':'🔕 Alarm OFF'};
   btnTest.onclick=()=>{fireAlert('TEST',{close:NaN,time:Math.floor(Date.now()/1000)},{up:[NaN],dn:[NaN]})};
   btnSaveEmail.onclick=saveEmailCfg;
-  applyBtn.onclick=applySymbol;
+  applyBtn.onclick=()=>{const s=$("symbol").value.trim().toUpperCase();const idField=$("cgid").value.trim();state.symbol=s;state.cgid=idField || symbolToCgId[s] || 'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`)};
 
   function renderTV(){ new TradingView.widget({autosize:true,symbol:`BINANCE:${state.symbol}`,interval:"5",timezone:"Etc/UTC",theme:"dark",style:"1",locale:"en",hide_top_toolbar:false,hide_legend:false,container_id:"tv_chart"}); }
 
+  (function initDefaults(){const s=$("symbol").value.trim().toUpperCase();$("cgid").value=symbolToCgId[s]||'ripple';state.symbol=s;state.cgid=$("cgid").value.trim();})();
   loadEmailCfg();
   setStatus('Idle');
   renderTV();
