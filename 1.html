@@ -154,7 +154,11 @@
 
   function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
 
-  async function getPricesFromCG(id, days){const url=`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;const r=await fetch(url,{cache:'no-store'});if(!r.ok) throw new Error('CoinGecko fetch gagal');const raw=await r.json();return raw.prices;}
+  async function getPricesFromCG(id, days)
+  {const url=`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
+  const r=await fetch(url,{cache:'no-store'});if(!r.ok)
+  throw new Error('CoinGecko fetch gagal');
+  const raw=await r.json();return raw.prices;}
 
   function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
     const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
