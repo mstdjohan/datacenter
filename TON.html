@@ -1,190 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading TON - Mobile Friendly</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XRP Trading Bot - UT Bot + Linear Regression</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-  </style>
 </head>
-<body>
+<body style="font-family: Arial, sans-serif; padding:20px;">
+  <h2>📊 XRP/USDT Auto Trading (UT Bot 2/10 + Linear Regression 100,2,2)</h2>
+  <div>
+    Live: <span id="livePrice">-</span><br>
+    Trend: <span id="trend">-</span><br>
+    Last Signal: <span id="lastSignal">-</span>
+  </div>
+  <canvas id="chart" width="800" height="400"></canvas>
 
-<h2>📊 Harga TON & Indikator (Real-time)</h2>
-<div>💰 Harga Live: <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
-<div id="log"></div>
+  <script>
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
 
-<script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = 1000;
-let qtyPerTrade = 100;
-let lastBuy = null;
-let highestSinceBuy = null;
-let currentPositionAmount = 0;
-const chartCtx = document.getElementById('chart').getContext('2d');
+    async function getPricesFromCG(id, days) {
+      const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
 
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
+      const r = await fetch(proxyUrl, { cache: 'no-store' });
+      if (!r.ok) throw new Error('Proxy fetch gagal');
 
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
-
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
-  }
-  return result;
-}
-
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
+      const wrapped = await r.json();
+      const raw = JSON.parse(wrapped.contents);
+      return raw.prices;
     }
-  }
-  return { upper, lower };
-}
 
-function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
+    function linearRegression(data) {
+      const n = data.length;
+      const x = Array.from({length: n}, (_, i) => i);
+      const y = data;
 
-function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
+      const sumX = x.reduce((a,b) => a+b, 0);
+      const sumY = y.reduce((a,b) => a+b, 0);
+      const sumXY = x.reduce((acc, xi, i) => acc + xi*y[i], 0);
+      const sumXX = x.reduce((acc, xi) => acc + xi*xi, 0);
 
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
+      const slope = (n*sumXY - sumX*sumY) / (n*sumXX - sumX*sumX);
+      const intercept = (sumY - slope*sumX) / n;
 
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data["the-open-network"].usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 100) {
-      priceData.shift();
-      timeLabels.shift();
+      return x.map((xi) => slope*xi + intercept);
     }
-    updateIndicators();
-    chart.update();
 
-    if (!lastBuy) {
-      const lowest = Math.min(...priceData.slice(-50));
-      if (price <= lowest) {
-        lastBuy = price;
-        highestSinceBuy = price;
-        currentPositionAmount = qtyPerTrade / price;
-        currentCapital -= qtyPerTrade;
-        updateCapitalDisplay();
-        log(`📥 BUY di $${price.toFixed(4)} (terendah 50 data)`);
-        sendEmail("BUY Signal", `Beli TON di $${price.toFixed(4)} (terendah 50 data)`);
-      } else {
-        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
+    function UTBot(data, key=2, atrPeriod=10) {
+      let signals = [];
+      for (let i = atrPeriod; i < data.length; i++) {
+        const atr = Math.abs(data[i] - data[i-atrPeriod]);
+        if (data[i] > data[i-1] + key*atr) {
+          signals.push({index: i, type: "BUY", price: data[i]});
+        } else if (data[i] < data[i-1] - key*atr) {
+          signals.push({index: i, type: "SELL", price: data[i]});
+        }
       }
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const loss = ((lastBuy - price) / lastBuy) * 100;
+      return signals;
+    }
 
-      if (drop > 1.0) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)}`);
-        sendEmail("SELL (Trailing Profit)", `Jual TON di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-      } else if (loss > 1.5) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${loss.toFixed(2)}%`);
-        sendEmail("SELL (Cut Loss)", `Cut loss TON di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
+    async function update() {
+      try {
+        const pricesRaw = await getPricesFromCG("ripple", 1); // XRP
+        const prices = pricesRaw.map(p => p[1]);
+
+        document.getElementById("livePrice").textContent = "$" + prices[prices.length-1].toFixed(4);
+
+        const lr = linearRegression(prices.slice(-100));
+        const signals = UTBot(prices, 2, 10);
+
+        if (signals.length > 0) {
+          const last = signals[signals.length-1];
+          document.getElementById("lastSignal").textContent = last.type + " @ $" + last.price.toFixed(4);
+          document.getElementById("trend").textContent = last.type === "BUY" ? "Bullish" : "Bearish";
+        }
+
+        const labels = pricesRaw.map(p => new Date(p[0]).toLocaleTimeString());
+        if (!chart) {
+          chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [
+                { label: 'XRP/USDT', data: prices, borderColor: 'blue', fill: false },
+                { label: 'Linear Regression', data: lr, borderColor: 'orange', fill: false }
+              ]
+            },
+            options: { responsive: true }
+          });
+        } else {
+          chart.data.labels = labels;
+          chart.data.datasets[0].data = prices;
+          chart.data.datasets[1].data = lr;
+          chart.update();
+        }
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById("lastSignal").textContent = "❌ Fetch gagal";
       }
     }
 
-  } catch (err) {
-    log("❌ Gagal ambil harga TON");
-    console.error(err);
-  }
-}
-
-setInterval(fetchAndEvaluate, 15000);
-fetchAndEvaluate();
-</script>
+    setInterval(update, 30000);
+    update();
+  </script>
 </body>
 </html>
