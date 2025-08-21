@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TV-like • UT Bot (2,10) + LRC (100,2,2) • 100R • EmailJS Alerts (CoinGecko)</title>
-  <script src="https://s3.tradingview.com/tv.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
     :root{--bg:#0b0f14;--panel:#0f1720;--muted:#8aa0b6;--text:#e6eef7;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
@@ -138,7 +137,7 @@
     'CAKEUSDT':'pancakeswap-token'
   };
   const tfToMinutes={'1m':1,'3m':3,'5m':5,'15m':15,'1h':60};
-  const state={running:false,alarmOn:true,symbol:'XRPUSDT',cgid:'ripple',interval:'5m',limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
+  const state={running:false,alarmOn:true,symbol:'XRPUSDT',cgid:'ripple',interval:'5m',limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null, tradingviewLoaded:false};
   const $=id=>document.getElementById(id);
   function log(msg){const el=$("log");el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML;}
   function setStatus(s){$("status").textContent=s;}
@@ -161,9 +160,16 @@
     const raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
     return raw.prices;
   }catch(_){
-    try{ const raw = await tryFetch(target); return raw.prices; }catch(e){ throw new Error('CoinGecko fetch gagal'); }
+    try{
+      const wrapper = await tryFetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`);
+      const parsed = JSON.parse(wrapper.contents);
+      return parsed.prices;
+    }catch(__){
+      const raw = await tryFetch(target);
+      return raw.prices;
+    }
   }
-}/market_chart?vs_currency=usd&days=${days}&interval=minute`;const r=await fetch(url,{cache:'no-store'});if(!r.ok) throw new Error('CoinGecko fetch gagal');const raw=await r.json();return raw.prices;}
+}
 
   function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
     const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
