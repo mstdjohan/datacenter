@@ -29,7 +29,7 @@
 </head>
 <body>
 <header>
-  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
+  <h1>UT Bo (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
   <div class="row">
     <span class="badge" id="status">Idle</span>
     <button class="primary" id="btnToggle">Start</button>
@@ -157,7 +157,7 @@
   const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
   const tryFetch = async (u) => {
     const res = await fetch(u, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) throw new Error('HTTPINIERROR ' + res.status);
     return res.json();
   };
 
