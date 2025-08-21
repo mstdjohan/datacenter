@@ -239,10 +239,41 @@
   }
 }
 
+function fireAlert(side,last,lr){
+  beep();
+  log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`);
+
+  if(state.email.service && state.email.template && state.email.user && state.email.to){
+    const params={
+      side,
+      price: fmt(last.close),
+      time: new Date(last.time*1000).toLocaleString(),
+      pair: `${state.symbol.replace('USDT','')}/USD`,
+      interval: state.interval,
+      dev_up: fmt(lr.up.at(-1)),
+      dev_dn: fmt(lr.dn.at(-1)),
+      to: state.email.to
+    };
+
+    emailjs.send(state.email.service, state.email.template, params)
+      .then(()=>{
+        log('✅ Email terkirim');
+      })
+      .catch(err=>{
+        // Tampilkan info error lebih detail
+        const msg = err?.status === 401
+          ? '❌ Email gagal: HTTP 401 Unauthorized (cek Public Key / Service ID / Template ID)'
+          : '❌ Email gagal: ' + (err?.text || err?.message || JSON.stringify(err));
+        log(msg);
+        console.error("EmailJS Error:", err);
+      });
+  } else {
+    log("⚠️ EmailJS belum diset (isi Service ID, Template ID, Public Key, dan Email tujuan)");
+  }
+}
 
 
-  function fireAlert(side,last,lr){beep();log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`); if(state.email.service&&state.email.template&&state.email.user&&state.email.to){ const params={ side, price: fmt(last.close), time: new Date(last.time*1000).toLocaleString(), pair:`${state.symbol.replace('USDT','')}/USD`, interval: state.interval, dev_up: fmt(lr.up.at(-1)), dev_dn: fmt(lr.dn.at(-1)), to: state.email.to}; emailjs.send(state.email.service,state.email.template,params).then(()=>{log('Email terkirim')}).catch(err=>{log('Email gagal: '+(err?.text||err?.message||'unknown'))}) } }
-
+  
   const btnToggle=$("btnToggle");
   const btnAlarm=$("btnToggleAlarm");
   const btnTest=$("btnTest");
