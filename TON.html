@@ -1,104 +1,204 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <title>XR/USDT Auto Trading</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/regression@2.0.1/dist/regression.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TV-like • UT Bot (2,10) + LRC (100,2,2) • 100R • EmailJS Alerts (CoinGecko)</title>
+  <script src="https://s3.tradingview.com/tv.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <style>
+    :root{--bg:#0b0f14;--panel:#0f1720;--muted:#8aa0b6;--text:#e6eef7;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+    header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #1e293b}
+    h1{font-size:18px;margin:0}
+    .wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px}
+    .card{background:var(--panel);border:1px solid #1e293b;border-radius:14px;padding:12px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    label{font-size:12px;color:var(--muted)}
+    input,select,button{background:#09111e;color:var(--text);border:1px solid #213047;border-radius:12px;padding:8px 10px;font-size:13px}
+    button{cursor:pointer}
+    button.primary{background:var(--accent);color:#001018;border:none}
+    .badge{padding:3px 8px;border-radius:999px;background:#0b1220;border:1px solid #213047;color:#a7c7de;font-size:11px}
+    #tv_chart{height:520px}
+    #log{height:220px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#0a0f18;border-radius:12px;padding:10px}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .ok{color:var(--ok)}.bad{color:var(--bad)}
+    @media(max-width:1100px){.wrap{grid-template-columns:1fr}#tv_chart{height:420px}}
+  </style>
 </head>
-<body style="font-family: Arial; text-align:center; background:#111; color:#eee;">
-  <h2>📊 XRP/USDT Auto Trading (UT Bot 2/10 + Linear Regression 100,2,2)</h2>
-  <p id="live">Live: -</p>
-  <p id="trend">Trend: -</p>
-  <p id="signal">Last Signal: -</p>
-  <canvas id="chart" width="400" height="200"></canvas>
+<body>
+<header>
+  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
+  <div class="row">
+    <span class="badge" id="status">Idle</span>
+    <button class="primary" id="btnToggle">Start</button>
+  </div>
+</header>
 
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8"); // ganti dengan public key kamu
+<div class="wrap">
+  <aside class="card">
+    <div class="row" style="justify-content:space-between">
+      <label>Exchange / Pair</label>
+      <span class="badge" id="pairBadge">BINANCE:XRPUSDT</span>
+    </div>
 
-    async function getPricesFromCG(id, days) {
-      try {
-        const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`;
-        const r = await fetch(proxyUrl, { cache: "no-store" });
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const raw = await r.json();
-        return raw.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
-      } catch (e) {
-        console.error("❌ Error CoinGecko:", e);
-        return null;
-      }
-    }
+    <div class="row" style="margin-top:8px">
+      <label>Symbol</label>
+      <input id="symbol" value="XRPUSDT" style="width:130px">
+      <label>CG ID</label>
+      <input id="cgid" value="ripple" style="width:150px">
+      <button id="applySymbol">Terapkan</button>
+    </div>
 
-    let chart, lastSignal = "-";
+    <div class="row" style="margin-top:8px">
+      <label>Timeframe</label>
+      <select id="interval">
+        <option value="1m">1m</option>
+        <option value="3m">3m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+      </select>
+      <label>Candles</label>
+      <select id="limit">
+        <option>300</option>
+        <option selected>500</option>
+        <option>800</option>
+        <option>1000</option>
+      </select>
+    </div>
 
-    function calcLinearRegression(prices) {
-      let input = prices.map((p, i) => [i, p.price]);
-      let result = regression.linear(input);
-      return input.map((d, i) => ({ x: d[0], y: result.points[i][1] }));
-    }
+    <h3 class="muted" style="margin:10px 0 6px">UT Bot (2,10)</h3>
+    <div class="row">
+      <label>KV</label>
+      <input type="number" id="kv" value="2" step="0.1" style="width:80px">
+      <label>ATR</label>
+      <input type="number" id="atr" value="10" step="1" style="width:80px">
+    </div>
 
-    function calcUTBot(prices, keyValue = 2, atrPeriod = 10) {
-      let signals = [];
-      for (let i = atrPeriod; i < prices.length; i++) {
-        let slice = prices.slice(i - atrPeriod, i);
-        let avg = slice.reduce((a, b) => a + b.price, 0) / atrPeriod;
-        if (prices[i].price > avg * (1 + keyValue/100)) signals.push({ time: prices[i].time, type: "BUY" });
-        else if (prices[i].price < avg * (1 - keyValue/100)) signals.push({ time: prices[i].time, type: "SELL" });
-      }
-      return signals;
-    }
+    <h3 class="muted" style="margin:10px 0 6px">Linear Regression Channel</h3>
+    <div class="row">
+      <label>Length</label>
+      <input type="number" id="lrLen" value="100" step="1" style="width:80px">
+      <label>DevUp</label>
+      <input type="number" id="devUp" value="2" step="0.1" style="width:80px">
+      <label>DevDn</label>
+      <input type="number" id="devDn" value="2" step="0.1" style="width:80px">
+    </div>
 
-    function sendEmail(signal, price) {
-      emailjs.send("service_5hxo1hk", "template_iq87egh", {
-        signal: signal,
-        price: price,
-        pair: "XRP/USDT"
-      }).then(() => console.log("📧 Email terkirim:", signal));
-    }
+    <h3 class="muted" style="margin:10px 0 6px">Alarm & Email</h3>
+    <div class="row">
+      <button id="btnToggleAlarm" class="primary">🔔 Alarm ON</button>
+      <button id="btnTest">Test Alarm</button>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <div>
+        <label>Email Service ID</label>
+        <input id="emailService" placeholder="service_xxx">
+      </div>
+      <div>
+        <label>Email Template ID</label>
+        <input id="emailTemplate" placeholder="template_xxx">
+      </div>
+      <div>
+        <label>Public Key</label>
+        <input id="emailUser" placeholder="YOUR_PUBLIC_KEY">
+      </div>
+      <div>
+        <label>Kirim ke Email</label>
+        <input id="emailTo" placeholder="nama@domain.com">
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnSaveEmail">Simpan EmailJS</button>
+      <span id="emailStatus" class="badge">EmailJS: Not set</span>
+    </div>
 
-    async function update() {
-      let prices = await getPricesFromCG("ripple", 1);
-      if (!prices) {
-        document.getElementById("signal").textContent = "Last Signal: ❌ Fetch gagal";
-        return;
-      }
-      let lastPrice = prices[prices.length - 1].price;
-      document.getElementById("live").textContent = "Live: $" + lastPrice.toFixed(4);
+    <div class="muted" style="margin-top:10px">Sumber data: CoinGecko market_chart (USD). Candle dibentuk dari agregasi ke TF yang dipilih.</div>
+  </aside>
 
-      let regressionLine = calcLinearRegression(prices.slice(-100));
-      let utSignals = calcUTBot(prices, 2, 10);
+  <main class="card">
+    <div id="tv_chart"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between">
+        <div><b>Live:</b> <span id="live"></span> • <span class="muted" id="lastUpdate"></span></div>
+        <div><span class="badge" id="trendBadge">Trend: -</span></div>
+      </div>
+    </div>
+    <div id="log" class="card"></div>
+  </main>
+</div>
 
-      if (utSignals.length > 0) {
-        let sig = utSignals[utSignals.length - 1];
-        if (sig.type !== lastSignal) {
-          lastSignal = sig.type;
-          document.getElementById("signal").textContent = "Last Signal: " + sig.type;
-          sendEmail(sig.type, lastPrice);
-        }
-      }
+<script>
+(function(){
+  const symbolToCgId={
+    'XRPUSDT':'ripple',
+    'CAKEUSDT':'pancakeswap-token'
+  };
+  const tfToMinutes={'1m':1,'3m':3,'5m':5,'15m':15,'1h':60};
+  const state={running:false,alarmOn:true,symbol:'XRPUSDT',cgid:'ripple',interval:'5m',limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
+  const $=id=>document.getElementById(id);
+  function log(msg){const el=$("log");el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML;}
+  function setStatus(s){$("status").textContent=s;}
+  function beep(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.type='sine';o.frequency.value=880;g.gain.value=0.03;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>{o.stop();ctx.close();},220);}catch(_){} }
 
-      let trend = regressionLine[regressionLine.length - 1].y - regressionLine[0].y;
-      document.getElementById("trend").textContent = "Trend: " + (trend >= 0 ? "Bullish" : "Bearish");
+  function loadEmailCfg(){const raw=localStorage.getItem('emailjs_cfg');if(raw){try{const x=JSON.parse(raw);state.email=x;$("emailService").value=x.service||'';$("emailTemplate").value=x.template||'';$("emailUser").value=x.user||'';$("emailTo").value=x.to||'';if(x.user){emailjs.init(x.user);}updateEmailBadge();}catch(e){}}
+  }
+  function saveEmailCfg(){state.email.service=$("emailService").value.trim();state.email.template=$("emailTemplate").value.trim();state.email.user=$("emailUser").value.trim();state.email.to=$("emailTo").value.trim();localStorage.setItem('emailjs_cfg',JSON.stringify(state.email));if(state.email.user){emailjs.init(state.email.user);}updateEmailBadge();log('EmailJS disimpan');}
+  function updateEmailBadge(){const ok=state.email.service&&state.email.template&&state.email.user&&state.email.to;$("emailStatus").textContent= ok? 'EmailJS: Ready':'EmailJS: Not set'}
 
-      let ctx = document.getElementById("chart").getContext("2d");
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: prices.map(p => p.time.toLocaleTimeString()),
-          datasets: [
-            { label: "Price", data: prices.map(p => p.price), borderColor: "#0f0", borderWidth: 1, fill: false },
-            { label: "Linear Regression", data: regressionLine.map(p => p.y), borderColor: "#f90", borderWidth: 1, fill: false }
-          ]
-        },
-        options: { responsive: true, plugins: { legend: { labels: { color: "#fff" } } }, scales: { x: { ticks: { color: "#fff" } }, y: { ticks: { color: "#fff" } } } }
-      });
-    }
+  function syncInputs(){state.interval=$("interval").value;state.limit=+$("limit").value;state.kv=+$("kv").value;state.atr=+$("atr").value;state.lrLen=+$("lrLen").value;state.devUp=+$("devUp").value;state.devDn=+$("devDn").value}
+  function applySymbol(){const s=$("symbol").value.trim().toUpperCase();if(!s) return;state.symbol=s;const mapped=symbolToCgId[s];state.cgid=$("cgid").value.trim()||mapped||'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`);}  
 
-    update();
-    setInterval(update, 30000);
-  </script>
+  function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
+
+  async function getPricesFromCG(id, days){
+  const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
+  const tryFetch = async (u)=>{ const res = await fetch(u,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status); return res.json(); };
+  try{
+    const raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
+    return raw.prices;
+  }catch(_){
+    try{ const raw = await tryFetch(target); return raw.prices; }catch(e){ throw new Error('CoinGecko fetch gagal'); }
+  }
+}/market_chart?vs_currency=usd&days=${days}&interval=minute`;const r=await fetch(url,{cache:'no-store'});if(!r.ok) throw new Error('CoinGecko fetch gagal');const raw=await r.json();return raw.prices;}
+
+  function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
+    const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
+
+  async function getKlinesFromCG(id, interval, limit){const tfMin=tfToMinutes[interval]||5;const minutesNeeded=tfMin*limit;let days=Math.ceil(minutesNeeded/1440)+1;days=Math.min(Math.max(days,1),30);const prices=await getPricesFromCG(id, days);return aggregateToCandles(prices, tfMin, limit);}
+
+  function trueRange(c){const t=[NaN];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];const m1=a.high-a.low,m2=Math.abs(a.high-b.close),m3=Math.abs(a.low-b.close);t.push(Math.max(m1,m2,m3))}return t}
+  function atr(c,p=10){const t=trueRange(c);let o=new Array(c.length).fill(NaN);let s=0,i=1;while(i<=p&&i<t.length){s+=t[i];i++}if(i<=p)return o;o[p]=s/p;for(let j=p+1;j<t.length;j++){o[j]=(o[j-1]*(p-1)+t[j])/p}return o}
+  function utBot(c,kv=2,aP=10){const n=c.length;const r={trend:new Array(n).fill(0),upper:new Array(n).fill(NaN),lower:new Array(n).fill(NaN),line:new Array(n).fill(NaN)};const A=atr(c,aP);let tr=1,up=NaN,dn=NaN;for(let i=0;i<n;i++){const x=c[i];const hl2=(x.high+x.low)/2;const nLoss=kv*A[i];if(!isFinite(nLoss)){r.trend[i]=0;continue}const bU=hl2+nLoss,bL=hl2-nLoss;if(i===0){up=bU;dn=bL}else{const pU=r.upper[i-1];const pL=r.lower[i-1];up=(bU<pU||x.close>pU)?bU:pU;dn=(bL>pL||x.close<pL)?bL:pL}const pT=i>0?r.trend[i-1]:1;tr=x.close>up?1:x.close<dn?-1:pT;const line=tr===1?dn:up;r.trend[i]=tr;r.upper[i]=up;r.lower[i]=dn;r.line[i]=line}return r}
+  function linRegChannel(c,l=100,u=2,d=2){const n=c.length;const m=new Array(n).fill(NaN),up=new Array(n).fill(NaN),dn=new Array(n).fill(NaN);for(let i=l-1;i<n;i++){const sl=c.slice(i-l+1,i+1);const y=sl.map(z=>z.close);const M=y.length;const X=[...Array(M).keys()];const SX=X.reduce((a,b)=>a+b,0);const SY=y.reduce((a,b)=>a+b,0);const SXX=X.reduce((a,b)=>a+b*b,0);const SXY=X.reduce((a,b,j)=>a+b*y[j],0);const D=M*SXX-SX*SX;const slope=D!==0?(M*SXY-SX*SY)/D:0;const intercept=(SY-slope*SX)/M;const yHat=intercept+slope*(M-1);const s2=y.reduce((a,v,j)=>{const est=intercept+slope*j;return a+(v-est)*(v-est)},0)/M;const sd=Math.sqrt(s2);m[i]=yHat;up[i]=yHat+u*sd;dn[i]=yHat-d*sd}return{mid:m,up, dn}}
+
+  async function step(){try{syncInputs();const candles=await getKlinesFromCG(state.cgid,state.interval,state.limit);if(!candles.length) return;const ut=utBot(candles,state.kv,state.atr);const lr=linRegChannel(candles,state.lrLen,state.devUp,state.devDn);const last=candles[candles.length-1];const prevTrend=ut.trend[ut.trend.length-2]??null;const lastTrend=ut.trend[ut.trend.length-1];$("live").textContent=`${fmt(last.close)} USD`;$("lastUpdate").textContent=`TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;$("trendBadge").textContent=`Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;const barKey=last.time; if(state.alarmOn){ if(state.lastTrend!==null && state.lastAlertBar!==barKey){ if(prevTrend===-1 && lastTrend===1){fireAlert('BUY', last, lr);} else if(prevTrend===1 && lastTrend===-1){fireAlert('SELL', last, lr);} } } state.lastTrend=lastTrend; state.lastAlertBar=barKey; }catch(e){log('Error: '+e.message);} }
+
+  function fireAlert(side,last,lr){beep();log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`); if(state.email.service&&state.email.template&&state.email.user&&state.email.to){ const params={ side, price: fmt(last.close), time: new Date(last.time*1000).toLocaleString(), pair:`${state.symbol.replace('USDT','')}/USD`, interval: state.interval, dev_up: fmt(lr.up.at(-1)), dev_dn: fmt(lr.dn.at(-1)), to: state.email.to}; emailjs.send(state.email.service,state.email.template,params).then(()=>{log('Email terkirim')}).catch(err=>{log('Email gagal: '+(err?.text||err?.message||'unknown'))}) } }
+
+  const btnToggle=$("btnToggle");
+  const btnAlarm=$("btnToggleAlarm");
+  const btnTest=$("btnTest");
+  const btnSaveEmail=$("btnSaveEmail");
+  const applyBtn=$("applySymbol");
+
+  btnToggle.onclick=()=>{state.running=!state.running;setStatus(state.running? 'Running':'Stopped');btnToggle.textContent=state.running? 'Stop':'Start'; if(state.running){step(); if(!state._timer) state._timer=setInterval(step,30000);} else { if(state._timer){clearInterval(state._timer);state._timer=null;} } };
+  btnAlarm.onclick=()=>{state.alarmOn=!state.alarmOn;btnAlarm.textContent=state.alarmOn? '🔔 Alarm ON':'🔕 Alarm OFF'};
+  btnTest.onclick=()=>{fireAlert('TEST',{close:NaN,time:Math.floor(Date.now()/1000)},{up:[NaN],dn:[NaN]})};
+  btnSaveEmail.onclick=saveEmailCfg;
+  applyBtn.onclick=()=>{const s=$("symbol").value.trim().toUpperCase();const idField=$("cgid").value.trim();state.symbol=s;state.cgid=idField || symbolToCgId[s] || 'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`)};
+
+  function renderTV(){ new TradingView.widget({autosize:true,symbol:`BINANCE:${state.symbol}`,interval:"5",timezone:"Etc/UTC",theme:"dark",style:"1",locale:"en",hide_top_toolbar:false,hide_legend:false,container_id:"tv_chart"}); }
+
+  (function initDefaults(){const s=$("symbol").value.trim().toUpperCase();$("cgid").value=symbolToCgId[s]||'ripple';state.symbol=s;state.cgid=$("cgid").value.trim();})();
+  loadEmailCfg();
+  setStatus('Idle');
+  renderTV();
+  step();
+})();
+</script>
 </body>
 </html>
