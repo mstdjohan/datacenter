@@ -29,7 +29,7 @@
 </head>
 <body>
 <header>
-  <h1>UT Bo (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
+  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
   <div class="row">
     <span class="badge" id="status">Idle</span>
     <button class="primary" id="btnToggle">Start</button>
@@ -155,29 +155,45 @@
 
   async function getPricesFromCG(id, days) {
   const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-  const tryFetch = async (u) => {
+
+  const tryFetch = async (u, label="") => {
     const res = await fetch(u, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTPINIERROR ' + res.status);
+    if (!res.ok) throw new Error(`HTTP ${res.status} (${label || u})`);
     return res.json();
   };
 
   try {
-    const raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
-    if (!raw.prices || !Array.isArray(raw.prices)) throw new Error('Invalid prices (raw direct)');
-    return raw.prices;
-  } catch (_) {
+    // 1. coba langsung ke CoinGecko
+    const raw = await tryFetch(target, "CoinGecko direct");
+    if (raw?.prices && Array.isArray(raw.prices)) return raw.prices;
+    throw new Error("Invalid prices (direct)");
+  } catch (e1) {
+    console.warn("Direct fetch gagal:", e1.message);
+
     try {
-      const wrapper = await tryFetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`);
-      const parsed = JSON.parse(wrapper.contents);
-      if (!parsed.prices || !Array.isArray(parsed.prices)) throw new Error('Invalid prices (wrapped)');
-      return parsed.prices;
-    } catch (__) {
-      const raw = await tryFetch(target);
-      if (!raw.prices || !Array.isArray(raw.prices)) throw new Error('Invalid prices (fallback)');
-      return raw.prices;
+      // 2. coba proxy allorigins (raw)
+      const raw = await tryFetch(
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+        "AllOrigins raw"
+      );
+      if (raw?.prices && Array.isArray(raw.prices)) return raw.prices;
+      throw new Error("Invalid prices (raw proxy)");
+    } catch (e2) {
+      console.warn("AllOrigins raw gagal:", e2.message);
+
+      // 3. fallback terakhir: allorigins wrapped
+      const wrapper = await tryFetch(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
+        "AllOrigins wrapped"
+      );
+      const parsed = JSON.parse(wrapper.contents || "{}");
+      if (parsed?.prices && Array.isArray(parsed.prices)) return parsed.prices;
+
+      throw new Error("Invalid prices (wrapped proxy)");
     }
   }
 }
+
 
 
   function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
