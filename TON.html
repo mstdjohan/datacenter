@@ -2,108 +2,103 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XRP Trading Bot - UT Bot + Linear Regression</title>
+  <title>XRP/USDT Auto Trading</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/regression@2.0.1/dist/regression.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
-<body style="font-family: Arial, sans-serif; padding:20px;">
+<body style="font-family: Arial; text-align:center; background:#111; color:#eee;">
   <h2>📊 XRP/USDT Auto Trading (UT Bot 2/10 + Linear Regression 100,2,2)</h2>
-  <div>
-    Live: <span id="livePrice">-</span><br>
-    Trend: <span id="trend">-</span><br>
-    Last Signal: <span id="lastSignal">-</span>
-  </div>
-  <canvas id="chart" width="800" height="400"></canvas>
+  <p id="live">Live: -</p>
+  <p id="trend">Trend: -</p>
+  <p id="signal">Last Signal: -</p>
+  <canvas id="chart" width="400" height="200"></canvas>
 
   <script>
-    const ctx = document.getElementById('chart').getContext('2d');
-    let chart;
+    emailjs.init("OGH12a8LlCboHPVz8"); // ganti dengan public key kamu
 
     async function getPricesFromCG(id, days) {
-      const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
-
-      const r = await fetch(proxyUrl, { cache: 'no-store' });
-      if (!r.ok) throw new Error('Proxy fetch gagal');
-
-      const wrapped = await r.json();
-      const raw = JSON.parse(wrapped.contents);
-      return raw.prices;
+      try {
+        const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`;
+        const r = await fetch(proxyUrl, { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const raw = await r.json();
+        return raw.prices.map(p => ({ time: new Date(p[0]), price: p[1] }));
+      } catch (e) {
+        console.error("❌ Error CoinGecko:", e);
+        return null;
+      }
     }
 
-    function linearRegression(data) {
-      const n = data.length;
-      const x = Array.from({length: n}, (_, i) => i);
-      const y = data;
+    let chart, lastSignal = "-";
 
-      const sumX = x.reduce((a,b) => a+b, 0);
-      const sumY = y.reduce((a,b) => a+b, 0);
-      const sumXY = x.reduce((acc, xi, i) => acc + xi*y[i], 0);
-      const sumXX = x.reduce((acc, xi) => acc + xi*xi, 0);
-
-      const slope = (n*sumXY - sumX*sumY) / (n*sumXX - sumX*sumX);
-      const intercept = (sumY - slope*sumX) / n;
-
-      return x.map((xi) => slope*xi + intercept);
+    function calcLinearRegression(prices) {
+      let input = prices.map((p, i) => [i, p.price]);
+      let result = regression.linear(input);
+      return input.map((d, i) => ({ x: d[0], y: result.points[i][1] }));
     }
 
-    function UTBot(data, key=2, atrPeriod=10) {
+    function calcUTBot(prices, keyValue = 2, atrPeriod = 10) {
       let signals = [];
-      for (let i = atrPeriod; i < data.length; i++) {
-        const atr = Math.abs(data[i] - data[i-atrPeriod]);
-        if (data[i] > data[i-1] + key*atr) {
-          signals.push({index: i, type: "BUY", price: data[i]});
-        } else if (data[i] < data[i-1] - key*atr) {
-          signals.push({index: i, type: "SELL", price: data[i]});
-        }
+      for (let i = atrPeriod; i < prices.length; i++) {
+        let slice = prices.slice(i - atrPeriod, i);
+        let avg = slice.reduce((a, b) => a + b.price, 0) / atrPeriod;
+        if (prices[i].price > avg * (1 + keyValue/100)) signals.push({ time: prices[i].time, type: "BUY" });
+        else if (prices[i].price < avg * (1 - keyValue/100)) signals.push({ time: prices[i].time, type: "SELL" });
       }
       return signals;
     }
 
-    async function update() {
-      try {
-        const pricesRaw = await getPricesFromCG("ripple", 1); // XRP
-        const prices = pricesRaw.map(p => p[1]);
-
-        document.getElementById("livePrice").textContent = "$" + prices[prices.length-1].toFixed(4);
-
-        const lr = linearRegression(prices.slice(-100));
-        const signals = UTBot(prices, 2, 10);
-
-        if (signals.length > 0) {
-          const last = signals[signals.length-1];
-          document.getElementById("lastSignal").textContent = last.type + " @ $" + last.price.toFixed(4);
-          document.getElementById("trend").textContent = last.type === "BUY" ? "Bullish" : "Bearish";
-        }
-
-        const labels = pricesRaw.map(p => new Date(p[0]).toLocaleTimeString());
-        if (!chart) {
-          chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: labels,
-              datasets: [
-                { label: 'XRP/USDT', data: prices, borderColor: 'blue', fill: false },
-                { label: 'Linear Regression', data: lr, borderColor: 'orange', fill: false }
-              ]
-            },
-            options: { responsive: true }
-          });
-        } else {
-          chart.data.labels = labels;
-          chart.data.datasets[0].data = prices;
-          chart.data.datasets[1].data = lr;
-          chart.update();
-        }
-
-      } catch (err) {
-        console.error(err);
-        document.getElementById("lastSignal").textContent = "❌ Fetch gagal";
-      }
+    function sendEmail(signal, price) {
+      emailjs.send("service_5hxo1hk", "template_iq87egh", {
+        signal: signal,
+        price: price,
+        pair: "XRP/USDT"
+      }).then(() => console.log("📧 Email terkirim:", signal));
     }
 
-    setInterval(update, 30000);
+    async function update() {
+      let prices = await getPricesFromCG("ripple", 1);
+      if (!prices) {
+        document.getElementById("signal").textContent = "Last Signal: ❌ Fetch gagal";
+        return;
+      }
+      let lastPrice = prices[prices.length - 1].price;
+      document.getElementById("live").textContent = "Live: $" + lastPrice.toFixed(4);
+
+      let regressionLine = calcLinearRegression(prices.slice(-100));
+      let utSignals = calcUTBot(prices, 2, 10);
+
+      if (utSignals.length > 0) {
+        let sig = utSignals[utSignals.length - 1];
+        if (sig.type !== lastSignal) {
+          lastSignal = sig.type;
+          document.getElementById("signal").textContent = "Last Signal: " + sig.type;
+          sendEmail(sig.type, lastPrice);
+        }
+      }
+
+      let trend = regressionLine[regressionLine.length - 1].y - regressionLine[0].y;
+      document.getElementById("trend").textContent = "Trend: " + (trend >= 0 ? "Bullish" : "Bearish");
+
+      let ctx = document.getElementById("chart").getContext("2d");
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: prices.map(p => p.time.toLocaleTimeString()),
+          datasets: [
+            { label: "Price", data: prices.map(p => p.price), borderColor: "#0f0", borderWidth: 1, fill: false },
+            { label: "Linear Regression", data: regressionLine.map(p => p.y), borderColor: "#f90", borderWidth: 1, fill: false }
+          ]
+        },
+        options: { responsive: true, plugins: { legend: { labels: { color: "#fff" } } }, scales: { x: { ticks: { color: "#fff" } }, y: { ticks: { color: "#fff" } } } }
+      });
+    }
+
     update();
+    setInterval(update, 30000);
   </script>
 </body>
 </html>
