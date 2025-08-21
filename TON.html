@@ -29,7 +29,7 @@
 </head>
 <body>
 <header>
-  <h1>UT Bot (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
+  <h1>UT Bo (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
   <div class="row">
     <span class="badge" id="status">Idle</span>
     <button class="primary" id="btnToggle">Start</button>
@@ -183,13 +183,23 @@
 
       // 3. fallback terakhir: allorigins wrapped
       const wrapper = await tryFetch(
-        `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
-        "AllOrigins wrapped"
-      );
-      const parsed = JSON.parse(wrapper.contents || "{}");
-      if (parsed?.prices && Array.isArray(parsed.prices)) return parsed.prices;
+  `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
+  "AllOrigins wrapped"
+);
 
-      throw new Error("Invalid prices (wrapped proxy)");
+let parsed = {};
+try {
+  parsed = JSON.parse(wrapper.contents || "{}");
+} catch (e) {
+  console.error("Wrapper parse error:", e, "Raw:", wrapper);
+}
+
+if (parsed?.prices && Array.isArray(parsed.prices)) return parsed.prices;
+
+// ⬇️ Tambah debug biar kelihatan isi respons
+console.error("Wrapped proxy response:", parsed);
+throw new Error("Invalid prices (wrapped proxy)");
+
     }
   }
 }
