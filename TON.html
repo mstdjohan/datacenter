@@ -153,35 +153,77 @@
 
   function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
 
-  async function getPricesFromCG(id, days){
+  async function getPricesFromCG(id, days) {
   const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-  const tryFetch = async (u)=>{ const res = await fetch(u,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status); return res.json(); };
-  try{
+  const tryFetch = async (u) => {
+    const res = await fetch(u, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  };
+
+  try {
     const raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
+    if (!raw.prices || !Array.isArray(raw.prices)) throw new Error('Invalid prices (raw direct)');
     return raw.prices;
-  }catch(_){
-    try{
+  } catch (_) {
+    try {
       const wrapper = await tryFetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`);
       const parsed = JSON.parse(wrapper.contents);
+      if (!parsed.prices || !Array.isArray(parsed.prices)) throw new Error('Invalid prices (wrapped)');
       return parsed.prices;
-    }catch(__){
+    } catch (__) {
       const raw = await tryFetch(target);
+      if (!raw.prices || !Array.isArray(raw.prices)) throw new Error('Invalid prices (fallback)');
       return raw.prices;
     }
   }
 }
 
+
   function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
     const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
 
-  async function getKlinesFromCG(id, interval, limit){const tfMin=tfToMinutes[interval]||5;const minutesNeeded=tfMin*limit;let days=Math.ceil(minutesNeeded/1440)+1;days=Math.min(Math.max(days,1),30);const prices=await getPricesFromCG(id, days);return aggregateToCandles(prices, tfMin, limit);}
+  async function getKlinesFromCG(id, interval, limit) {
+  const tfMin = tfToMinutes[interval] || 5;
+  const minutesNeeded = tfMin * limit;
+  let days = Math.ceil(minutesNeeded / 1440) + 1;
+  days = Math.min(Math.max(days, 1), 30);
 
+  const prices = await getPricesFromCG(id, days);
+
+  if (!Array.isArray(prices)) {
+    console.error('Invalid prices data:', prices);
+    throw new Error('prices is not iterable');
+  }
+
+  return aggregateToCandles(prices, tfMin, limit);
+}
+  
   function trueRange(c){const t=[NaN];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];const m1=a.high-a.low,m2=Math.abs(a.high-b.close),m3=Math.abs(a.low-b.close);t.push(Math.max(m1,m2,m3))}return t}
   function atr(c,p=10){const t=trueRange(c);let o=new Array(c.length).fill(NaN);let s=0,i=1;while(i<=p&&i<t.length){s+=t[i];i++}if(i<=p)return o;o[p]=s/p;for(let j=p+1;j<t.length;j++){o[j]=(o[j-1]*(p-1)+t[j])/p}return o}
   function utBot(c,kv=2,aP=10){const n=c.length;const r={trend:new Array(n).fill(0),upper:new Array(n).fill(NaN),lower:new Array(n).fill(NaN),line:new Array(n).fill(NaN)};const A=atr(c,aP);let tr=1,up=NaN,dn=NaN;for(let i=0;i<n;i++){const x=c[i];const hl2=(x.high+x.low)/2;const nLoss=kv*A[i];if(!isFinite(nLoss)){r.trend[i]=0;continue}const bU=hl2+nLoss,bL=hl2-nLoss;if(i===0){up=bU;dn=bL}else{const pU=r.upper[i-1];const pL=r.lower[i-1];up=(bU<pU||x.close>pU)?bU:pU;dn=(bL>pL||x.close<pL)?bL:pL}const pT=i>0?r.trend[i-1]:1;tr=x.close>up?1:x.close<dn?-1:pT;const line=tr===1?dn:up;r.trend[i]=tr;r.upper[i]=up;r.lower[i]=dn;r.line[i]=line}return r}
   function linRegChannel(c,l=100,u=2,d=2){const n=c.length;const m=new Array(n).fill(NaN),up=new Array(n).fill(NaN),dn=new Array(n).fill(NaN);for(let i=l-1;i<n;i++){const sl=c.slice(i-l+1,i+1);const y=sl.map(z=>z.close);const M=y.length;const X=[...Array(M).keys()];const SX=X.reduce((a,b)=>a+b,0);const SY=y.reduce((a,b)=>a+b,0);const SXX=X.reduce((a,b)=>a+b*b,0);const SXY=X.reduce((a,b,j)=>a+b*y[j],0);const D=M*SXX-SX*SX;const slope=D!==0?(M*SXY-SX*SY)/D:0;const intercept=(SY-slope*SX)/M;const yHat=intercept+slope*(M-1);const s2=y.reduce((a,v,j)=>{const est=intercept+slope*j;return a+(v-est)*(v-est)},0)/M;const sd=Math.sqrt(s2);m[i]=yHat;up[i]=yHat+u*sd;dn[i]=yHat-d*sd}return{mid:m,up, dn}}
 
-  async function step(){try{syncInputs();const candles=await getKlinesFromCG(state.cgid,state.interval,state.limit);if(!candles.length) return;const ut=utBot(candles,state.kv,state.atr);const lr=linRegChannel(candles,state.lrLen,state.devUp,state.devDn);const last=candles[candles.length-1];const prevTrend=ut.trend[ut.trend.length-2]??null;const lastTrend=ut.trend[ut.trend.length-1];$("live").textContent=`${fmt(last.close)} USD`;$("lastUpdate").textContent=`TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;$("trendBadge").textContent=`Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;const barKey=last.time; if(state.alarmOn){ if(state.lastTrend!==null && state.lastAlertBar!==barKey){ if(prevTrend===-1 && lastTrend===1){fireAlert('BUY', last, lr);} else if(prevTrend===1 && lastTrend===-1){fireAlert('SELL', last, lr);} } } state.lastTrend=lastTrend; state.lastAlertBar=barKey; }catch(e){log('Error: '+e.message);} }
+  async function step() {
+  try {
+    syncInputs();
+    const candles = await getKlinesFromCG(state.cgid, state.interval, state.limit);
+    if (!candles.length) return;
+
+    const ut = utBot(candles, state.kv, state.atr);
+    const lr = linRegChannel(candles, state.lrLen, state.devUp, state.devDn);
+    const last = candles[candles.length - 1];
+    const prevTrend = ut.trend[ut.trend.length - 2] ?? null;
+    const lastTrend = ut.trend[ut.trend.length - 1];
+
+    $("live").textContent = `${fmt(last.close)} USD`;
+    $("lastUpdate").textContent = `TF ${state.interval} • ${new Date(last.time * 1000).toLocaleString()}`;
+    $("trendBadge").textContent = `Trend: ${lastTrend > 0 ? 'UP' : lastTrend < 0 ? 'DOWN' : '-'}`;
+
+    const barKey = last.time;
+    if (state.alarmOn) {
+      if (state.lastTrend !== null && st
+
 
   function fireAlert(side,last,lr){beep();log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`); if(state.email.service&&state.email.template&&state.email.user&&state.email.to){ const params={ side, price: fmt(last.close), time: new Date(last.time*1000).toLocaleString(), pair:`${state.symbol.replace('USDT','')}/USD`, interval: state.interval, dev_up: fmt(lr.up.at(-1)), dev_dn: fmt(lr.dn.at(-1)), to: state.email.to}; emailjs.send(state.email.service,state.email.template,params).then(()=>{log('Email terkirim')}).catch(err=>{log('Email gagal: '+(err?.text||err?.message||'unknown'))}) } }
 
