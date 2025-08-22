@@ -33,6 +33,24 @@
       candleSeries = chart.addCandlestickSeries();
     }
 
+let prices = [];
+    let highs = [];
+    let lows = [];
+    let pair = null;
+
+    async function findPair() {
+      let res = await fetch("https://indodax.com/api/pairs");
+      let data = await res.json();
+      let found = data.find(p => p.id.includes("cake"));
+      if (found) {
+        pair = found.id;
+        document.getElementById("status").innerText = "Pair ditemukan: " + pair;
+      } else {
+        document.getElementById("status").innerText = "CAKE tidak ada di Indodax";
+      }
+    }
+
+    
     function calcATR(period = 10) {
       if (prices.length < period + 1) return null;
       let trs = [];
