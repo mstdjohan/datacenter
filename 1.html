@@ -1,45 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CAKE/USDT Signals</title>
+  <title>CAKE/IDR Signals</title>
 </head>
 <body>
-  <h2>Signal Trading CAKE/USDT (Indodax)</h2>
+  <h2>Signal Trading CAKE/IDR (Indodax)</h2>
   <div id="price">Loading...</div>
   <div id="signal">Waiting signal...</div>
 
   <script>
-    let prices = []; // simpan harga untuk analisa
+    let prices = [];
 
     async function getPrice() {
       try {
-        let res = await fetch("https://indodax.com/api/ticker/cakeusdt");
+        // ganti cakeusdt -> cake_idr
+        let res = await fetch("https://indodax.com/api/ticker/cake_idr");
         let data = await res.json();
+
+        if (!data.ticker || !data.ticker.last) {
+          throw new Error("Invalid response: " + JSON.stringify(data));
+        }
+
         let price = parseFloat(data.ticker.last);
         prices.push(price);
 
-        // jaga panjang array (100 data terakhir)
         if (prices.length > 100) prices.shift();
 
-        document.getElementById("price").innerText = "Last Price: " + price + " USDT";
+        document.getElementById("price").innerText = "Last Price: " + price + " IDR";
 
-        // ---- LOGIKA SIGNAL ----
         if (prices.length >= 20) {
-          // Moving Average sederhana
           let avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-
-          // hitung deviasi standar sederhana (buat channel)
           let variance = prices.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / prices.length;
           let stdev = Math.sqrt(variance);
           let upper = avg + 2 * stdev;
           let lower = avg - 2 * stdev;
 
           let signal = "HOLD";
-
           if (price > upper) {
-            signal = "SELL 🚨 (harga tembus resistance)";
+            signal = "SELL 🚨 (tembus resistance)";
           } else if (price < lower) {
-            signal = "BUY ✅ (harga tembus support)";
+            signal = "BUY ✅ (tembus support)";
           }
 
           document.getElementById("signal").innerText = "Signal: " + signal;
@@ -51,7 +51,7 @@
     }
 
     getPrice();
-    setInterval(getPrice, 5000); // update tiap 5 detik
+    setInterval(getPrice, 5000);
   </script>
 </body>
 </html>
