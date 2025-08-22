@@ -14,6 +14,7 @@
 <body>
   <h2>CAKE/IDR Trading Signal</h2>
   <div id="status">Loading...</div>
+    <div id="status1">Loading...</div>
   <div id="signal">Waiting signal...</div>
   <div id="chart"></div>
 
@@ -44,9 +45,9 @@ let prices = [];
       let found = data.find(p => p.id.includes("cake"));
       if (found) {
         pair = found.id;
-        document.getElementById("status").innerText = "Pair ditemukan: " + pair;
+        document.getElementById("status1").innerText = "Pair ditemukan: " + pair;
       } else {
-        document.getElementById("status").innerText = "CAKE tidak ada di Indodax";
+        document.getElementById("status1").innerText = "CAKE tidak ada di Indodax";
       }
     }
 
