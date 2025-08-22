@@ -1,29 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CAKE Trading Signal Indodax</title>
+  <title>CAKE/IDR Trading Signal (UT Bot + LRC)</title>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #111; color: #eee; text-align: center; }
+    #chart { width: 100%; height: 400px; margin-top: 10px; }
+    #status { margin: 10px 0; font-size: 16px; }
+    #signal { font-size: 20px; font-weight: bold; }
+  </style>
 </head>
 <body>
-  <h2>CAKE/IDR Trading Signal (UT Bot + LRC)</h2>
+  <h2>CAKE/IDR Trading Signal</h2>
   <div id="status">Loading...</div>
   <div id="signal">Waiting signal...</div>
+  <div id="chart"></div>
 
   <script>
-    let prices = [];
-    let highs = [];
-    let lows = [];
-    let pair = null;
+    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS
 
-    async function findPair() {
-      let res = await fetch("https://indodax.com/api/pairs");
-      let data = await res.json();
-      let found = data.find(p => p.id.includes("cake"));
-      if (found) {
-        pair = found.id;
-        document.getElementById("status").innerText = "Pair ditemukan: " + pair;
-      } else {
-        document.getElementById("status").innerText = "CAKE tidak ada di Indodax";
-      }
+    let prices = [], highs = [], lows = [];
+    let lastSignal = "HOLD ⏳";
+    let pair = "cakeidr"; // CAKE/IDR di Indodax
+    let chart, candleSeries;
+
+    function setupChart() {
+      chart = LightweightCharts.createChart(document.getElementById("chart"), {
+        layout: { background: { color: "#111" }, textColor: "#eee" },
+        grid: { vertLines: { color: "#333" }, horzLines: { color: "#333" } },
+      });
+      candleSeries = chart.addCandlestickSeries();
     }
 
     function calcATR(period = 10) {
@@ -52,31 +59,30 @@
       let mean = reg.reduce((a, b) => a + b, 0) / reg.length;
       let variance = reg.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / reg.length;
       let stdev = Math.sqrt(variance);
-      return {
-        mid: reg[reg.length - 1],
-        upper: reg[reg.length - 1] + 2 * stdev,
-        lower: reg[reg.length - 1] - 2 * stdev
-      };
+      return { mid: reg[reg.length - 1], upper: reg[reg.length - 1] + 2 * stdev, lower: reg[reg.length - 1] - 2 * stdev };
+    }
+
+    function sendEmail(signal, price) {
+      emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
+        signal: signal,
+        price: price,
+        pair: "CAKE/IDR",
+        time: new Date().toLocaleString()
+      }).then(() => console.log("Email terkirim"), (err) => console.error("Email error", err));
     }
 
     async function getPrice() {
-      if (!pair) return;
       try {
         let res = await fetch(`https://indodax.com/api/ticker/${pair}`);
         let data = await res.json();
-        if (!data.ticker || !data.ticker.last) throw new Error("Invalid response: " + JSON.stringify(data));
+        if (!data.ticker || !data.ticker.last) throw new Error("Invalid response");
 
         let price = parseFloat(data.ticker.last);
         let high = parseFloat(data.ticker.high);
         let low = parseFloat(data.ticker.low);
 
-        prices.push(price);
-        highs.push(high);
-        lows.push(low);
-
-        if (prices.length > 500) {
-          prices.shift(); highs.shift(); lows.shift();
-        }
+        prices.push(price); highs.push(high); lows.push(low);
+        if (prices.length > 500) { prices.shift(); highs.shift(); lows.shift(); }
 
         document.getElementById("status").innerText = `Last: ${price} (${pair})`;
 
@@ -84,28 +90,31 @@
         let lrc = calcLinearRegression(100);
         if (!atr || !lrc) return;
 
-        // UT Bot baseline
         let baseline = prices[prices.length - 2] + 2 * atr * (price > prices[prices.length - 2] ? 1 : -1);
 
         let signal = "HOLD ⏳";
-
         if (price > baseline && price > lrc.upper) {
-          signal = "SELL 🚨 (UT Bot + LRC)";
+          signal = "SELL 🚨";
         } else if (price < baseline && price < lrc.lower) {
-          signal = "BUY ✅ (UT Bot + LRC)";
+          signal = "BUY ✅";
         }
 
         document.getElementById("signal").innerText = "Signal: " + signal;
+
+        if (signal !== lastSignal && signal !== "HOLD ⏳") {
+          lastSignal = signal;
+          sendEmail(signal, price);
+        }
+
+        candleSeries.update({ time: Math.floor(Date.now() / 1000), open: low, high: high, low: low, close: price });
 
       } catch (err) {
         document.getElementById("status").innerText = "Error: " + err;
       }
     }
 
-    (async () => {
-      await findPair();
-      setInterval(getPrice, 5000);
-    })();
+    setupChart();
+    setInterval(getPrice, 5000);
   </script>
 </body>
 </html>
