@@ -1,33 +1,62 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CAKE Signal Indodax</title>
+  <title>CAKE Trading Signal Indodax</title>
 </head>
 <body>
-  <h2>Signal Trading CAKE di Indodax</h2>
+  <h2>CAKE/IDR Trading Signal (UT Bot + LRC)</h2>
   <div id="status">Loading...</div>
   <div id="signal">Waiting signal...</div>
 
   <script>
     let prices = [];
-    let pair = null; // nanti diisi otomatis
+    let highs = [];
+    let lows = [];
+    let pair = null;
 
     async function findPair() {
-      try {
-        let res = await fetch("https://indodax.com/api/pairs");
-        let data = await res.json();
-
-        // cari pair yang ada kata 'cake'
-        let found = data.find(p => p.id.includes("cake"));
-        if (found) {
-          pair = found.id;
-          document.getElementById("status").innerText = "Pair ditemukan: " + pair;
-        } else {
-          throw new Error("Pair CAKE tidak tersedia di Indodax");
-        }
-      } catch (err) {
-        document.getElementById("status").innerText = "Error: " + err;
+      let res = await fetch("https://indodax.com/api/pairs");
+      let data = await res.json();
+      let found = data.find(p => p.id.includes("cake"));
+      if (found) {
+        pair = found.id;
+        document.getElementById("status").innerText = "Pair ditemukan: " + pair;
+      } else {
+        document.getElementById("status").innerText = "CAKE tidak ada di Indodax";
       }
+    }
+
+    function calcATR(period = 10) {
+      if (prices.length < period + 1) return null;
+      let trs = [];
+      for (let i = prices.length - period; i < prices.length; i++) {
+        let high = highs[i], low = lows[i], closePrev = prices[i - 1];
+        let tr = Math.max(high - low, Math.abs(high - closePrev), Math.abs(low - closePrev));
+        trs.push(tr);
+      }
+      return trs.reduce((a, b) => a + b, 0) / trs.length;
+    }
+
+    function calcLinearRegression(len = 100) {
+      if (prices.length < len) return null;
+      let y = prices.slice(-len);
+      let x = [...Array(len).keys()];
+      let n = len;
+      let sumX = x.reduce((a, b) => a + b, 0);
+      let sumY = y.reduce((a, b) => a + b, 0);
+      let sumXY = x.map((xi, i) => xi * y[i]).reduce((a, b) => a + b, 0);
+      let sumXX = x.map(xi => xi * xi).reduce((a, b) => a + b, 0);
+      let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      let intercept = (sumY - slope * sumX) / n;
+      let reg = x.map(xi => intercept + slope * xi);
+      let mean = reg.reduce((a, b) => a + b, 0) / reg.length;
+      let variance = reg.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / reg.length;
+      let stdev = Math.sqrt(variance);
+      return {
+        mid: reg[reg.length - 1],
+        upper: reg[reg.length - 1] + 2 * stdev,
+        lower: reg[reg.length - 1] - 2 * stdev
+      };
     }
 
     async function getPrice() {
@@ -35,43 +64,47 @@
       try {
         let res = await fetch(`https://indodax.com/api/ticker/${pair}`);
         let data = await res.json();
-
-        if (!data.ticker || !data.ticker.last) {
-          throw new Error("Invalid response: " + JSON.stringify(data));
-        }
+        if (!data.ticker || !data.ticker.last) throw new Error("Invalid response: " + JSON.stringify(data));
 
         let price = parseFloat(data.ticker.last);
+        let high = parseFloat(data.ticker.high);
+        let low = parseFloat(data.ticker.low);
+
         prices.push(price);
-        if (prices.length > 100) prices.shift();
+        highs.push(high);
+        lows.push(low);
 
-        document.getElementById("status").innerText = "Last Price " + price + " (" + pair + ")";
-
-        if (prices.length >= 20) {
-          let avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-          let variance = prices.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / prices.length;
-          let stdev = Math.sqrt(variance);
-          let upper = avg + 2 * stdev;
-          let lower = avg - 2 * stdev;
-
-          let signal = "HOLD";
-          if (price > upper) {
-            signal = "SELL 🚨";
-          } else if (price < lower) {
-            signal = "BUY ✅";
-          }
-
-          document.getElementById("signal").innerText = "Signal: " + signal;
+        if (prices.length > 500) {
+          prices.shift(); highs.shift(); lows.shift();
         }
+
+        document.getElementById("status").innerText = `Last: ${price} (${pair})`;
+
+        let atr = calcATR(10);
+        let lrc = calcLinearRegression(100);
+        if (!atr || !lrc) return;
+
+        // UT Bot baseline
+        let baseline = prices[prices.length - 2] + 2 * atr * (price > prices[prices.length - 2] ? 1 : -1);
+
+        let signal = "HOLD ⏳";
+
+        if (price > baseline && price > lrc.upper) {
+          signal = "SELL 🚨 (UT Bot + LRC)";
+        } else if (price < baseline && price < lrc.lower) {
+          signal = "BUY ✅ (UT Bot + LRC)";
+        }
+
+        document.getElementById("signal").innerText = "Signal: " + signal;
 
       } catch (err) {
         document.getElementById("status").innerText = "Error: " + err;
       }
     }
 
-    // jalankan
     (async () => {
-      await findPair();         // cari dulu pair yang sah
-      setInterval(getPrice, 5000); // ambil harga setiap 5 detik
+      await findPair();
+      setInterval(getPrice, 5000);
     })();
   </script>
 </body>
