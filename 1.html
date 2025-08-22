@@ -18,7 +18,7 @@
   <div id="chart"></div>
 
   <script>
-    emailjs.init("YOUR_USER_ID"); // Ganti dengan User ID EmailJS
+    emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan User ID EmailJS
 
     let prices = [], highs = [], lows = [];
     let lastSignal = "HOLD ⏳";
@@ -63,7 +63,7 @@
     }
 
     function sendEmail(signal, price) {
-      emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
+      emailjs.send("service_d48312b", "template_1ktk40q", {
         signal: signal,
         price: price,
         pair: "CAKE/IDR",
