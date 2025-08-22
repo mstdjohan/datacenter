@@ -1,131 +1,114 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CAKE ⇄ USDT • PancakeSwap Swap + UT Bot Signals + EmailJS</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>UT Bot (2,10) + LRC (100,2,2) • CAKE/USDT • Auto-Signal & Swap</title>
 
 <!-- Ethers.js -->
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <!-- WalletConnect v2 UMD -->
 <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.1/dist/index.umd.min.js"></script>
-<!-- EmailJS SDK -->
+<!-- EmailJS -->
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 
 <style>
-:root{--bg:#071021;--panel:#0b1722;--muted:#9fb3c8;--text:#dff4ff;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
-*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto;background:var(--bg);color:var(--text)}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #123}
-.wrap{display:grid;grid-template-columns:360px 1fr;gap:12px;padding:12px}
-.card{background:var(--panel);border:1px solid #123;border-radius:12px;padding:12px}
+:root{--bg:#06121a;--panel:#071826;--muted:#99b6c6;--text:#e6f7ff;--accent:#38bdf8;--ok:#22c55e;--bad:#ff6b6b}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text)}
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #0f3340;background:var(--panel)}
+.container{display:grid;grid-template-columns:360px 1fr;gap:12px;padding:12px}
+.card{background:linear-gradient(180deg,#071726,#06121a);border:1px solid #0e2b36;border-radius:12px;padding:12px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-input,select,button{background:#06101a;color:var(--text);border:1px solid #123;border-radius:10px;padding:8px 10px;font-size:13px}
+label{font-size:12px;color:var(--muted)}
+input,select,button{background:#05101a;color:var(--text);border:1px solid #083243;border-radius:10px;padding:8px 10px;font-size:13px}
 button.primary{background:var(--accent);color:#001018;border:none}
-.badge{padding:4px 8px;border-radius:999px;background:#06121b;border:1px solid #123;color:#9fb3c8;font-size:12px}
-#log{height:300px;overflow:auto;font-family:ui-monospace,Menlo,monospace;background:#05101a;border-radius:10px;padding:10px}
+.badge{padding:4px 8px;border-radius:999px;background:#042028;border:1px solid #083243;color:#9fc5d8;font-size:12px}
+#log{height:360px;overflow:auto;font-family:ui-monospace,Menlo,monospace;background:#021018;border-radius:10px;padding:10px}
 small{color:var(--muted)}
-@media(max-width:1000px){.wrap{grid-template-columns:1fr}}
+@media(max-width:980px){.container{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<header>
-  <h1 style="font-size:16px;margin:0">CAKE ⇄ USDT • PancakeSwap • Auto-swap</h1>
+<div class="header">
+  <div><strong>UT Bot (2,10) + LRC (100,2,2)</strong> • CAKE/USDT Auto-Signal & Swap</div>
   <div class="row">
-    <span id="status" class="badge">Wallet: Disconnected</span>
-    <button id="btnConnect" class="primary">Connect Wallet</button>
+    <span id="status" class="badge">Idle</span>
+    <button id="btnToggle" class="primary">Start</button>
   </div>
-</header>
+</div>
 
-<div class="wrap">
+<div class="container">
   <aside class="card">
-    <h3 style="margin:0 0 8px">Konfigurasi</h3>
+    <h4 style="margin:0 0 8px">Konfigurasi & Koneksi</h4>
 
-    <div class="row">
-      <label style="min-width:110px">WC Project ID</label>
-      <input id="wcProjectId" placeholder="project id (untuk Trust Wallet)" style="flex:1">
-    </div>
-
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">EmailJS Service</label>
-      <input id="emailService" placeholder="service_xxx" style="flex:1">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">Template / User</label>
-      <input id="emailTemplate" placeholder="template_xxx" style="flex:1;margin-right:6px">
-      <input id="emailUser" placeholder="public_xxx" style="flex:1">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">To (optional)</label>
-      <input id="emailTo" placeholder="nama@domain.com" style="flex:1">
-      <button id="btnInitEmail">Init</button>
+    <div class="row" style="margin-bottom:8px">
+      <label style="min-width:110px">Symbol</label>
+      <input id="symbol" value="CAKEUSDT" style="width:140px">
+      <label>TF</label>
+      <select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
     </div>
 
-    <hr style="border:none;border-top:1px solid #123;margin:12px 0">
-
-    <h3 style="margin:0 0 8px">Swap Manual</h3>
-    <div class="row">
-      <label style="min-width:110px">Pair</label>
-      <select id="side" style="flex:1">
-        <option value="CAKE2USDT">CAKE → USDT (SELL)</option>
-        <option value="USDT2CAKE">USDT → CAKE (BUY)</option>
-      </select>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">Amount</label>
-      <input id="amount" type="number" step="0.000001" placeholder="0.0" style="flex:1">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">Slippage %</label>
-      <input id="slippage" type="number" step="0.1" value="0.6" style="width:100px">
-      <label style="min-width:110px;margin-left:8px">Deadline (min)</label>
-      <input id="deadline" type="number" step="1" value="10" style="width:100px">
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="btnQuote">Get Quote</button>
-      <button id="btnSwap" class="primary">Swap Now</button>
-      <span id="net" class="badge">BSC</span>
-    </div>
-
-    <hr style="border:none;border-top:1px solid #123;margin:12px 0">
-
-    <h3 style="margin:0 0 8px">Auto-Trade (UT Bot + LRC)</h3>
-    <div class="row">
-      <label style="min-width:110px">CoinGecko ID</label>
-      <input id="cgid" value="pancakeswap-token" style="flex:1">
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="min-width:110px">Interval</label>
-      <select id="interval"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
-      <label style="min-width:110px;margin-left:8px">Candles</label>
+    <div style="margin-top:6px" class="row">
+      <label style="min-width:110px">Candles</label>
       <input id="limit" type="number" value="500" style="width:100px">
-    </div>
-    <div style="margin-top:8px">
-      <small>UT Bot (KV / ATR):</small>
-      <div class="row" style="margin-top:6px">
-        <input id="kv" type="number" value="2" step="0.1" style="width:80px">
-        <input id="atr" type="number" value="10" step="1" style="width:80px">
-        <input id="lrLen" type="number" value="100" style="width:80px">
-        <input id="devUp" type="number" value="2" step="0.1" style="width:80px">
-        <input id="devDn" type="number" value="2" step="0.1" style="width:80px">
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="btnAuto" class="primary">Auto: OFF</button>
-      <button id="btnStopAuto">Stop Auto</button>
+      <label style="min-width:110px;margin-left:8px">KV</label>
+      <input id="kv" type="number" value="2" step="0.1" style="width:80px">
+      <label style="min-width:60px">ATR</label>
+      <input id="atr" type="number" value="10" style="width:80px">
     </div>
 
-    <div style="margin-top:12px"><small style="color:#cfcfcf">Peringatan: uji di testnet/amount kecil dulu. Halaman ini tidak menyimpan private key — semua transaksi melalui wallet Anda.</small></div>
+    <div style="margin-top:10px" class="row">
+      <label style="min-width:110px">LRC len</label>
+      <input id="lrLen" type="number" value="100" style="width:90px">
+      <label>devUp</label><input id="devUp" type="number" value="2" step="0.1" style="width:70px">
+      <label>devDn</label><input id="devDn" type="number" value="2" step="0.1" style="width:70px">
+    </div>
+
+    <hr style="border:none;border-top:1px solid #083243;margin:10px 0">
+
+    <h4 style="margin:6px 0">EmailJS (opsional)</h4>
+    <div class="row" style="margin-bottom:6px"><input id="emailService" placeholder="service_xxx" style="flex:1"></div>
+    <div class="row" style="margin-bottom:6px"><input id="emailTemplate" placeholder="template_xxx" style="flex:1"><input id="emailUser" placeholder="public_xxx" style="flex:1"></div>
+    <div class="row" style="margin-bottom:6px"><input id="emailTo" placeholder="tujuan@domain.com" style="flex:1"><button id="btnInitEmail">Init EmailJS</button></div>
+    <div id="emailBadge" class="badge">EmailJS: Not set</div>
+
+    <hr style="border:none;border-top:1px solid #083243;margin:10px 0">
+
+    <h4 style="margin:6px 0">Wallet (opsional, untuk swap)</h4>
+    <div class="row" style="margin-bottom:8px">
+      <input id="wcProjectId" placeholder="WalletConnect Project ID (Trust Wallet)" style="flex:1">
+      <button id="btnConnect">Connect Wallet</button>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <div>Account: <span id="acct" class="badge">-</span></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #083243;margin:10px 0">
+
+    <h4 style="margin:6px 0">Manual Swap</h4>
+    <div class="row" style="margin-bottom:8px">
+      <select id="side"><option value="USDT2CAKE">BUY CAKE (USDT→CAKE)</option><option value="CAKE2USDT">SELL CAKE (CAKE→USDT)</option></select>
+      <input id="amount" type="number" step="0.000001" placeholder="amount" style="width:120px">
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <input id="slip" type="number" value="0.6" style="width:90px"><label>% slippage</label>
+      <input id="deadline" type="number" value="10" style="width:90px"><label>min deadline</label>
+      <button id="btnQuote">Quote</button>
+      <button id="btnSwap" class="primary">Swap Now</button>
+    </div>
+
+    <small>Pastikan test kecil dulu. Halaman ini tidak menyimpan private key — wallet menandatangani transaksi.</small>
   </aside>
 
   <main class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div><b>Account:</b> <span id="acct">-</span></div>
-        <div style="margin-top:6px"><b>CAKE:</b> <span id="balCake">-</span> • <b>USDT:</b> <span id="balUsdt">-</span></div>
+        <div><b>Live:</b> <span id="live">-</span></div>
+        <div style="margin-top:6px"><b>Signal:</b> <span id="signal" class="badge">-</span></div>
       </div>
       <div>
-        <div><b>Live price:</b> <span id="livePrice">-</span></div>
-        <div style="margin-top:6px"><b>Signal:</b> <span id="signal" class="badge">-</span></div>
+        <div><b>UT Trend:</b> <span id="trend" class="badge">-</span></div>
+        <div style="margin-top:6px"><b>Last bar:</b> <span id="lastBar" class="badge">-</span></div>
       </div>
     </div>
 
@@ -134,12 +117,13 @@ small{color:var(--muted)}
 </div>
 
 <script>
-/* ====== CONSTANTS ====== */
+/* ==== Constants (BSC mainnet tokens & router) ==== */
 const CAKE = "0x0E09Fabb73Bd3Ade0a17ECC321fD13a19e81cE82";
 const USDT = "0x55d398326f99059fF775485246999027B3197955";
-const ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E"; // PancakeSwap V2 router
-const BSC_CHAIN_ID = 56;
+const ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E"; // Pancake v2 router
+const BSC_RPC = "https://bsc-dataseed.binance.org/";
 
+/* ==== ABIs (minimal) ==== */
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
   "function balanceOf(address) view returns (uint)",
@@ -151,87 +135,233 @@ const ROUTER_ABI = [
   "function swapExactTokensForTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external returns (uint[] memory amounts)"
 ];
 
-/* ====== STATE ====== */
+/* ==== State ==== */
 const state = {
-  ethersProvider: null, signer: null, account: null, wcProvider: null,
-  email:{service:"",template:"",user:"",to:""}, auto:false, autoTimer:null
+  running:false,
+  lastAlertBar:null,
+  email:{service:"",template:"",user:"",to:""},
+  wallet:{provider:null,ethers:null,signer:null,account:null,wcProvider:null}
 };
 
-/* ====== UI HELPERS ====== */
+/* ==== UI helpers ==== */
 const $ = id => document.getElementById(id);
 function log(msg){ $("log").innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>` + $("log").innerHTML; }
-function setStatus(s){ $("status").textContent = s; }
+function setStatus(v){ $("status").textContent = v; }
 
-/* ====== EmailJS ====== */
-$("btnInitEmail").onclick = () => {
+/* ==== EmailJS init/save ==== */
+$("btnInitEmail").onclick = ()=>{
   state.email.service = $("emailService").value.trim();
   state.email.template = $("emailTemplate").value.trim();
   state.email.user = $("emailUser").value.trim();
   state.email.to = $("emailTo").value.trim();
-  try{ if(!window.emailjs) throw new Error("EmailJS SDK tidak termuat"); if(state.email.user) emailjs.init(state.email.user); localStorage.setItem("email_cfg", JSON.stringify(state.email)); log("EmailJS inisialisasi"); } catch(e){ log("EmailJS init error: "+e.message); }
-};
-(function loadEmailCfg(){ try{ const c=JSON.parse(localStorage.getItem("email_cfg")||"{}"); if(c){ Object.assign(state.email,c); $("emailService").value=c.service||""; $("emailTemplate").value=c.template||""; $("emailUser").value=c.user||""; $("emailTo").value=c.to||""; if(c.user && window.emailjs) emailjs.init(c.user); } }catch(_){} })();
-
-/* ====== WALLET CONNECT / METAMASK ====== */
-async function connectWallet(){
   try{
-    // MetaMask prioritized
+    if(!window.emailjs) throw new Error("EmailJS SDK belum termuat");
+    if(state.email.user) emailjs.init(state.email.user);
+    localStorage.setItem("email_cfg", JSON.stringify(state.email));
+    $("emailBadge").textContent = "EmailJS: Ready";
+    log("EmailJS dikonfigurasi");
+  }catch(e){ log("EmailJS init error: "+(e.message||e)); $("emailBadge").textContent = "EmailJS: Error"; }
+};
+(function(){ try{ const c = JSON.parse(localStorage.getItem("email_cfg")||"{}"); if(c){ Object.assign(state.email,c); $("emailService").value=c.service||""; $("emailTemplate").value=c.template||""; $("emailUser").value=c.user||""; $("emailTo").value=c.to||""; if(c.user && window.emailjs) emailjs.init(c.user); $("emailBadge").textContent = c.user? "EmailJS: Ready":"EmailJS: Not set"; } }catch(_){} })();
+
+/* ==== Wallet connect (MetaMask or WalletConnect v2) ==== */
+$("btnConnect").onclick = async ()=>{
+  try{
+    // MetaMask preferred
     if(window.ethereum && window.ethereum.isMetaMask){
-      state.ethersProvider = new ethers.providers.Web3Provider(window.ethereum);
-      await state.ethersProvider.send("eth_requestAccounts", []);
-      state.signer = state.ethersProvider.getSigner();
-      state.account = await state.signer.getAddress();
-      log("Connected via MetaMask " + state.account);
+      state.wallet.provider = window.ethereum;
+      state.wallet.ethers = new ethers.providers.Web3Provider(window.ethereum);
+      await state.wallet.ethers.send("eth_requestAccounts", []);
+      state.wallet.signer = state.wallet.ethers.getSigner();
+      state.wallet.account = await state.wallet.signer.getAddress();
+      $("acct").textContent = state.wallet.account;
+      setStatus("Wallet: Connected (MetaMask)");
+      log("Connected MetaMask: "+state.wallet.account);
     } else {
-      // WalletConnect v2 (Trust Wallet)
-      const projectId = $("wcProjectId").value.trim() || localStorage.getItem("wc_project_id") || "";
-      if(!projectId) { alert("Masukkan WalletConnect Project ID untuk Trust Wallet"); return; }
-      localStorage.setItem("wc_project_id", projectId);
+      const pid = $("wcProjectId").value.trim() || localStorage.getItem("wc_project_id");
+      if(!pid){ alert("Masukkan WalletConnect Project ID untuk Trust Wallet"); return; }
+      localStorage.setItem("wc_project_id", pid);
       const WC = window.WalletConnectEthereumProvider;
       if(!WC) throw new Error("WalletConnect SDK belum termuat");
-      state.wcProvider = await WC.init({ projectId, chains: [BSC_CHAIN_ID], showQrModal: true });
-      await state.wcProvider.enable();
-      state.ethersProvider = new ethers.providers.Web3Provider(state.wcProvider);
-      state.signer = state.ethersProvider.getSigner();
-      state.account = await state.signer.getAddress();
-      log("Connected via WalletConnect " + state.account);
+      state.wallet.wcProvider = await WC.init({ projectId: pid, chains: [56], showQrModal: true });
+      await state.wallet.wcProvider.enable();
+      state.wallet.ethers = new ethers.providers.Web3Provider(state.wallet.wcProvider);
+      state.wallet.signer = state.wallet.ethers.getSigner();
+      state.wallet.account = await state.wallet.signer.getAddress();
+      $("acct").textContent = state.wallet.account;
+      setStatus("Wallet: Connected (WalletConnect)");
+      log("Connected WalletConnect: "+state.wallet.account);
     }
-    $("acct").textContent = state.account;
-    setStatus("Wallet: Connected");
-    refreshBalances();
-  }catch(e){ log("Gagal connect: "+(e.message||e)); setStatus("Wallet: Disconnected"); }
-}
-$("btnConnect").onclick = connectWallet;
+  }catch(e){ log("Gagal connect wallet: "+(e.message||e)); setStatus("Wallet: Disconnected"); }
+};
 
-/* ====== BALANCE & DECIMALS ====== */
-async function refreshBalances(){
+/* ==== Binance Klines (no API key) ==== */
+const tfToBinance = {'1m':'1m','3m':'3m','5m':'5m','15m':'15m','1h':'1h'};
+async function getKlines(symbol, interval, limit){
+  const tf = tfToBinance[interval] || '5m';
+  const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${tf}&limit=${limit}`;
+  const res = await fetch(url, { cache:'no-store' });
+  if(!res.ok) throw new Error("Binance HTTP " + res.status);
+  const arr = await res.json();
+  // [openTime, open, high, low, close, vol, closeTime,...]
+  return arr.map(k => ({ time: Math.floor(k[6]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4], volume:+k[5] }));
+}
+async function getLastPrice(symbol){
   try{
-    if(!state.signer) return;
-    const provider = state.ethersProvider || (new ethers.providers.JsonRpcProvider("https://bsc-dataseed.binance.org/"));
-    const cake = new ethers.Contract(CAKE, ERC20_ABI, provider);
-    const usdt = new ethers.Contract(USDT, ERC20_ABI, provider);
-    const [dCake,dUsdt,bCake,bUsdt] = await Promise.all([cake.decimals(), usdt.decimals(), cake.balanceOf(state.account), usdt.balanceOf(state.account)]);
-    $("balCake").textContent = ethers.utils.formatUnits(bCake, dCake);
-    $("balUsdt").textContent = ethers.utils.formatUnits(bUsdt, dUsdt);
-  }catch(e){ log("Refresh balances error: "+(e.message||e)); }
+    const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {cache:'no-store'});
+    if(!r.ok) return null;
+    const j = await r.json(); return +j.price;
+  }catch(e){ return null; }
 }
 
-/* ====== QUOTE & APPROVE & SWAP ====== */
+/* ==== Indicators: trueRange, ATR, UT Bot, Linear Regression Channel ==== */
+function trueRange(c){ const t=[NaN]; for(let i=1;i<c.length;i++){ const a=c[i], b=c[i-1]; t.push(Math.max(a.high-a.low, Math.abs(a.high-b.close), Math.abs(a.low-b.close))); } return t; }
+function atr(c,p=10){ const t=trueRange(c); const o=new Array(c.length).fill(NaN); let s=0, i=1; while(i<=p && i<t.length){ s+=t[i]; i++; } if(i<=p) return o; o[p]=s/p; for(let j=p+1;j<t.length;j++){ o[j]=(o[j-1]*(p-1)+t[j])/p } return o; }
+
+/* UT Bot (version adapted) */
+function utBot(c, kv=2, aP=10){
+  const n=c.length;
+  const A = atr(c,aP);
+  const trend = new Array(n).fill(0);
+  const upper = new Array(n).fill(NaN);
+  const lower = new Array(n).fill(NaN);
+  for(let i=0;i<n;i++){
+    const x=c[i];
+    const hl2 = (x.high + x.low)/2;
+    const nLoss = kv * (A[i] || NaN);
+    if(!isFinite(nLoss)){ trend[i] = i?trend[i-1]:0; continue; }
+    const bU = hl2 + nLoss, bL = hl2 - nLoss;
+    if(i===0){ upper[i]=bU; lower[i]=bL; }
+    else {
+      const pU = upper[i-1], pL = lower[i-1];
+      upper[i] = (bU < pU || x.close > pU) ? bU : pU;
+      lower[i] = (bL > pL || x.close < pL) ? bL : pL;
+    }
+    const prev = i?trend[i-1]:0;
+    trend[i] = x.close > upper[i] ? 1 : x.close < lower[i] ? -1 : prev;
+  }
+  return { trend, upper, lower };
+}
+
+/* Linear Regression Channel */
+function linRegChannel(c, len=100, devUp=2, devDn=2){
+  const n = c.length;
+  const mid = new Array(n).fill(NaN), up = new Array(n).fill(NaN), dn = new Array(n).fill(NaN);
+  for(let i=len-1;i<n;i++){
+    const slice = c.slice(i-len+1, i+1);
+    const y = slice.map(z=>z.close);
+    const M = y.length;
+    const X = [...Array(M).keys()];
+    const SX = X.reduce((a,b)=>a+b,0);
+    const SY = y.reduce((a,b)=>a+b,0);
+    const SXX = X.reduce((a,b)=>a+b*b,0);
+    const SXY = X.reduce((a,b,j)=>a + b*y[j],0);
+    const D = M*SXX - SX*SX;
+    const slope = D !== 0 ? (M*SXY - SX*SY)/D : 0;
+    const intercept = (SY - slope*SX)/M;
+    const yHat = intercept + slope*(M-1);
+    const s2 = y.reduce((a,v,j)=>{ const est = intercept + slope*j; return a + (v - est)*(v - est); },0)/M;
+    const sd = Math.sqrt(s2);
+    mid[i] = yHat; up[i]= yHat + devUp*sd; dn[i]= yHat - devDn*sd;
+  }
+  return { mid, up, dn };
+}
+
+/* ==== Core step: fetch candles, compute indicators, detect cross ==== */
+async function step(){
+  try{
+    const symbol = $("symbol").value.trim().toUpperCase();
+    const interval = $("interval").value;
+    const limit = Math.max(120, (+$("limit").value || 500));
+    const kv = +$("kv").value; const aP = +$("atr").value;
+    const lrLen = +$("lrLen").value; const devUp = +$("devUp").value; const devDn = +$("devDn").value;
+
+    const [candles, lastPx] = await Promise.all([ getKlines(symbol, interval, limit), getLastPrice(symbol) ]);
+    if(lastPx) $("live").textContent = lastPx.toFixed(6);
+
+    if(!candles.length) { log("No candles"); return; }
+    const ut = utBot(candles, kv, aP);
+    const lr = linRegChannel(candles, lrLen, devUp, devDn);
+
+    const last = candles.at(-1);
+    const prevTrend = ut.trend.at(-2) ?? 0;
+    const nowTrend = ut.trend.at(-1) ?? 0;
+
+    $("trend").textContent = nowTrend>0 ? "UP" : nowTrend<0 ? "DOWN" : "-";
+    $("lastBar").textContent = new Date(last.time*1000).toLocaleString();
+    $("signal").textContent = nowTrend>0 ? "BUY" : nowTrend<0 ? "SELL" : "-";
+    $("signal").className = "badge " + (nowTrend>0 ? "ok" : nowTrend<0 ? "bad" : "");
+
+    // detect cross (previous different + now different) and once per bar key
+    const barKey = last.time;
+    if(state.lastAlertBar !== barKey && prevTrend !== nowTrend && nowTrend !== 0){
+      const side = nowTrend>0 ? "BUY" : "SELL";
+      log(`Signal detected: ${side} ${symbol} ~${(lastPx||last.close).toFixed(6)}`);
+      // send email if configured
+      sendEmail(side, symbol, (lastPx||last.close), new Date(last.time*1000).toLocaleString());
+      // set lastAlertBar so we don't duplicate in same bar
+      state.lastAlertBar = barKey;
+      // Auto-prompt user to swap (optional): ask confirm
+      if(state.wallet.signer){
+        // Ask user if want to auto-execute
+        setTimeout(()=> {
+          const exec = confirm(`Signal ${side} detected. Execute swap now? (OK untuk execute)`);
+          if(exec){
+            // default: user enters amount in manual field before approval
+            const amt = parseFloat($("amount").value || "0");
+            if(!(amt>0)){ alert("Masukkan jumlah di field Amount sebelum konfirmasi auto-swap."); return; }
+            // set side accordingly
+            if(side==="BUY") $("side").value = "USDT2CAKE"; else $("side").value = "CAKE2USDT";
+            doSwap();
+          }
+        }, 500);
+      }
+    }
+  }catch(err){
+    log("Step error: " + (err.message || err));
+  }
+}
+
+/* ==== Email sender ==== */
+async function sendEmail(side, symbol, price, time){
+  try{
+    if(!(state.email && state.email.service && state.email.template && state.email.user)) return;
+    await emailjs.send(state.email.service, state.email.template, {
+      signal: side,
+      symbol,
+      price: String(price),
+      time,
+      to: state.email.to || ""
+    });
+    log("Email sent: "+side);
+  }catch(e){ log("Email send failed: "+(e.text||e.message||e)); }
+}
+
+/* ==== Start/Stop ==== */
+$("btnToggle").onclick = ()=>{
+  state.running = !state.running;
+  $("btnToggle").textContent = state.running ? "Stop" : "Start";
+  setStatus(state.running ? "Running" : "Idle");
+  if(state.running){ step(); state._timer = setInterval(step, 30000); } else { clearInterval(state._timer); state._timer = null; }
+};
+
+/* ==== Swap functions: quote, approve, swap ==== */
 async function getQuote(side, amountFloat){
   try{
-    const provider = state.ethersProvider || new ethers.providers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
+    const provider = new ethers.providers.JsonRpcProvider(BSC_RPC);
     const router = new ethers.Contract(ROUTER, ROUTER_ABI, provider);
     const cake = new ethers.Contract(CAKE, ERC20_ABI, provider);
     const usdt = new ethers.Contract(USDT, ERC20_ABI, provider);
-    const [dCake,dUsdt] = await Promise.all([cake.decimals(), usdt.decimals()]);
-    if(side==="CAKE2USDT"){
-      const amountIn = ethers.utils.parseUnits(String(amountFloat), dCake);
-      const amounts = await router.getAmountsOut(amountIn, [CAKE, USDT]);
-      return { out: amounts[1], decimalsOut: dUsdt };
+    const dCake = await cake.decimals();
+    const dUsdt = await usdt.decimals();
+    if(side === "CAKE2USDT"){
+      const amtIn = ethers.utils.parseUnits(String(amountFloat), dCake);
+      const amounts = await router.getAmountsOut(amtIn, [CAKE, USDT]);
+      return { outBN: amounts[1], outDecimals: dUsdt };
     } else {
-      const amountIn = ethers.utils.parseUnits(String(amountFloat), dUsdt);
-      const amounts = await router.getAmountsOut(amountIn, [USDT, CAKE]);
-      return { out: amounts[1], decimalsOut: dCake };
+      const amtIn = ethers.utils.parseUnits(String(amountFloat), dUsdt);
+      const amounts = await router.getAmountsOut(amtIn, [USDT, CAKE]);
+      return { outBN: amounts[1], outDecimals: dCake };
     }
   }catch(e){ throw e; }
 }
@@ -239,183 +369,98 @@ $("btnQuote").onclick = async ()=>{
   try{
     const side = $("side").value;
     const amt = +$("amount").value;
-    if(!(amt>0)) { alert("Masukkan jumlah > 0"); return; }
+    if(!(amt>0)){ alert("Masukkan jumlah > 0"); return; }
     const q = await getQuote(side, amt);
-    const outHuman = ethers.utils.formatUnits(q.out, q.decimalsOut);
-    log(`Quote: ${side} ${amt} → approx ${outHuman}`);
-    alert(`Quote: approx ${outHuman}`);
-  }catch(e){ log("Quote error: "+(e.message||e)); alert("Quote gagal: "+(e.message||e)); }
+    const human = ethers.utils.formatUnits(q.outBN, q.outDecimals);
+    log(`Quote: ${side} ${amt} → est ${human}`);
+    alert(`Quote approx: ${human}`);
+  }catch(e){ log("Quote error: "+(e.message||e)); alert("Quote error: "+(e.message||e)); }
 };
 
-async function ensureAllowance(tokenAddr, ownerSigner, spender, amountBN){
-  const token = new ethers.Contract(tokenAddr, ERC20_ABI, ownerSigner);
-  const owner = await ownerSigner.getAddress();
+async function ensureAllowance(tokenAddr, signer, spender, amountBN){
+  const token = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
+  const owner = await signer.getAddress();
   const current = await token.allowance(owner, spender);
-  if(current.gte(amountBN)) { log("Allowance OK"); return true; }
-  log("Membuat approve...");
-  const tx = await token.connect(ownerSigner).approve(spender, amountBN);
-  log("Approve tx: "+tx.hash);
+  if(current.gte(amountBN)) return true;
+  const tx = await token.approve(spender, amountBN);
+  log("Approve tx sent: " + tx.hash);
   await tx.wait();
-  log("Approve selesai");
+  log("Approve done");
   return true;
 }
 
 async function doSwap(){
   try{
-    if(!state.signer) { alert("Hubungkan wallet dulu"); return; }
+    if(!state.wallet.signer){ alert("Connect wallet first"); return; }
     const side = $("side").value;
     const amt = +$("amount").value;
-    const slippage = +$("slippage").value / 100; // fraction
+    const slipPct = +$("slip").value/100;
     const deadlineMin = +$("deadline").value || 10;
-    if(!(amt>0)) { alert("Jumlah harus > 0"); return; }
+    if(!(amt>0)){ alert("Enter valid amount"); return; }
 
-    const signer = state.signer;
-    const provider = state.ethersProvider || new ethers.providers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
-    const router = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
+    const signer = state.wallet.signer;
+    const provider = state.wallet.ethers || new ethers.providers.JsonRpcProvider(BSC_RPC);
+    // Read decimals
     const cakeRead = new ethers.Contract(CAKE, ERC20_ABI, provider);
     const usdtRead = new ethers.Contract(USDT, ERC20_ABI, provider);
     const dCake = await cakeRead.decimals();
     const dUsdt = await usdtRead.decimals();
 
-    let amountIn, path;
-    if(side==="CAKE2USDT"){
-      amountIn = ethers.utils.parseUnits(String(amt), dCake);
+    let amountInBN, path;
+    if(side === "CAKE2USDT"){
+      amountInBN = ethers.utils.parseUnits(String(amt), dCake);
       path = [CAKE, USDT];
-      await ensureAllowance(CAKE, signer, ROUTER, amountIn);
+      await ensureAllowance(CAKE, signer, ROUTER, amountInBN);
     } else {
-      amountIn = ethers.utils.parseUnits(String(amt), dUsdt);
+      amountInBN = ethers.utils.parseUnits(String(amt), dUsdt);
       path = [USDT, CAKE];
-      await ensureAllowance(USDT, signer, ROUTER, amountIn);
+      await ensureAllowance(USDT, signer, ROUTER, amountInBN);
     }
 
-    // getAmountsOut for minOut calc
+    // Compute minOut with getAmountsOut
     const routerRead = new ethers.Contract(ROUTER, ROUTER_ABI, provider);
-    const amounts = await routerRead.getAmountsOut(amountIn, path);
-    const out = amounts[amounts.length - 1];
-    // minOut = out * (1 - slippage)
-    const minOut = out.sub(out.mul(ethers.BigNumber.from(Math.floor(slippage * 1e6))).div(ethers.BigNumber.from(1e6)));
+    const amounts = await routerRead.getAmountsOut(amountInBN, path);
+    const outBN = amounts[amounts.length-1];
+    const minOut = outBN.sub(outBN.mul(ethers.BigNumber.from(Math.floor(slipPct*1e6))).div(ethers.BigNumber.from(1e6)));
 
-    const deadline = Math.floor(Date.now() / 1000) + deadlineMin * 60;
-    log(`Swap tx preparing: side=${side} amountIn=${amt} minOut≈${ethers.utils.formatUnits(minOut, side==="CAKE2USDT"?dUsdt:dCake)}`);
+    const deadline = Math.floor(Date.now()/1000) + deadlineMin*60;
+    log(`Sending swap: ${side} amountIn=${amt} minOut≈${ethers.utils.formatUnits(minOut, side==="CAKE2USDT"?dUsdt:dCake)}`);
 
-    const tx = await router.swapExactTokensForTokens(amountIn, minOut, path, await signer.getAddress(), deadline, { gasLimit: 700000 });
-    log("Swap sent: "+tx.hash);
+    const router = new ethers.Contract(ROUTER, ROUTER_ABI, signer);
+    const tx = await router.swapExactTokensForTokens(amountInBN, minOut, path, await signer.getAddress(), deadline, { gasLimit: 800000 });
+    log("Swap tx sent: " + tx.hash);
     const receipt = await tx.wait();
-    log("Swap success, block " + receipt.blockNumber);
+    log("Swap success. Block: " + receipt.blockNumber);
 
-    // update balances
-    refreshBalances();
-
-    // email notify
-    if(state.email.service && state.email.template && state.email.user){
+    // after swap, notify via email if configured
+    if(state.email && state.email.service && state.email.template && state.email.user){
       try{
         await emailjs.send(state.email.service, state.email.template, {
-          signal: side==="USDT2CAKE" ? "BUY" : "SELL",
+          signal: side === "USDT2CAKE" ? "BUY" : "SELL",
           symbol: "CAKE/USDT",
-          price: $("#livePrice")?.textContent || "-",
+          price: $("live").textContent || "-",
           txhash: tx.hash,
+          time: new Date().toLocaleString(),
           to: state.email.to || ""
         });
         log("EmailJS: notification sent");
-      }catch(e){ log("EmailJS send error: "+(e.text||e.message||e)); }
+      }catch(e){ log("EmailJS error: "+(e.text||e.message||e)); }
     }
 
-  }catch(e){
-    log("Swap error: "+(e.message||e));
-    alert("Swap gagal: "+(e.message||e));
-  }
+  }catch(e){ log("Swap error: "+(e.message||e)); alert("Swap failed: "+(e.message||e)); }
 }
 $("btnSwap").onclick = doSwap;
 
-/* ====== UT Bot + LRC Auto-trade ====== */
-/* reuse helper functions from earlier examples (aggregate, atr, utBot, linRegChannel) */
+/* ==== small utility: formatting ==== */
+function fmt(n, d=6){ return (typeof n==='number' && isFinite(n)) ? n.toFixed(d) : '-' }
 
-function aggregateToCandles(prices, tfMin, limit){
-  const by = new Map();
-  for(const [ts,price] of prices){
-    const minute = Math.floor(ts/60000);
-    const bucket = Math.floor(minute / tfMin) * tfMin;
-    const key = bucket*60000;
-    let c = by.get(key);
-    if(!c) c = { time: Math.floor(key/1000), open: price, high: price, low: price, close: price };
-    else { c.high = Math.max(c.high, price); c.low = Math.min(c.low, price); c.close = price; }
-    by.set(key, c);
-  }
-  return [...by.values()].sort((a,b)=>a.time-b.time).slice(-limit);
-}
+/* ==== Auto-loop start indicator default ==== */
+setStatus("Idle");
+log("Ready — isi config EmailJS (opsional), connect wallet (opsional), lalu tekan Start untuk loop indikator.");
 
-async function getPricesFromCG(id, days){
-  const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-  const r = await fetch(target, { cache:'no-store' });
-  if(!r.ok) throw new Error("CG HTTP " + r.status);
-  const j = await r.json();
-  if(!j.prices) throw new Error("No prices");
-  return j.prices;
-}
+/* ==== Safety note repeated ==== */
+log("⚠️ TEST with small amounts first. This script executes real swaps on BSC Mainnet when you confirm.");
 
-function trueRange(c){ const t=[NaN]; for(let i=1;i<c.length;i++){ const a=c[i], b=c[i-1]; t.push(Math.max(a.high-a.low, Math.abs(a.high-b.close), Math.abs(a.low-b.close))); } return t; }
-function atr(c,p=10){ const t=trueRange(c); const o=new Array(c.length).fill(NaN); let s=0,i=1; while(i<=p && i<t.length) { s+=t[i]; i++; } if(i<=p) return o; o[p]=s/p; for(let j=p+1;j<t.length;j++){ o[j] = (o[j-1]*(p-1) + t[j]) / p; } return o; }
-function utBot(c, kv=2, aP=10){ const n=c.length; const r={trend:new Array(n).fill(0), upper:new Array(n).fill(NaN), lower:new Array(n).fill(NaN)}; const A=atr(c,aP); for(let i=0;i<n;i++){ const x=c[i]; const hl2=(x.high+x.low)/2; const nLoss=kv*A[i]; if(!isFinite(nLoss)){ r.trend[i] = i? r.trend[i-1] : 0; continue; } const bU=hl2+nLoss, bL=hl2-nLoss; if(i===0){ r.upper[i]=bU; r.lower[i]=bL } else { const pU=r.upper[i-1], pL=r.lower[i-1]; r.upper[i] = (bU < pU || x.close > pU) ? bU : pU; r.lower[i] = (bL > pL || x.close < pL) ? bL : pL; } const prev = i? r.trend[i-1] : 0; r.trend[i] = x.close > r.upper[i] ? 1 : x.close < r.lower[i] ? -1 : prev; } return r; }
-function linRegChannel(c, l=100, u=2, d=2){ const n=c.length; const mid=new Array(n).fill(NaN), up=new Array(n).fill(NaN), dn=new Array(n).fill(NaN); for(let i=l-1;i<n;i++){ const sl=c.slice(i-l+1,i+1); const y=sl.map(z=>z.close); const M=y.length; const X=[...Array(M).keys()]; const SX=X.reduce((a,b)=>a+b,0), SY=y.reduce((a,b)=>a+b,0), SXX=X.reduce((a,b)=>a+b*b,0), SXY=X.reduce((a,b,j)=>a+b*y[j],0); const D=M*SXX-SX*SX; const slope=D!==0 ? (M*SXY - SX*SY)/D : 0; const intercept=(SY - slope*SX)/M; const yHat = intercept + slope*(M-1); const s2 = y.reduce((a,v,j)=>{ const est=intercept+slope*j; return a + (v-est)*(v-est) },0)/M; const sd = Math.sqrt(s2); mid[i]=yHat; up[i]=yHat+u*sd; dn[i]=yHat-d*sd; } return { mid, up, dn }; }
-
-async function stepAuto(){
-  try{
-    if(!state.auto) return;
-    const id = $("cgid").value.trim() || "pancakeswap-token";
-    const interval = $("interval").value;
-    const limit = +$("limit").value || 500;
-    const tfMin = interval==="1h"?60:(interval==="15m"?15:(interval==="5m"?5:1));
-    const days = Math.min(30, Math.ceil((tfMin*limit)/1440) + 1);
-    const prices = await getPricesFromCG(id, days);
-    const candles = aggregateToCandles(prices, tfMin, limit);
-    const kv = +$("kv").value; const aP = +$("atr").value;
-    const ut = utBot(candles, kv, aP);
-    const lr = linRegChannel(candles, +$("lrLen").value, +$("devUp").value, +$("devDn").value);
-    const last = candles.at(-1);
-    const prevTrend = ut.trend.at(-2) ?? 0;
-    const nowTrend = ut.trend.at(-1) ?? 0;
-    $("signal").textContent = nowTrend>0?"BUY":nowTrend<0?"SELL":"-";
-    $("livePrice").textContent = last.close.toFixed(6);
-    if(state.auto && state.signer && nowTrend!==0 && prevTrend !== nowTrend){
-      // Execute trade: BUY => USDT->CAKE (USDT2CAKE), SELL => CAKE->USDT
-      const side = nowTrend>0 ? "USDT2CAKE" : "CAKE2USDT";
-      // choose amount: for demo use small fixed fraction of balance (e.g., 10% of token balance)
-      // Here we prompt user for amount first (safer). You could auto-calc but that's riskier.
-      const q = confirm(`Auto signal ${side} detected. Execute swap now? (OK to execute)`); 
-      if(q){
-        // ask amount
-        let amountStr = prompt("Masukkan jumlah untuk swap (masukkan angka):", "");
-        const amountNum = parseFloat(amountStr);
-        if(!isNaN(amountNum) && amountNum>0){
-          $("side").value = side;
-          $("amount").value = amountNum;
-          await doSwap();
-        } else log("Auto-swap dibatalkan: jumlah tidak valid");
-      }
-    }
-  }catch(e){ log("Auto error: "+(e.message||e)); }
-}
-
-/* Auto control */
-$("btnAuto").onclick = ()=>{
-  state.auto = !state.auto;
-  $("btnAuto").textContent = state.auto? "Auto: ON":"Auto: OFF";
-  if(state.auto){ state.autoTimer = setInterval(stepAuto, 30000); stepAuto(); }
-  else { clearInterval(state.autoTimer); state.autoTimer = null; }
-};
-$("btnStopAuto").onclick = ()=>{ state.auto=false; if(state.autoTimer){ clearInterval(state.autoTimer); state.autoTimer=null; } $("btnAuto").textContent="Auto: OFF"; log("Auto stopped"); };
-
-/* ====== Live price (binance ticker) update ====== */
-async function refreshTicker(){
-  try{
-    const symbol = "CAKEUSDT";
-    const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, { cache:'no-store' });
-    if(r.ok){ const j = await r.json(); $("livePrice").textContent = parseFloat(j.price).toFixed(6); }
-  }catch(_){}
-}
-setInterval(refreshTicker, 15000); refreshTicker();
-
-log("Siap. Hubungkan wallet, lalu gunakan Quote / Swap. Uji di test small amount terlebih dahulu.");
 </script>
 </body>
 </html>
