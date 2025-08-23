@@ -3,109 +3,167 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Monitor Harga CAKE & TON</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulasi Trading CAKE/USDT</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
-      text-align: center;
+      margin: 0;
+      padding: 0 10px;
       background-color: #f4f4f4;
       color: #222;
     }
-    @media (prefers-color-scheme: dark) {
-      body {
-        background-color: #121212;
-        color: #eee;
-      }
-      .pair-box {
-        border-color: #444;
-        background-color: #1e1e1e;
-      }
+
+    h1 {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 1.5rem;
     }
-    h1 { margin-bottom: 20px; }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 30px;
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
     }
-    @media (max-width: 768px) {
-      .grid { grid-template-columns: 1fr; }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 20px 0;
     }
-    .pair-box {
+
+    label, button {
+      font-size: 1rem;
+    }
+
+    button {
+      padding: 10px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    canvas {
+      max-width: 100%;
+    }
+
+    #log {
+      background-color: #fff;
       border: 1px solid #ccc;
-      border-radius: 10px;
-      padding: 15px;
-      box-shadow: 0 0 5px #ccc;
+      padding: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9rem;
     }
-    .price { font-size: 1.5em; margin: 5px 0; }
-    .trend { font-weight: bold; margin-bottom: 10px; }
-    .up { color: green; }
-    .down { color: red; }
-    label { display: block; font-size: 0.9em; margin: 5px 0; }
-    input { width: 80px; text-align: center; }
-    canvas { max-width: 100%; height: 200px; margin-top: 10px; }
-    button { margin-top: 5px; font-size: 0.9em; }
+
+    @media (min-width: 600px) {
+      .controls {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      label {
+        flex: 1;
+      }
+
+      button {
+        flex-shrink: 0;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>📊 Monitor Harga CAKE & TON</h1>
-  <div class="grid">
-    <div class="pair-box">
-      <h3>CAKE/USDT</h3>
-      <div id="price-usdt" class="price">Memuat...</div>
-      <div id="trend-usdt" class="trend">-</div>
-      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.75" step="0.01" /></label>
-      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.30" step="0.01" /></label>
-      <button onclick="saveLimits('usdt')">Simpan</button>
-      <canvas id="chart-usdt"></canvas>
-   
+  <div class="container">
+    <h1>📈 Simulasi Trading CAKE/USDT</h1>
+
+    <div class="controls">
+      <label>Trailing %: <input type="number" id="trailing" value="1" min="0.1" step="0.1" />%</label>
+      <button onclick="testStrategy()">Uji Strategi</button>
+      <button onclick="resetSimulasi()">Reset Simulasi</button>
+    </div>
+
+    <div id="price">💰 Harga: Memuat...</div>
+    <canvas id="chart" height="200"></canvas>
+
+    <h3>📋 Log Simulasi</h3>
+    <div id="log">Menunggu data...</div>
   </div>
 
-
-
-
- 
-   
-<script>
- emailjs.init("aPZx0R9oxUbIQkLEv");
+  <script>
+     emailjs.init("aPZx0R9oxUbIQkLEv"); 
   </script>
       <script>
-
-        let lastPrice = null;
+    let lastPrice = null;
     let chart, priceHistory = [], timeLabels = [];
     let entryPrice = null;
     let highestSinceEntry = null;
     let isHolding = false;
-    const alarmSound = document.getElementById("alarm");
 
-    const pairs = {
-      usdt: {
-        name: "CAKE/USDT",
-        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
-        canvas: "chart-usdt",
-        priceEl: "price-usdt",
-        trendEl: "trend-usdt",
-        upperId: "upper-usdt",
-        lowerId: "lower-usdt",
-        priceHistory: [],
-        timeLabels: [],
-        lastPrice: null,
-        lastAlert: null,
-        chart: null,
-        upperLimit: 2.75,
-        lowerLimit: 2.30
-      },
-     
-    };
+    async function fetchPrice() {
+      try {
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+        const data = await res.json();
+        const price = parseFloat(data.pair.priceUsd);
+        lastPrice = price;
+        document.getElementById("price").textContent = `💰 Harga: $${price.toFixed(4)}`;
+        const now = new Date().toLocaleTimeString();
+        priceHistory.push(price);
+        timeLabels.push(now);
+        if (priceHistory.length > 30) {
+          priceHistory.shift();
+          timeLabels.shift();
+        }
+        chart.data.labels = timeLabels;
+        chart.data.datasets[0].data = priceHistory;
+        chart.update();
+      } catch (err) {
+        document.getElementById("price").textContent = "❌ Gagal memuat harga";
+        console.error(err);
+      }
+    }
 
-    function saveLimits(pairKey) {
-      const pair = pairs[pairKey];
-      pair.upperLimit = parseFloat(document.getElementById(pair.upperId).value);
-      pair.lowerLimit = parseFloat(document.getElementById(pair.lowerId).value);
-      alert(`✅ Alarm ${pair.name} disimpan:\nAtas: $${pair.upperLimit}\nBawah: $${pair.lowerLimit}`);
+    function log(msg) {
+      const logBox = document.getElementById("log");
+      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function testStrategy() {
+      const trailingPercent = parseFloat(document.getElementById("trailing").value) / 100;
+      if (!lastPrice) {
+        log("⏳ Harga belum tersedia");
+        return;
+      }
+
+      if (!isHolding) {
+        entryPrice = lastPrice;
+        highestSinceEntry = lastPrice;
+        isHolding = true;
+        log(`📥 Buy di $${entryPrice.toFixed(4)}`);
+      } else {
+        if (lastPrice > highestSinceEntry) {
+          highestSinceEntry = lastPrice;
+        }
+
+        const trailingStop = highestSinceEntry * (1 - trailingPercent);
+        if (lastPrice <= trailingStop) {
+          log(`📤 Sell di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry.toFixed(4)})`);
+          isHolding = false;
+          entryPrice = null;
+          highestSinceEntry = null;
+        } else {
+          log(`⌛ HOLD, trailing stop di $${trailingStop.toFixed(4)}`);
+        }
+      }
     }
 
 
@@ -113,100 +171,127 @@
     emailjs.send("service_d48312b", "template_1ktk40q", {
     to_name: "ADMIN DATA CENTER",
     from_name: "Crypto Tracker",
-    pair: pairName,
+    pair: lastPrice,
     price: price,
-    message: `Harga ${pairName} telah mencapai $${price}`
+    message: `Harga ${lastPrice} telah mencapai $${price}`
       }).then(() => {
         console.log("📧 Email terkirim");
       }).catch((err) => {
         console.error("❌ Gagal kirim email:", err);
       });
     }
-    
 
-    function initCharts() {
-      for (const key in pairs) {
-        const pair = pairs[key];
-        const ctx = document.getElementById(pair.canvas).getContext("2d");
-        pair.chart = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: pair.timeLabels,
-            datasets: [{
-              label: `Harga ${pair.name}`,
-              data: pair.priceHistory,
-              borderColor: "blue",
-              backgroundColor: "rgba(0,0,255,0.1)",
-              fill: true,
-              tension: 0.3
-            }]
-          },
-          options: {
-            scales: {
-              x: { display: false },
-              y: { title: { display: true, text: "USD" } }
-            },
-            plugins: { legend: { display: false } }
-          }
-        });
-      }
+        
+    function resetSimulasi() {
+      entryPrice = null;
+      highestSinceEntry = null;
+      isHolding = false;
+      document.getElementById("log").innerHTML = "🔁 Simulasi direset<br>";
     }
 
-    async function fetchPrices() {
-      const now = new Date().toLocaleTimeString();
-      for (const key in pairs) {
-        const pair = pairs[key];
-        try {
-          const res = await fetch(pair.api);
-          const data = await res.json();
-          const price = parseFloat(data.pair.priceUsd);
-
-          document.getElementById(pair.priceEl).textContent = `$${price.toFixed(4)}`;
-          const trendEl = document.getElementById(pair.trendEl);
-          if (pair.lastPrice !== null) {
-            if (price > pair.lastPrice) {
-              trendEl.textContent = "Naik";
-              trendEl.className = "trend up";
-            } else if (price < pair.lastPrice) {
-              trendEl.textContent = "Turun";
-              trendEl.className = "trend down";
-            } else {
-              trendEl.textContent = "Stabil";
-              trendEl.className = "trend";
-            }
-          }
-
-          if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
-            alarmSound.play();
-            sendEmailNotification(pair.name, price);
-            pair.lastAlert = 'high';
-          } else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
-            alarmSound.play();
-            sendEmailNotification(pair.name, price);
-            pair.lastAlert = 'low';
-          } else if (price < pair.upperLimit && price > pair.lowerLimit) {
-            pair.lastAlert = null;
-          }
-
-          pair.priceHistory.push(price);
-          pair.timeLabels.push(now);
-          if (pair.priceHistory.length > 20) {
-            pair.priceHistory.shift();
-            pair.timeLabels.shift();
-          }
-          pair.chart.update();
-          pair.lastPrice = price;
-
-        } catch (err) {
-          document.getElementById(pair.priceEl).textContent = "❌ Error";
-          console.error(`Gagal ambil harga ${pair.name}:`, err);
+    const ctx = document.getElementById("chart").getContext("2d");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          label: "Harga CAKE/USDT",
+          data: priceHistory,
+          borderColor: "green",
+          backgroundColor: "rgba(0,255,0,0.1)",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { display: false },
+          y: { beginAtZero: false }
         }
       }
-    }
+    });
 
-    initCharts();
-    fetchPrices();
-    setInterval(fetchPrices, 30000);
+    fetchPrice();
+    setInterval(fetchPrice, 30000);
   </script>
 </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulasi Trading CAKE/USDT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #000000;
+      --card: #f9f9f9;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121212;
+        --text: #ffffff;
+        --card: #1e1e1e;
+      }
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: var(--card);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-weight: bold;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      background-color: #008CBA;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #007bb5;
+    }
+    .log {
+      margin-top: 20px;
+      background: #eee;
+      color: #333;
+      padding: 10px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
 </html>
