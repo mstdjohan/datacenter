@@ -1,306 +1,218 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-  <title>CAKE/IDR Trading Signal (UT Bot + LRC)</title>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <meta charset="UTF-8" />
+  <title>Monitor Harga CAKE & TON</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; background: #111; color: #eee; text-align: center; }
-    #chart { width: 100%; height: 400px; margin-top: 10px; }
-    #status { margin: 10px 0; font-size: 16px; }
-    #signal { font-size: 20px; font-weight: bold; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      text-align: center;
+      background-color: #f4f4f4;
+      color: #222;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background-color: #121212;
+        color: #eee;
+      }
+      .pair-box {
+        border-color: #444;
+        background-color: #1e1e1e;
+      }
+    }
+    h1 { margin-bottom: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .pair-box {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 0 5px #ccc;
+    }
+    .price { font-size: 1.5em; margin: 5px 0; }
+    .trend { font-weight: bold; margin-bottom: 10px; }
+    .up { color: green; }
+    .down { color: red; }
+    label { display: block; font-size: 0.9em; margin: 5px 0; }
+    input { width: 80px; text-align: center; }
+    canvas { max-width: 100%; height: 200px; margin-top: 10px; }
+    button { margin-top: 5px; font-size: 0.9em; }
   </style>
 </head>
 <body>
-  <h2>CAKE/IDR Trading Signal</h2>
-  <div id="status">Loading...</div>
+  <h1>📊 Monitor Harga CAKE & TON</h1>
+  <div class="grid">
+    <div class="pair-box">
+      <h3>CAKE/USDT</h3>
+      <div id="price-usdt" class="price">Memuat...</div>
+      <div id="trend-usdt" class="trend">-</div>
+      <label>Batas Atas: <input type="number" id="upper-usdt" value="2.75" step="0.01" /></label>
+      <label>Batas Bawah: <input type="number" id="lower-usdt" value="2.30" step="0.01" /></label>
+      <button onclick="saveLimits('usdt')">Simpan</button>
+      <canvas id="chart-usdt"></canvas>
+   
+  </div>
 
-  <div id="signal">Waiting signal...</div>
-  <div id="chart"></div>
+
+<script>
+function testEmail() {
+  emailjs.send("service_d48312b", "template_1ktk40q", {
+    to_name: "aPZx0R9oxUbIQkLEv",
+    from_name: "Crypto Tracker",
+    message: "Tes kirim email ketika harga tercapai."
+  })
+  .then(function(response) {
+    alert("✅ Email berhasil dikirim!");
+  }, function(error) {
+    console.error("❌ Gagal mengirim email:", error);
+    alert("❌ Gagal mengirim email:\n" + JSON.stringify(error));
+  });
+}
+</script>
+
 
   <script>
-    emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan User ID EmailJS
+    emailjs.init("aPZx0R9oxUbIQkLEv");
 
-    let prices = [], highs = [], lows = [];
-    let lastSignal = "HOLD ⏳";
-    let pair = "cakeidr"; // CAKE/IDR di Indodax
-    let chart, candleSeries;
+    const alarmSound = document.getElementById("alarm");
 
-    function setupChart() {
-      chart = LightweightCharts.createChart(document.getElementById("chart"), {
-        layout: { background: { color: "#111" }, textColor: "#eee" },
-        grid: { vertLines: { color: "#333" }, horzLines: { color: "#333" } },
+    const pairs = {
+      usdt: {
+        name: "CAKE/USDT",
+        api: "https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0",
+        canvas: "chart-usdt",
+        priceEl: "price-usdt",
+        trendEl: "trend-usdt",
+        upperId: "upper-usdt",
+        lowerId: "lower-usdt",
+        priceHistory: [],
+        timeLabels: [],
+        lastPrice: null,
+        lastAlert: null,
+        chart: null,
+        upperLimit: 2.75,
+        lowerLimit: 2.30
+      },
+     
+    };
+
+    function saveLimits(pairKey) {
+      const pair = pairs[pairKey];
+      pair.upperLimit = parseFloat(document.getElementById(pair.upperId).value);
+      pair.lowerLimit = parseFloat(document.getElementById(pair.lowerId).value);
+      alert(`✅ Alarm ${pair.name} disimpan:\nAtas: $${pair.upperLimit}\nBawah: $${pair.lowerLimit}`);
+    }
+
+
+    function sendEmailNotification(pairName, price) {
+    emailjs.send("service_d48312b", "template_1ktk40q", {
+    to_name: "ADMIN DATA CENTER",
+    from_name: "Crypto Tracker",
+    pair: pairName,
+    price: price,
+    message: `Harga ${pairName} telah mencapai $${price}`
+      }).then(() => {
+        console.log("📧 Email terkirim");
+      }).catch((err) => {
+        console.error("❌ Gagal kirim email:", err);
       });
-      candleSeries = chart.addCandlestickSeries();
     }
-
-
-    
-    function calcATR(period = 10) {
-      if (prices.length < period + 1) return null;
-      let trs = [];
-      for (let i = prices.length - period; i < prices.length; i++) {
-        let high = highs[i], low = lows[i], closePrev = prices[i - 1];
-        let tr = Math.max(high - low, Math.abs(high - closePrev), Math.abs(low - closePrev));
-        trs.push(tr);
-      }
-      return trs.reduce((a, b) => a + b, 0) / trs.length;
-    }
-
-    function calcLinearRegression(len = 100) {
-      if (prices.length < len) return null;
-      let y = prices.slice(-len);
-      let x = [...Array(len).keys()];
-      let n = len;
-      let sumX = x.reduce((a, b) => a + b, 0);
-      let sumY = y.reduce((a, b) => a + b, 0);
-      let sumXY = x.map((xi, i) => xi * y[i]).reduce((a, b) => a + b, 0);
-      let sumXX = x.map(xi => xi * xi).reduce((a, b) => a + b, 0);
-      let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-      let intercept = (sumY - slope * sumX) / n;
-      let reg = x.map(xi => intercept + slope * xi);
-      let mean = reg.reduce((a, b) => a + b, 0) / reg.length;
-      let variance = reg.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / reg.length;
-      let stdev = Math.sqrt(variance);
-      return { mid: reg[reg.length - 1], upper: reg[reg.length - 1] + 2 * stdev, lower: reg[reg.length - 1] - 2 * stdev };
-    }
-
-    function sendEmail(signal, price) {
-      emailjs.send("service_d48312b", "template_1ktk40q", {
-        signal: signal,
-        price: price,
-        pair: "CAKE/IDR",
-        time: new Date().toLocaleString()
-      }).then(() => console.log("Email terkirim"), (err) => console.error("Email error", err));
-    }
-
-    async function getPrice() {
-      try {
-        let res = await fetch(`https://indodax.com/api/ticker/${pair}`);
-        let data = await res.json();
-        if (!data.ticker || !data.ticker.last) throw new Error("Invalid response");
-
-        let price = parseFloat(data.ticker.last);
-        let high = parseFloat(data.ticker.high);
-        let low = parseFloat(data.ticker.low);
-
-        prices.push(price); highs.push(high); lows.push(low);
-        if (prices.length > 500) { prices.shift(); highs.shift(); lows.shift(); }
-
-        document.getElementById("status").innerText = `Last: ${price} (${pair})`;
-
-        let atr = calcATR(10);
-        let lrc = calcLinearRegression(100);
-        if (!atr || !lrc) return;
-
-        let baseline = prices[prices.length - 2] + 2 * atr * (price > prices[prices.length - 2] ? 1 : -1);
-
-        let signal = "HOLD ⏳";
-        if (price > baseline && price > lrc.upper) {
-          signal = "SELL 🚨";
-        } else if (price < baseline && price < lrc.lower) {
-          signal = "BUY ✅";
-        }
-
-        document.getElementById("signal").innerText = "Signal: " + signal;
-
-        if (signal !== lastSignal && signal !== "HOLD ⏳") {
-          lastSignal = signal;
-          sendEmail(signal, price);
-        }
-
-        candleSeries.update({ time: Math.floor(Date.now() / 1000), open: low, high: high, low: low, close: price });
-
-      } catch (err) {
-        document.getElementById("status").innerText = "Error: " + err;
-      }
-    }
-
-    setupChart();
-    setInterval(getPrice, 5000);
-  </script>
     
 
-<body>
-  <h2>CAKE/IDR Trading Signal (UT Bot + LRC)</h2>
-  <div id="status">Loading...</div>
-  <div id="signal">Waiting signal...</div>
-
-  <script>
-    let prices = [];
-    let highs = [];
-    let lows = [];
-    let pair = null;
-
-    async function findPair() {
-      let res = await fetch("https://indodax.com/api/pairs");
-      let data = await res.json();
-      let found = data.find(p => p.id.includes("cake"));
-      if (found) {
-        pair = found.id;
-        document.getElementById("status").innerText = "Pair ditemukan: " + pair;
-      } else {
-        document.getElementById("status").innerText = "CAKE tidak ada di Indodax";
+    function initCharts() {
+      for (const key in pairs) {
+        const pair = pairs[key];
+        const ctx = document.getElementById(pair.canvas).getContext("2d");
+        pair.chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: pair.timeLabels,
+            datasets: [{
+              label: `Harga ${pair.name}`,
+              data: pair.priceHistory,
+              borderColor: "blue",
+              backgroundColor: "rgba(0,0,255,0.1)",
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            scales: {
+              x: { display: false },
+              y: { title: { display: true, text: "USD" } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
       }
     }
 
-    function calcATR(period = 10) {
-      if (prices.length < period + 1) return null;
-      let trs = [];
-      for (let i = prices.length - period; i < prices.length; i++) {
-        let high = highs[i], low = lows[i], closePrev = prices[i - 1];
-        let tr = Math.max(high - low, Math.abs(high - closePrev), Math.abs(low - closePrev));
-        trs.push(tr);
-      }
-      return trs.reduce((a, b) => a + b, 0) / trs.length;
-    }
+    async function fetchPrices() {
+      const now = new Date().toLocaleTimeString();
+      for (const key in pairs) {
+        const pair = pairs[key];
+        try {
+          const res = await fetch(pair.api);
+          const data = await res.json();
+          const price = parseFloat(data.pair.priceUsd);
 
-    function calcLinearRegression(len = 100) {
-      if (prices.length < len) return null;
-      let y = prices.slice(-len);
-      let x = [...Array(len).keys()];
-      let n = len;
-      let sumX = x.reduce((a, b) => a + b, 0);
-      let sumY = y.reduce((a, b) => a + b, 0);
-      let sumXY = x.map((xi, i) => xi * y[i]).reduce((a, b) => a + b, 0);
-      let sumXX = x.map(xi => xi * xi).reduce((a, b) => a + b, 0);
-      let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-      let intercept = (sumY - slope * sumX) / n;
-      let reg = x.map(xi => intercept + slope * xi);
-      let mean = reg.reduce((a, b) => a + b, 0) / reg.length;
-      let variance = reg.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / reg.length;
-      let stdev = Math.sqrt(variance);
-      return {
-        mid: reg[reg.length - 1],
-        upper: reg[reg.length - 1] + 2 * stdev,
-        lower: reg[reg.length - 1] - 2 * stdev
-      };
-    }
-
-    async function getPrice() {
-      if (!pair) return;
-      try {
-        let res = await fetch(`https://indodax.com/api/ticker/${pair}`);
-        let data = await res.json();
-        if (!data.ticker || !data.ticker.last) throw new Error("Invalid response: " + JSON.stringify(data));
-
-        let price = parseFloat(data.ticker.last);
-        let high = parseFloat(data.ticker.high);
-        let low = parseFloat(data.ticker.low);
-
-        prices.push(price);
-        highs.push(high);
-        lows.push(low);
-
-        if (prices.length > 500) {
-          prices.shift(); highs.shift(); lows.shift();
-        }
-
-        document.getElementById("status").innerText = `Last: ${price} (${pair})`;
-
-        let atr = calcATR(10);
-        let lrc = calcLinearRegression(100);
-        if (!atr || !lrc) return;
-
-        // UT Bot baseline
-        let baseline = prices[prices.length - 2] + 2 * atr * (price > prices[prices.length - 2] ? 1 : -1);
-
-        let signal = "HOLD ⏳";
-
-        if (price > baseline && price > lrc.upper) {
-          signal = "SELL 🚨 (UT Bot + LRC)";
-        } else if (price < baseline && price < lrc.lower) {
-          signal = "BUY ✅ (UT Bot + LRC)";
-        }
-
-        document.getElementById("signal").innerText = "Signal: " + signal;
-
-      } catch (err) {
-        document.getElementById("status").innerText = "Error: " + err;
-      }
-    }
-
-    (async () => {
-      await findPair();
-      setInterval(getPrice, 5000);
-    })();
-  </script>
-
-
-<body>
-  <h2>Signal Trading CAKE di Indodax</h2>
-  <div id="status">Loading...</div>
-  <div id="signal">Waiting signal...</div>
-
-  <script>
-    let prices = [];
-    let pair = null; // nanti diisi otomatis
-
-    async function findPair() {
-      try {
-        let res = await fetch("https://indodax.com/api/pairs");
-        let data = await res.json();
-
-        // cari pair yang ada kata 'cake'
-        let found = data.find(p => p.id.includes("cake"));
-        if (found) {
-          pair = found.id;
-          document.getElementById("status").innerText = "Pair ditemukan: " + pair;
-        } else {
-          throw new Error("Pair CAKE tidak tersedia di Indodax");
-        }
-      } catch (err) {
-        document.getElementById("status").innerText = "Error: " + err;
-      }
-    }
-
-    async function getPrice() {
-      if (!pair) return;
-      try {
-        let res = await fetch(`https://indodax.com/api/ticker/${pair}`);
-        let data = await res.json();
-
-        if (!data.ticker || !data.ticker.last) {
-          throw new Error("Invalid response: " + JSON.stringify(data));
-        }
-
-        let price = parseFloat(data.ticker.last);
-        prices.push(price);
-        if (prices.length > 100) prices.shift();
-
-        document.getElementById("status").innerText = "Last Price " + price + " (" + pair + ")";
-
-        if (prices.length >= 20) {
-          let avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-          let variance = prices.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / prices.length;
-          let stdev = Math.sqrt(variance);
-          let upper = avg + 2 * stdev;
-          let lower = avg - 2 * stdev;
-
-          let signal = "HOLD";
-          if (price > upper) {
-            signal = "SELL 🚨";
-          } else if (price < lower) {
-            signal = "BUY ✅";
+          document.getElementById(pair.priceEl).textContent = `$${price.toFixed(4)}`;
+          const trendEl = document.getElementById(pair.trendEl);
+          if (pair.lastPrice !== null) {
+            if (price > pair.lastPrice) {
+              trendEl.textContent = "Naik";
+              trendEl.className = "trend up";
+            } else if (price < pair.lastPrice) {
+              trendEl.textContent = "Turun";
+              trendEl.className = "trend down";
+            } else {
+              trendEl.textContent = "Stabil";
+              trendEl.className = "trend";
+            }
           }
 
-          document.getElementById("signal").innerText = "Signal: " + signal;
-        }
+          if (price >= pair.upperLimit && pair.lastAlert !== 'high') {
+            alarmSound.play();
+            sendEmailNotification(pair.name, price);
+            pair.lastAlert = 'high';
+          } else if (price <= pair.lowerLimit && pair.lastAlert !== 'low') {
+            alarmSound.play();
+            sendEmailNotification(pair.name, price);
+            pair.lastAlert = 'low';
+          } else if (price < pair.upperLimit && price > pair.lowerLimit) {
+            pair.lastAlert = null;
+          }
 
-      } catch (err) {
-        document.getElementById("status").innerText = "Error: " + err;
+          pair.priceHistory.push(price);
+          pair.timeLabels.push(now);
+          if (pair.priceHistory.length > 20) {
+            pair.priceHistory.shift();
+            pair.timeLabels.shift();
+          }
+          pair.chart.update();
+          pair.lastPrice = price;
+
+        } catch (err) {
+          document.getElementById(pair.priceEl).textContent = "❌ Error";
+          console.error(`Gagal ambil harga ${pair.name}:`, err);
+        }
       }
     }
 
-    // jalankan
-    (async () => {
-      await findPair();         // cari dulu pair yang sah
-      setInterval(getPrice, 5000); // ambil harga setiap 5 detik
-    })();
+    initCharts();
+    fetchPrices();
+    setInterval(fetchPrices, 30000);
   </script>
 </body>
-
-
-</body>
-  </body>
 </html>
