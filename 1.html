@@ -98,10 +98,11 @@
     <div id="log">Menunggu data...</div>
   </div>
 
-  <script>
+  
+      <script>
+        <script>
      emailjs.init("aPZx0R9oxUbIQkLEv"); 
   </script>
-      <script>
     let lastPrice = null;
     let chart, priceHistory = [], timeLabels = [];
     let entryPrice = null;
@@ -167,19 +168,7 @@
     }
 
 
-    function sendEmailNotification(pairName, price) {
-    emailjs.send("service_d48312b", "template_1ktk40q", {
-    to_name: "ADMIN DATA CENTER",
-    from_name: "Crypto Tracker",
-    pair: lastPrice,
-    price: price,
-    message: `Harga ${lastPrice} telah mencapai $${price}`
-      }).then(() => {
-        console.log("📧 Email terkirim");
-      }).catch((err) => {
-        console.error("❌ Gagal kirim email:", err);
-      });
-    }
+   
 
         
     function resetSimulasi() {
@@ -292,6 +281,19 @@
       border-radius: 5px;
     }
   </style>
+   function sendEmailNotification(pairName, price) {
+    emailjs.send("service_d48312b", "template_1ktk40q", {
+    to_name: "ADMIN DATA CENTER",
+    from_name: "Crypto Tracker",
+    pair: lastPrice,
+    price: price,
+    message: `Harga ${lastPrice} telah mencapai $${price}`
+      }).then(() => {
+        console.log("📧 Email terkirim");
+      }).catch((err) => {
+        console.error("❌ Gagal kirim email:", err);
+      });
+    }
 </head>
 
 </html>
