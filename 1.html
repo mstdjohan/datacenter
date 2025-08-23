@@ -1,212 +1,5 @@
-
 <!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simulasi Trading CAKE/USDT</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0 10px;
-      background-color: #f4f4f4;
-      color: #222;
-    }
-
-    h1 {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 1.5rem;
-    }
-
-    .container {
-      max-width: 700px;
-      margin: 0 auto;
-    }
-
-    .controls {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin: 20px 0;
-    }
-
-    label, button {
-      font-size: 1rem;
-    }
-
-    button {
-      padding: 10px;
-      border: none;
-      background-color: #007bff;
-      color: white;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #0056b3;
-    }
-
-    canvas {
-      max-width: 100%;
-    }
-
-    #log {
-      background-color: #fff;
-      border: 1px solid #ccc;
-      padding: 10px;
-      max-height: 200px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 0.9rem;
-    }
-
-    @media (min-width: 600px) {
-      .controls {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      label {
-        flex: 1;
-      }
-
-      button {
-        flex-shrink: 0;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>📈 Simulasi Trading CAKE/USDT</h1>
-
-    <div class="controls">
-      <label>Trailing %: <input type="number" id="trailing" value="1" min="0.1" step="0.1" />%</label>
-      <button onclick="testStrategy()">Uji Strategi</button>
-      <button onclick="resetSimulasi()">Reset Simulasi</button>
-    </div>
-
-    <div id="price">💰 Harga: Memuat...</div>
-    <canvas id="chart" height="200"></canvas>
-
-    <h3>📋 Log Simulasi</h3>
-    <div id="log">Menunggu data...</div>
-  </div>
-
-  
-      <script>
-        <script>
-     emailjs.init("aPZx0R9oxUbIQkLEv"); 
- 
-    let lastPrice = null;
-    let chart, priceHistory = [], timeLabels = [];
-    let entryPrice = null;
-    let highestSinceEntry = null;
-    let isHolding = false;
-
-    async function fetchPrice() {
-      try {
-        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
-        const data = await res.json();
-        const price = parseFloat(data.pair.priceUsd);
-        lastPrice = price;
-        document.getElementById("price").textContent = `💰 Harga: $${price.toFixed(4)}`;
-        const now = new Date().toLocaleTimeString();
-        priceHistory.push(price);
-        timeLabels.push(now);
-        if (priceHistory.length > 30) {
-          priceHistory.shift();
-          timeLabels.shift();
-        }
-        chart.data.labels = timeLabels;
-        chart.data.datasets[0].data = priceHistory;
-        chart.update();
-      } catch (err) {
-        document.getElementById("price").textContent = "❌ Gagal memuat harga";
-        console.error(err);
-      }
-    }
-
-    function log(msg) {
-      const logBox = document.getElementById("log");
-      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
-      logBox.scrollTop = logBox.scrollHeight;
-    }
-
-    function testStrategy() {
-      const trailingPercent = parseFloat(document.getElementById("trailing").value) / 100;
-      if (!lastPrice) {
-        log("⏳ Harga belum tersedia");
-        return;
-      }
-
-      if (!isHolding) {
-        entryPrice = lastPrice;
-        highestSinceEntry = lastPrice;
-        isHolding = true;
-        log(`📥 Buy di $${entryPrice.toFixed(4)}`);
-      } else {
-        if (lastPrice > highestSinceEntry) {
-          highestSinceEntry = lastPrice;
-        }
-
-        const trailingStop = highestSinceEntry * (1 - trailingPercent);
-        if (lastPrice <= trailingStop) {
-          log(`📤 Sell di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry.toFixed(4)})`);
-          isHolding = false;
-          entryPrice = null;
-          highestSinceEntry = null;
-        } else {
-          log(`⌛ HOLD, trailing stop di $${trailingStop.toFixed(4)}`);
-        }
-      }
-    }
-
-
-   
-
-        
-    function resetSimulasi() {
-      entryPrice = null;
-      highestSinceEntry = null;
-      isHolding = false;
-      document.getElementById("log").innerHTML = "🔁 Simulasi direset<br>";
-    }
-
-    const ctx = document.getElementById("chart").getContext("2d");
-    chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: timeLabels,
-        datasets: [{
-          label: "Harga CAKE/USDT",
-          data: priceHistory,
-          borderColor: "green",
-          backgroundColor: "rgba(0,255,0,0.1)",
-          fill: true,
-          tension: 0.3
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: { display: false },
-          y: { beginAtZero: false }
-        }
-      }
-    });
-
-    fetchPrice();
-    setInterval(fetchPrice, 30000);
-  </script>
-   </script>
-</body>
-
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Simulasi Trading CAKE/USDT</title>
@@ -282,19 +75,134 @@
       border-radius: 5px;
     }
   </style>
-   function sendEmailNotification(pairName, price) {
-    emailjs.send("service_d48312b", "template_1ktk40q", {
-    to_name: "ADMIN DATA CENTER",
-    from_name: "Crypto Tracker",
-    pair: lastPrice,
-    price: price,
-    message: `Harga ${lastPrice} telah mencapai $${price}`
-      }).then(() => {
-        console.log("📧 Email terkirim");
-      }).catch((err) => {
-        console.error("❌ Gagal kirim email:", err);
-      });
-    }
+
+  <!-- EmailJS -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <script>
+    (function() {
+      emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan Public Key EmailJS
+    })();
+  </script>
 </head>
 
+<body>
+  <div class="container">
+    <h1>Simulasi Trading CAKE/USDT</h1>
+    <p id="price">💰 Harga: -</p>
+    <label for="trailing">Trailing Stop (%)</label>
+    <input id="trailing" type="number" value="2" step="0.1" />
+    <button onclick="testStrategy()">▶️ Jalankan Strategi</button>
+    <button onclick="resetSimulasi()">🔄 Reset</button>
+    <canvas id="chart" height="200"></canvas>
+    <div id="log" class="log">📜 Log aktivitas:<br></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let lastPrice = null;
+    let chart, priceHistory = [], timeLabels = [];
+    let entryPrice = null;
+    let highestSinceEntry = null;
+    let isHolding = false;
+
+    async function fetchPrice() {
+      try {
+        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
+        const data = await res.json();
+        const price = parseFloat(data.pair.priceUsd);
+        lastPrice = price;
+        document.getElementById("price").textContent = `💰 Harga: $${price.toFixed(4)}`;
+        const now = new Date().toLocaleTimeString();
+        priceHistory.push(price);
+        timeLabels.push(now);
+        if (priceHistory.length > 30) {
+          priceHistory.shift();
+          timeLabels.shift();
+        }
+        chart.data.labels = timeLabels;
+        chart.data.datasets[0].data = priceHistory;
+        chart.update();
+      } catch (err) {
+        document.getElementById("price").textContent = "❌ Gagal memuat harga";
+        console.error(err);
+      }
+    }
+
+    function log(msg) {
+      const logBox = document.getElementById("log");
+      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function testStrategy() {
+      const trailingPercent = parseFloat(document.getElementById("trailing").value) / 100;
+      if (!lastPrice) {
+        log("⏳ Harga belum tersedia");
+        return;
+      }
+
+      if (!isHolding) {
+        entryPrice = lastPrice;
+        highestSinceEntry = lastPrice;
+        isHolding = true;
+        log(`📥 Buy di $${entryPrice.toFixed(4)}`);
+      } else {
+        if (lastPrice > highestSinceEntry) {
+          highestSinceEntry = lastPrice;
+        }
+
+        const trailingStop = highestSinceEntry * (1 - trailingPercent);
+        if (lastPrice <= trailingStop) {
+          log(`📤 Sell di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry.toFixed(4)})`);
+          isHolding = false;
+          entryPrice = null;
+          highestSinceEntry = null;
+
+          // Kirim notifikasi EmailJS
+          emailjs.send("service_d48312b", "template_1ktk40q", {
+            message: `Sell berhasil di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry})`,
+            time: new Date().toLocaleString()
+          })
+          .then(() => log("📧 Notifikasi email terkirim"))
+          .catch(err => log("❌ Gagal kirim email: " + err));
+        } else {
+          log(`⌛ HOLD, trailing stop di $${trailingStop.toFixed(4)}`);
+        }
+      }
+    }
+
+    function resetSimulasi() {
+      entryPrice = null;
+      highestSinceEntry = null;
+      isHolding = false;
+      document.getElementById("log").innerHTML = "🔁 Simulasi direset<br>";
+    }
+
+    const ctx = document.getElementById("chart").getContext("2d");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          label: "Harga CAKE/USDT",
+          data: priceHistory,
+          borderColor: "green",
+          backgroundColor: "rgba(0,255,0,0.1)",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { display: false },
+          y: { beginAtZero: false }
+        }
+      }
+    });
+
+    fetchPrice();
+    setInterval(fetchPrice, 30000);
+  </script>
+</body>
 </html>
