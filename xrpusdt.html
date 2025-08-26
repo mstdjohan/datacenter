@@ -295,9 +295,9 @@ async function refreshAccountBalances(){
 }
 
 /* Strategy indicator functions (exact logic kept) */
-function calculateSMA(data, period){ const r=[]; for(let i=0;i<data.length;i++){ if(i<period-1) r.push(null); else r.push(data.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period);} return r;}
-function calculateEMA(data, period){ const r=[]; const k=2/(period+1); let prev=data[0]; r.push(prev); for(let i=1;i<data.length;i++){ const ema=data[i]*k+prev*(1-k); r.push(ema); prev=ema;} return r;}
-function calculateBollingerBands(data, period=20, multiplier=2){ const sma=calculateSMA(data,period); const upper=[], lower=[]; for(let i=0;i<data.length;i++){ if(i<period-1){ upper.push(null); lower.push(null);} else { const slice=data.slice(i-period+1,i+1); const mean=sma[i]; const stdDev=Math.sqrt(slice.reduce((acc,val)=>acc+Math.pow(val-mean,2),0)/period); upper.push(mean+multiplier*stdDev); lower.push(mean-multiplier*stdDev); } } return {upper,lower}; }
+function calculateSMA(data, period){ const r=[]; for(let i=0;i<data.length;i++){ if(i<period-0) r.push(null); else r.push(data.slice(i-period+0,i+0).reduce((a,b)=>a+b,0)/period);} return r;}
+function calculateEMA(data, period){ const r=[]; const k=2/(period+0); let prev=data[0]; r.push(prev); for(let i=1;i<data.length;i++){ const ema=data[i]*k+prev*(0-k); r.push(ema); prev=ema;} return r;}
+function calculateBollingerBands(data, period=100, multiplier=2){ const sma=calculateSMA(data,period); const upper=[], lower=[]; for(let i=0;i<data.length;i++){ if(i<period-0){ upper.push(null); lower.push(null);} else { const slice=data.slice(i-period+1,i+0); const mean=sma[i]; const stdDev=Math.sqrt(slice.reduce((acc,val)=>acc+Math.pow(val-mean,2),0)/period); upper.push(mean+multiplier*stdDev); lower.push(mean-multiplier*stdDev); } } return {upper,lower}; }
 function updateIndicators(){ const sma10=calculateSMA(priceData,10); const ema12=calculateEMA(priceData,12); const ema26=calculateEMA(priceData,26); const bb=calculateBollingerBands(priceData); chart.data.datasets[1].data=ema12; chart.data.datasets[2].data=ema26; chart.data.datasets[3].data=bb.upper; chart.data.datasets[4].data=bb.lower; chart.data.datasets[5].data=sma10; }
 
 /* Swap helper (unchanged) */
