@@ -1,162 +1,297 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading CAKE - " CAKE1 "</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CAKE/USDT – UT Bot + Linear Regression Channel</title>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
-    #resetBtn { margin-top: 10px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
+    :root{
+      --bg:#0b0e12;--panel:#12161c;--text:#d7e0ea;--muted:#8a97a8;--accent:#4ad295;--danger:#ff5d5d;--warn:#f0b429;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px}
+    .card{background:var(--panel);border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:14px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .grow{flex:1 1 320px}
+    label{font-size:12px;color:var(--muted)}
+    input,select,button{background:#0f1318;color:var(--text);border:1px solid #202832;border-radius:12px;padding:10px;font-size:14px}
+    button{cursor:pointer}
+    button.primary{background:linear-gradient(180deg,#2ed88f,#17a36e);border:none}
+    .status{font-size:12px;color:var(--muted)}
+    .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;background:#0f1318;border:1px solid #1c2430}
+    .legend{display:flex;gap:8px;flex-wrap:wrap}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.candle{background:#9fb3c8}
+    .dot.st{background:var(--accent)}
+    .dot.reg{background:#5aa0ff}
+    .dot.regch{background:#a3c4ff}
+    .dot.buy{background:#21d07a}
+    .dot.sell{background:#ff6b6b}
+    .grid{display:grid;grid-template-columns:repeat(6, minmax(120px, 1fr));gap:10px}
+    @media (max-width:980px){.grid{grid-template-columns:repeat(2, minmax(140px,1fr))}}
+    #chart{height:520px}
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <div class="row">
+      <div class="card grow">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:12px">
+            <h2 style="margin:4px 0">UT Bot + Linear Regression • CAKE/USDT</h2>
+            <span id="pricePill" class="pill">Harga: <b id="lastPrice">–</b></span>
+          </div>
+          <div class="legend">
+            <span class="pill"><span class="dot candle"></span>Candles</span>
+            <span class="pill"><span class="dot st"></span>UT Bot</span>
+            <span class="pill"><span class="dot reg"></span>Regresi</span>
+            <span class="pill"><span class="dot regch"></span>Channel</span>
+            <span class="pill"><span class="dot buy"></span>Buy</span>
+            <span class="pill"><span class="dot sell"></span>Sell</span>
+          </div>
+        </div>
+        <div id="chart"></div>
+        <div class="status" id="status">Menunggu data…</div>
+      </div>
+      <div class="card" style="min-width:300px">
+        <h3 style="margin:6px 0 10px">Pengaturan</h3>
+        <div class="grid">
+          <div>
+            <label>Symbol</label>
+            <select id="symbol">
+              <option value="CAKEUSDT" selected>CAKEUSDT</option>
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+              <option value="BNBUSDT">BNBUSDT</option>
+            </select>
+          </div>
+          <div>
+            <label>Interval</label>
+            <select id="interval">
+              <option>5m</option>
+              <option selected>15m</option>
+              <option>1h</option>
+              <option>4h</option>
+              <option>1d</option>
+            </select>
+          </div>
+          <div>
+            <label>ATR Periode</label>
+            <input id="atrPeriod" type="number" value="10" min="2" max="200"/>
+          </div>
+          <div>
+            <label>ATR Multiplier</label>
+            <input id="atrMult" type="number" value="1.5" step="0.1" min="0.2" max="10"/>
+          </div>
+          <div>
+            <label>Panjang Regresi</label>
+            <input id="regLen" type="number" value="100" min="20" max="500"/>
+          </div>
+          <div>
+            <label>Channel Dev (σ)</label>
+            <input id="regMult" type="number" value="2" step="0.1" min="0.2" max="5"/>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px">
+          <button class="primary" id="btnLoad">Muat / Perbarui</button>
+          <button id="btnLive">Live On</button>
+        </div>
+        <p class="status" style="margin-top:8px">Tips: jika koneksi padat, tombol Live bisa dimatikan lalu klik Muat untuk refresh manual.</p>
+      </div>
+    </div>
+  </div>
 
-<h2>📊 Harga CAKE " cake1 " & Indikator (Real-time + Historis)</h2>
-<div>💰 <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
+  <script>
+    // ===== Utilities =====
+    const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+    const fmt = new Intl.NumberFormat('en-US',{maximumFractionDigits:6});
 
-<button id="resetBtn">🔁 Reset Simulasi</button>
-
-<div id="log"></div>
-
-<script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 100;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-const chartCtx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
-
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  localStorage.clear();
-  currentCapital = 1000;
-  lastBuy = null;
-  currentPositionAmount = 0;
-  updateCapitalDisplay();
-  log("🔄 Simulasi telah direset.");
-});
-
-function calculateSMA(data, period) {
-  return data.map((val, i, arr) => {
-    if (i < period - 1) return null;
-    const slice = arr.slice(i - period + 1, i + 1);
-    return slice.reduce((a, b) => a + b, 0) / period;
-  });
-}
-
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - sma[i], 2), 0) / period);
-      upper.push(sma[i] + multiplier * stdDev);
-      lower.push(sma[i] - multiplier * stdDev);
-    }
-  }
-  return { upper, lower };
-}
-
-function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => log(`📧 Email terkirim: ${subject}`))
-    .catch(err => log("⚠️ Gagal kirim email: " + err.text));
-}
-
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=pancakeswap-token&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data["pancakeswap-token"].usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 100) {
-      priceData.shift();
-      timeLabels.shift();
-    }
-
-    const { upper, lower } = calculateBollingerBands(priceData);
-    chart.data.datasets[1].data = upper;
-    chart.data.datasets[2].data = lower;
-    chart.update();
-
-    const lastLower = lower[lower.length - 1];
-    const lastUpper = upper[upper.length - 1];
-
-    if (!lastBuy && price <= lastLower) {
-      lastBuy = price;
-      currentPositionAmount = qtyPerTrade / price;
-      currentCapital -= qtyPerTrade;
-      updateCapitalDisplay();
-      localStorage.setItem('capital', currentCapital);
-      localStorage.setItem('lastBuy', lastBuy);
-      localStorage.setItem('positionAmount', currentPositionAmount);
-      log(`📥 BUY di lower BB: $${price.toFixed(4)}`);
-      sendEmail("BUY BB", `Beli CAKE di $${price.toFixed(4)} (lower BB)`);
+    // Robust fetch to avoid CORS/temporary issues – tries multiple Binance hosts with timeout & retries
+    async function robustFetchKlines(symbol, interval, limit=500){
+      const hosts = [
+        'https://api.binance.com',
+        'https://api1.binance.com',
+        'https://api2.binance.com',
+        'https://api3.binance.com'
+      ];
+      const path = `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      let lastErr = null;
+      for (let attempt=0; attempt<hosts.length*2; attempt++){
+        const host = hosts[attempt % hosts.length];
+        try{
+          const controller = new AbortController();
+          const t = setTimeout(()=>controller.abort(), 8000);
+          const res = await fetch(host+path,{signal:controller.signal});
+          clearTimeout(t);
+          if(!res.ok) throw new Error(`HTTP ${res.status}`);
+          const raw = await res.json();
+          // Map to OHLC
+          const data = raw.map(k=>({
+            time: Math.floor(k[0]/1000),
+            open: +k[1], high: +k[2], low: +k[3], close: +k[4],
+          }));
+          return data;
+        }catch(e){
+          lastErr = e;
+          console.warn('Fetch attempt failed:', host, e.message);
+          await sleep(400);
+        }
+      }
+      throw lastErr || new Error('Fetch gagal');
     }
 
-    if (lastBuy && price >= lastUpper) {
-      const sellValue = price * currentPositionAmount;
-      currentCapital += sellValue;
-      updateCapitalDisplay();
-      log(`📤 SELL di upper BB: $${price.toFixed(4)}`);
-      sendEmail("SELL BB", `Jual CAKE di $${price.toFixed(4)} (upper BB)`);
-      lastBuy = null;
-      currentPositionAmount = 0;
-      localStorage.setItem('capital', currentCapital);
-      localStorage.removeItem('lastBuy');
-      localStorage.removeItem('positionAmount');
+    function ema(values, period){
+      const k = 2/(period+1); let ema=null; const out=[];
+      values.forEach((v,i)=>{ ema = i===0? v : v*k + ema*(1-k); out.push(ema); });
+      return out;
     }
-  } catch (err) {
-    log("❌ Gagal ambil harga CAKE live");
-    console.error(err);
-  }
-}
 
-(async () => {
-  setInterval(fetchAndEvaluate, 15000);
-})();
-</script>
+    function atr(ohlc, period){
+      const trs = [];
+      for(let i=0;i<ohlc.length;i++){
+        if(i===0){ trs.push(ohlc[i].high-ohlc[i].low); continue; }
+        const h = ohlc[i].high, l=ohlc[i].low, pc=ohlc[i-1].close;
+        const tr = Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc));
+        trs.push(tr);
+      }
+      const atrLine = ema(trs, period);
+      return atrLine;
+    }
+
+    // Supertrend-like UT Bot implementation (stable and fast)
+    function utBot(ohlc, atrPeriod=10, mult=1.5){
+      const a = atr(ohlc, atrPeriod);
+      const mid = ohlc.map(d => (d.high + d.low)/2);
+      const upperBasic = mid.map((m,i)=> m + mult * a[i]);
+      const lowerBasic = mid.map((m,i)=> m - mult * a[i]);
+      const upper = [], lower = [], trend=[]; // 1=up, -1=down
+      for(let i=0;i<ohlc.length;i++){
+        if(i===0){ upper[i]=upperBasic[i]; lower[i]=lowerBasic[i]; trend[i]=1; continue; }
+        upper[i] = (upperBasic[i] < upper[i-1] || ohlc[i-1].close > upper[i-1]) ? upperBasic[i] : upper[i-1];
+        lower[i] = (lowerBasic[i] > lower[i-1] || ohlc[i-1].close < lower[i-1]) ? lowerBasic[i] : lower[i-1];
+        trend[i] = trend[i-1];
+        if(trend[i-1] === -1 && ohlc[i].close > upper[i]) trend[i] = 1;
+        else if(trend[i-1] === 1 && ohlc[i].close < lower[i]) trend[i] = -1;
+      }
+      const line = ohlc.map((d,i)=> ({ time:d.time, value: trend[i]===1? lower[i] : upper[i] }));
+      // Signals
+      const signals = [];
+      for(let i=1;i<ohlc.length;i++){
+        if(trend[i-1]===-1 && trend[i]===1) signals.push({type:'buy', time: ohlc[i].time, price: ohlc[i].close});
+        if(trend[i-1]===1 && trend[i]===-1) signals.push({type:'sell', time: ohlc[i].time, price: ohlc[i].close});
+      }
+      return { line, signals };
+    }
+
+    // Rolling Linear Regression Channel
+    function regressionChannel(closes, times, len=100, mult=2){
+      const center=[], upper=[], lower=[];
+      function slice(i){ return {x: times.slice(i-len+1, i+1), y: closes.slice(i-len+1, i+1)}; }
+      for(let i=0;i<closes.length;i++){
+        if(i < len-1){ center.push(null); upper.push(null); lower.push(null); continue; }
+        const {x,y} = slice(i);
+        // x as 0..len-1 improves numeric stability
+        const n = len; const xx = [...Array(n)].map((_,k)=>k);
+        const sumX = (n-1)*n/2; // 0+..+(n-1)
+        const sumX2 = (n-1)*n*(2*n-1)/6;
+        let sumY=0, sumXY=0;
+        for(let k=0;k<n;k++){ sumY+=y[k]; sumXY += xx[k]*y[k]; }
+        const denom = n*sumX2 - sumX*sumX;
+        const b = (n*sumXY - sumX*sumY)/denom; // slope
+        const a = (sumY - b*sumX)/n;            // intercept
+        // center value at last index
+        const lastX = n-1; const cVal = a + b*lastX;
+        // std dev of residuals
+        let sse=0; for(let k=0;k<n;k++){ const yhat=a+b*xx[k]; sse += (y[k]-yhat)**2; }
+        const sd = Math.sqrt(sse/(n-1));
+        center.push({time: times[i], value: cVal});
+        upper.push({time: times[i], value: cVal + mult*sd});
+        lower.push({time: times[i], value: cVal - mult*sd});
+      }
+      return {center, upper, lower};
+    }
+
+    // ===== Chart Setup =====
+    const chart = LightweightCharts.createChart(document.getElementById('chart'),{
+      layout:{background:{type:'solid', color:'#0b0e12'}, textColor:'#cdd7e1'},
+      grid:{vertLines:{color:'#11161d'}, horzLines:{color:'#11161d'}},
+      rightPriceScale:{borderVisible:false}, timeScale:{borderVisible:false},
+      crosshair:{mode:1},
+    });
+    const candleSeries = chart.addCandlestickSeries();
+    const utSeries = chart.addLineSeries({color:'#3ad489', lineWidth:2});
+    const regSeries = chart.addLineSeries({color:'#5aa0ff', lineWidth:1});
+    const regUpper = chart.addLineSeries({color:'#a3c4ff', lineWidth:1, lineStyle:2});
+    const regLower = chart.addLineSeries({color:'#a3c4ff', lineWidth:1, lineStyle:2});
+
+    const buyMarkers = [], sellMarkers = [];
+
+    function setMarkers(markers){
+      candleSeries.setMarkers(markers);
+    }
+
+    let liveTimer=null;
+
+    async function loadAll(){
+      const sym = document.getElementById('symbol').value;
+      const interval = document.getElementById('interval').value;
+      const atrP = +document.getElementById('atrPeriod').value;
+      const atrM = +document.getElementById('atrMult').value;
+      const regL = +document.getElementById('regLen').value;
+      const regM = +document.getElementById('regMult').value;
+      const status = document.getElementById('status');
+      status.textContent = 'Mengambil data dari Binance…';
+      try{
+        const ohlc = await robustFetchKlines(sym, interval, 800);
+        candleSeries.setData(ohlc);
+        const closes = ohlc.map(d=>d.close);
+        const times = ohlc.map(d=>d.time);
+        const last = ohlc[ohlc.length-1]?.close;
+        document.getElementById('lastPrice').textContent = last? fmt.format(last): '–';
+
+        // UT Bot
+        const ut = utBot(ohlc, atrP, atrM);
+        utSeries.setData(ut.line.filter(Boolean));
+
+        // Regression Channel
+        const reg = regressionChannel(closes, times, regL, regM);
+        regSeries.setData(reg.center.filter(Boolean));
+        regUpper.setData(reg.upper.filter(Boolean));
+        regLower.setData(reg.lower.filter(Boolean));
+
+        // Markers
+        const markers = ut.signals.map(s=>({
+          time: s.time,
+          position: s.type==='buy'? 'belowBar':'aboveBar',
+          color: s.type==='buy'? '#21d07a':'#ff6b6b',
+          shape: s.type==='buy'? 'arrowUp':'arrowDown',
+          text: s.type.toUpperCase()
+        }));
+        setMarkers(markers);
+
+        chart.timeScale().fitContent();
+        status.textContent = `Sukses • ${sym} @ ${interval} • Bar: ${ohlc.length}`;
+      }catch(e){
+        console.error(e);
+        status.textContent = 'Gagal memuat data. Sistem akan coba lagi saat Anda klik Muat.';
+        alert('Tidak bisa mengambil data saat ini (network/API). Coba klik Muat lagi.');
+      }
+    }
+
+    // Live updates using Binance kline stream via polling (simple & reliable)
+    async function startLive(){
+      if(liveTimer) return; // already on
+      document.getElementById('btnLive').textContent = 'Live Off';
+      liveTimer = setInterval(loadAll, 15000); // refresh setiap 15 detik
+    }
+    function stopLive(){ if(liveTimer){ clearInterval(liveTimer); liveTimer=null; } document.getElementById('btnLive').textContent='Live On'; }
+
+    document.getElementById('btnLoad').addEventListener('click', async ()=>{ stopLive(); await loadAll(); });
+    document.getElementById('btnLive').addEventListener('click', ()=>{ if(liveTimer) stopLive(); else startLive(); });
+
+    // initial
+    loadAll();
+  </script>
 </body>
 </html>
