@@ -1,208 +1,281 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <title>Simulasi Trading CAKE/USDT</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TradingView → AutoTrade Frontend (Test & Control)</title>
   <style>
-    :root {
-      --bg: #ffffff;
-      --text: #000000;
-      --card: #f9f9f9;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #121212;
-        --text: #ffffff;
-        --card: #1e1e1e;
-      }
-    }
-    body {
-      font-family: Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 20px;
-    }
-    .container {
-      max-width: 600px;
-      margin: auto;
-      background: var(--card);
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    label {
-      display: block;
-      margin: 12px 0 6px;
-      font-weight: bold;
-    }
-    input[type="number"] {
-      width: 100%;
-      padding: 8px;
-      font-size: 16px;
-      box-sizing: border-box;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-    button {
-      width: 100%;
-      margin-top: 10px;
-      padding: 10px;
-      font-size: 16px;
-      border: none;
-      border-radius: 5px;
-      background-color: #008CBA;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #007bb5;
-    }
-    .log {
-      margin-top: 20px;
-      background: #eee;
-      color: #333;
-      padding: 10px;
-      font-family: monospace;
-      white-space: pre-wrap;
-      max-height: 300px;
-      overflow-y: auto;
-      border-radius: 5px;
-    }
+    :root{--bg:#081122;--card:#0b1824;--accent:#06b6d4;--muted:#94a3b8}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6eef8}
+    header{padding:12px 18px;background:linear-gradient(90deg,#071226, #08192a);display:flex;align-items:center;justify-content:space-between}
+    header h1{font-size:16px;margin:0}
+    .wrap{display:grid;grid-template-columns:1fr 420px;gap:12px;padding:12px}
+    .card{background:var(--card);border-radius:10px;padding:10px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+    .controls{display:flex;flex-direction:column;gap:8px}
+    label{font-size:13px;color:var(--muted)}
+    input,select,textarea,button{font-size:14px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#091425;color:#eaf6ff}
+    button{cursor:pointer;background:var(--accent);color:#042a2f;border:none}
+    .small{font-size:13px;color:var(--muted)}
+    .row{display:flex;gap:8px}
+    .log{height:250px;overflow:auto;background:#06121a;padding:8px;border-radius:8px;font-family:monospace;font-size:13px}
+    footer{padding:12px;color:var(--muted);text-align:center}
+    @media(max-width:980px){.wrap{grid-template-columns:1fr}}
   </style>
-
-  <!-- EmailJS -->
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-  <script>
-    (function() {
-      emailjs.init("aPZx0R9oxUbIQkLEv"); // Ganti dengan Public Key EmailJS
-    })();
-  </script>
 </head>
-
 <body>
-  <div class="container">
-    <h1>Simulasi Trading CAKE/USDT</h1>
-    <p id="price">💰 Harga: -</p>
-    <label for="trailing">Trailing Stop (%)</label>
-    <input id="trailing" type="number" value="2" step="0.1" />
-    <button onclick="testStrategy()">▶️ Jalankan Strategi</button>
-    <button onclick="resetSimulasi()">🔄 Reset</button>
-    <canvas id="chart" height="200"></canvas>
-    <div id="log" class="log">📜 Log aktivitas:<br></div>
-  </div>
+  <header>
+    <h1>TradingView → AutoTrade Frontend (Test & Control)</h1>
+    <div class="small">Made for: connect TradingView alerts → webhook (Binance backend)</div>
+  </header>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <main class="wrap">
+    <section class="card">
+      <!-- Left: TradingView embed -->
+      <div style="height:56px;display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div style="font-weight:700">Chart</div>
+        <div class="small">Pilih simbol di chart TradingView lalu gunakan alerts di TradingView untuk mengirim ke webhook.</div>
+      </div>
+
+      <div id="tv_container" style="height:640px;border-radius:8px;overflow:hidden;background:#07121a"></div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <input id="symbolInput" placeholder="Symbol (example CAKEUSDT)" style="flex:1" />
+        <button id="openTv">Open TV in new tab</button>
+      </div>
+
+      <p class="small" style="margin-top:8px">Catatan: indikator custom (Pine Script) harus dipasang di akun TradingView. Alerts dibuat di TradingView (Create Alert) → webhook URL ke server kamu. Halaman ini membantu menguji & mengirim payload yang sama.</p>
+    </section>
+
+    <aside class="card">
+      <div style="font-weight:700;margin-bottom:6px">Webhook & AutoTrade Controls</div>
+      <div class="controls">
+        <label>Webhook URL</label>
+        <input id="webhookUrl" placeholder="https://your-server.com/webhook" />
+
+        <label>Secret (x-tv-secret header or tv_secret in body)</label>
+        <input id="tvSecret" placeholder="my_pre_shared_secret_here" />
+
+        <label>Action mapping</label>
+        <div class="row">
+          <select id="actionSelect">
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+          <input id="qtyInput" placeholder="qty (e.g. 0.01)" />
+        </div>
+
+        <label>Or use budget (USD) — convert to qty automatically</label>
+        <div class="row">
+          <input id="budgetInput" placeholder="budget_usdt (ex: 5)" />
+          <select id="orderType"><option>MARKET</option><option>LIMIT</option></select>
+        </div>
+
+        <label>Limit price (only for LIMIT orders)</label>
+        <input id="limitPrice" placeholder="price for limit order (optional)" />
+
+        <div style="display:flex;gap:8px">
+          <button id="sendTest">Send Test Alert</button>
+          <button id="fetchPrice">Fetch Market Price</button>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button id="autoToggle">Enable Auto-Send (Simulate)</button>
+          <button id="clearLog">Clear Log</button>
+        </div>
+
+        <div style="margin-top:8px">
+          <div style="font-weight:700">Logs</div>
+          <div id="log" class="log"></div>
+        </div>
+
+        <div style="margin-top:8px;font-size:13px;color:var(--muted)">
+          <strong>Instruksi singkat:</strong>
+          <ol>
+            <li>Jalankan server webhook (contoh server yang saya buat) dan isi Webhook URL + Secret.</li>
+            <li>Buat Alert di TradingView → Webhook URL yang sama. Gunakan body JSON seperti contoh di bawah.</li>
+            <li>Gunakan tombol "Send Test Alert" untuk mengirim payload payload langsung dari browser (testing).</li>
+          </ol>
+        </div>
+
+        <details style="margin-top:8px;color:var(--muted)">
+          <summary>Contoh payload yang dikirim ke server</summary>
+<pre style="white-space:pre-wrap">{
+  "tv_secret":"my_pre_shared_secret_here", // optional if using header
+  "action":"BUY",
+  "symbol":"CAKEUSDT",
+  "qty":0.01,
+  "type":"MARKET",
+  "alert_id":"{{strategy.order_id}}",
+  "comment":"UT Bot BUY"
+}
+</pre>
+        </details>
+
+      </div>
+    </aside>
+  </main>
+
+  <footer class="card">Disclaimer: This page only helps prepare and test alerts & webhook payloads. Actual auto trading requires a backend server that receives webhook and places orders on Binance (testnet recommended). Use at your own risk.</footer>
+
+  <!-- TradingView widget -->
+  <script src="https://s3.tradingview.com/tv.js"></script>
   <script>
-    let lastPrice = null;
-    let chart, priceHistory = [], timeLabels = [];
-    let entryPrice = null;
-    let highestSinceEntry = null;
-    let isHolding = false;
+    // Create TradingView widget
+    const tvContainer = document.getElementById('tv_container');
+    const defaultSymbol = 'CAKEUSDT';
+    let tvWidget = null;
 
-    async function fetchPrice() {
-      try {
-        const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/0x0ed7e52944161450477ee417de9cd3a859b14fd0");
-        const data = await res.json();
-        const price = parseFloat(data.pair.priceUsd);
-        lastPrice = price;
-        document.getElementById("price").textContent = `💰 Harga: $${price.toFixed(4)}`;
-        const now = new Date().toLocaleTimeString();
-        priceHistory.push(price);
-        timeLabels.push(now);
-        if (priceHistory.length > 30) {
-          priceHistory.shift();
-          timeLabels.shift();
-        }
-        chart.data.labels = timeLabels;
-        chart.data.datasets[0].data = priceHistory;
-        chart.update();
-      } catch (err) {
-        document.getElementById("price").textContent = "❌ Gagal memuat harga";
-        console.error(err);
-      }
+    function createTV(symbol){
+      tvContainer.innerHTML = '';
+      tvWidget = new TradingView.widget({
+        "autosize": true,
+        "symbol": symbol || defaultSymbol,
+        "interval": "60",
+        "container_id": "tv_container",
+        "library_path": "https://s3.tradingview.com/",
+        "theme": "Dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg":"#0b1220",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": true,
+        "details": true
+      });
+    }
+    createTV(defaultSymbol);
+
+    // Controls
+    const webhookUrlEl = document.getElementById('webhookUrl');
+    const tvSecretEl = document.getElementById('tvSecret');
+    const sendBtn = document.getElementById('sendTest');
+    const fetchPriceBtn = document.getElementById('fetchPrice');
+    const logEl = document.getElementById('log');
+    const symbolInput = document.getElementById('symbolInput');
+    const budgetInput = document.getElementById('budgetInput');
+    const qtyInput = document.getElementById('qtyInput');
+    const actionSelect = document.getElementById('actionSelect');
+    const orderTypeSelect = document.getElementById('orderType');
+    const limitPriceEl = document.getElementById('limitPrice');
+    const autoToggle = document.getElementById('autoToggle');
+    const clearLogBtn = document.getElementById('clearLog');
+    const openTvBtn = document.getElementById('openTv');
+
+    function log(msg, obj){
+      const t = new Date().toLocaleTimeString();
+      const pre = document.createElement('div');
+      pre.textContent = `[${t}] ${msg}` + (obj ? ' ' + JSON.stringify(obj) : '');
+      logEl.prepend(pre);
     }
 
-    function log(msg) {
-      const logBox = document.getElementById("log");
-      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
-      logBox.scrollTop = logBox.scrollHeight;
-    }
-
-    function testStrategy() {
-      const trailingPercent = parseFloat(document.getElementById("trailing").value) / 100;
-      if (!lastPrice) {
-        log("⏳ Harga belum tersedia");
-        return;
-      }
-
-      if (!isHolding) {
-        entryPrice = lastPrice;
-        highestSinceEntry = lastPrice;
-        isHolding = true;
-        log(`📥 Buy di $${entryPrice.toFixed(4)}`);
-      } else {
-        if (lastPrice > highestSinceEntry) {
-          highestSinceEntry = lastPrice;
-        }
-
-        const trailingStop = highestSinceEntry * (1 - trailingPercent);
-        if (lastPrice <= trailingStop) {
-          log(`📤 Sell di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry.toFixed(4)})`);
-          isHolding = false;
-          entryPrice = null;
-          highestSinceEntry = null;
-
-          // Kirim notifikasi EmailJS
-          emailjs.send("service_d48312b", "template_1ktk40q", {
-            message: `Sell berhasil di $${lastPrice.toFixed(4)} (Trailing hit dari $${highestSinceEntry})`,
-            time: new Date().toLocaleString()
-          })
-          .then(() => log("📧 Notifikasi email terkirim"))
-          .catch(err => log("❌ Gagal kirim email: " + err));
-        } else {
-          log(`⌛ HOLD, trailing stop di $${trailingStop.toFixed(4)}`);
-        }
-      }
-    }
-
-    function resetSimulasi() {
-      entryPrice = null;
-      highestSinceEntry = null;
-      isHolding = false;
-      document.getElementById("log").innerHTML = "🔁 Simulasi direset<br>";
-    }
-
-    const ctx = document.getElementById("chart").getContext("2d");
-    chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: timeLabels,
-        datasets: [{
-          label: "Harga CAKE/USDT",
-          data: priceHistory,
-          borderColor: "green",
-          backgroundColor: "rgba(0,255,0,0.1)",
-          fill: true,
-          tension: 0.3
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: { display: false },
-          y: { beginAtZero: false }
-        }
-      }
+    clearLogBtn.addEventListener('click', ()=>{ logEl.innerHTML=''; });
+    openTvBtn.addEventListener('click', ()=>{
+      const s = symbolInput.value.trim() || defaultSymbol;
+      const url = `https://www.tradingview.com/chart/?symbol=BINANCE%3A${encodeURIComponent(s)}`;
+      window.open(url, '_blank');
     });
 
-    fetchPrice();
-    setInterval(fetchPrice, 30000);
+    // fetch market price from Binance public API
+    async function fetchPrice(symbol){
+      try{
+        symbol = (symbol||symbolInput.value||defaultSymbol).toUpperCase();
+        const resp = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+        if(!resp.ok) throw new Error('Failed fetch price');
+        const data = await resp.json();
+        log('Market price fetched', data);
+        return Number(data.price);
+      }catch(err){
+        log('Fetch price error', err.message || err);
+        throw err;
+      }
+    }
+
+    // convert budget_usdt -> qty based on market price
+    async function computeQtyFromBudget(symbol, budget){
+      const price = await fetchPrice(symbol);
+      // simple division; doesn't consider lot step size
+      const qty = Number((Number(budget) / price).toFixed(8));
+      return { qty, price };
+    }
+
+    async function sendPayload(payload){
+      const url = webhookUrlEl.value.trim();
+      if(!url) { log('Webhook URL not set'); return; }
+      try{
+        const secret = tvSecretEl.value.trim();
+        const headers = { 'Content-Type':'application/json' };
+        if(secret) headers['x-tv-secret'] = secret;
+        const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(payload) });
+        const txt = await res.text();
+        log('Sent webhook', { status: res.status, body: payload, response: txt });
+      }catch(err){
+        log('Send webhook error', err.message || err);
+      }
+    }
+
+    // Test send behavior
+    sendBtn.addEventListener('click', async ()=>{
+      const symbol = (symbolInput.value.trim() || defaultSymbol).toUpperCase();
+      const action = actionSelect.value;
+      const type = orderTypeSelect.value;
+      let qty = qtyInput.value.trim();
+      const budget = budgetInput.value.trim();
+      const price = limitPriceEl.value.trim() || null;
+
+      if(budget){
+        try{
+          const r = await computeQtyFromBudget(symbol, budget);
+          qty = r.qty;
+          log(`Budget ${budget} USDT -> qty ${qty} at price ${r.price}`);
+        }catch(e){ log('Budget conversion failed'); }
+      }
+
+      if(!qty){ log('Quantity not set'); return; }
+
+      const payload = {
+        tv_secret: tvSecretEl.value.trim() || undefined,
+        action,
+        symbol,
+        qty: Number(qty),
+        type: type || 'MARKET',
+        price: price ? Number(price) : undefined,
+        alert_id: 'manual-test-' + Date.now(),
+        comment: 'Sent from frontend test'
+      };
+
+      await sendPayload(payload);
+    });
+
+    fetchPriceBtn.addEventListener('click', async ()=>{
+      const s = (symbolInput.value.trim() || defaultSymbol).toUpperCase();
+      try{ await fetchPrice(s); }catch(e){}
+    });
+
+    // Auto-send simulation: this only simulates receiving a signal in-browser
+    let autoEnabled = false;
+    autoToggle.addEventListener('click', ()=>{
+      autoEnabled = !autoEnabled;
+      autoToggle.textContent = autoEnabled ? 'Disable Auto-Send (Simulate)' : 'Enable Auto-Send (Simulate)';
+      if(autoEnabled) startAutoSim();
+    });
+
+    let autoTimer = null;
+    function startAutoSim(){
+      if(autoTimer) clearInterval(autoTimer);
+      autoTimer = setInterval(async ()=>{
+        // simple automatic rule: fetch price and if last digit even -> BUY else SELL (simulation only)
+        const s = (symbolInput.value.trim() || defaultSymbol).toUpperCase();
+        try{
+          const p = await fetchPrice(s);
+          const action = (Math.floor(p) % 2 === 0) ? 'BUY' : 'SELL';
+          const budget = Number(budgetInput.value) || 5;
+          const qty = Number((budget / p).toFixed(8));
+          const payload = { action, symbol: s, qty, type: 'MARKET', alert_id: 'sim-' + Date.now(), comment: 'Auto-sim' };
+          await sendPayload(payload);
+        }catch(err){ log('Auto-sim failed', err.message || err); }
+      }, 5000);
+    }
+
   </script>
 </body>
 </html>
