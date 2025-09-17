@@ -1,215 +1,327 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Strategi Trading TON - Delay Buy 15 Menit</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script>
-    emailjs.init("OGH12a8LlCboHPVz8");
-  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TradingView XRP/USDT + UT Bot (2,10) + LRC (100,2,2) — Email Alerts</title>
+  <script src="https://s3.tradingview.com/tv.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    canvas { background: white; border: 1px solid #ccc; }
-    #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+    :root{--bg:#0b0f14;--panel:#0f1720;--muted:#8aa0b6;--text:#e6eef7;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+    header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #1e293b}
+    h1{font-size:18px;margin:0}
+    .wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px}
+    .card{background:var(--panel);border:1px solid #1e293b;border-radius:14px;padding:12px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    label{font-size:12px;color:var(--muted)}
+    input,select,button{background:#09111e;color:var(--text);border:1px solid #213047;border-radius:12px;padding:8px 10px;font-size:13px}
+    button{cursor:pointer}
+    button.primary{background:var(--accent);color:#001018;border:none}
+    .badge{padding:3px 8px;border-radius:999px;background:#0b1220;border:1px solid #213047;color:#a7c7de;font-size:11px}
+    #tv_chart{height:520px}
+    #log{height:220px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#0a0f18;border-radius:12px;padding:10px}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .ok{color:var(--ok)}.bad{color:var(--bad)}
+    @media(max-width:1100px){.wrap{grid-template-columns:1fr}#tv_chart{height:420px}}
   </style>
 </head>
 <body>
+<header>
+  <h1>TradingView • XRP/USDT • UT Bot (2,10) + LRC (100,2,2)</h1>
+  <div class="row">
+    <span class="badge" id="status">Idle</span>
+    <button class="primary" id="btnToggle">Start</button>
+  </div>
+</header>
 
-<h2>📊 Harga TON & Indikator (Real-time)</h2>
-<div>💰 Harga Live: <span id="livePrice">Memuat...</span></div>
-<canvas id="chart" width="800" height="400"></canvas>
-<div>💼 Modal: <span id="capital">$1000.00</span></div>
-<div id="log"></div>
+<div class="wrap">
+  <aside class="card">
+    <div class="row" style="justify-content:space-between">
+      <label>Exchange / Pair</label>
+      <span class="badge">BINANCE:XRPUSDT</span>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <label>Timeframe</label>
+      <select id="interval">
+        <option value="1m">1m</option>
+        <option value="3m">3m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+      </select>
+      <label>Candles</label>
+      <select id="limit">
+        <option>300</option>
+        <option selected>500</option>
+        <option>800</option>
+        <option>1000</option>
+      </select>
+    </div>
+
+    <h3 class="muted" style="margin:10px 0 6px">UT Bot (2,10)</h3>
+    <div class="row">
+      <label>KV</label>
+      <input type="number" id="kv" value="2" step="0.1" style="width:80px">
+      <label>ATR</label>
+      <input type="number" id="atr" value="10" step="1" style="width:80px">
+    </div>
+
+    <h3 class="muted" style="margin:10px 0 6px">Linear Regression Channel</h3>
+    <div class="row">
+      <label>Length</label>
+      <input type="number" id="lrLen" value="100" step="1" style="width:80px">
+      <label>DevUp</label>
+      <input type="number" id="devUp" value="2" step="0.1" style="width:80px">
+      <label>DevDn</label>
+      <input type="number" id="devDn" value="2" step="0.1" style="width:80px">
+    </div>
+
+    <h3 class="muted" style="margin:10px 0 6px">Alarm</h3>
+    <div class="row">
+      <button id="btnToggleAlarm" class="primary">🔔 Alarm ON</button>
+      <button id="btnTest">Test Alarm</button>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <div>
+        <label>Email Service ID</label>
+        <input id="emailService" placeholder="e.g. service_xxx">
+      </div>
+      <div>
+        <label>Email Template ID</label>
+        <input id="emailTemplate" placeholder="e.g. template_xxx">
+      </div>
+      <div>
+        <label>Public Key (user_id)</label>
+        <input id="emailUser" placeholder="e.g. user_xxx">
+      </div>
+      <div>
+        <label>Kirim ke Email</label>
+        <input id="emailTo" placeholder="nama@domain.com">
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnSaveEmail">Simpan EmailJS</button>
+      <span id="emailStatus" class="badge">EmailJS: Not set</span>
+    </div>
+
+    <div class="muted" style="margin-top:10px">Catatan: sinyal dihitung lokal dari data Binance. Tampilan chart dari TradingView embed.</div>
+  </aside>
+
+  <main class="card">
+    <div id="tv_chart"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between">
+        <div><b>Live:</b> <span id="live"></span> • <span class="muted" id="lastUpdate"></span></div>
+        <div><span class="badge" id="trendBadge">Trend: -</span></div>
+      </div>
+    </div>
+    <div id="log" class="card"></div>
+  </main>
+</div>
 
 <script>
-let priceData = [];
-let timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem("capital")) || 1000;
-let qtyPerTrade = 100;
-let lastBuy = parseFloat(localStorage.getItem("lastBuy")) || null;
-let highestSinceBuy = parseFloat(localStorage.getItem("highestSinceBuy")) || null;
-let currentPositionAmount = parseFloat(localStorage.getItem("currentPositionAmount")) || 0;
-let buySignalStart = parseFloat(localStorage.getItem("buySignalStart")) || null;
+(function(){
+  // State and helpers
+  const state={running:false,alarmOn:true,symbol:"XRPUSDT",interval:"5m",limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
+  const $=id=>document.getElementById(id);
+  function log(msg){ const el=$("log"); el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML; console.log(msg); }
+  function setStatus(s){ $("status").textContent = s; }
+  function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.03; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(()=>{ o.stop(); ctx.close(); },250);}catch(e){} }
 
-const chartCtx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label: 'Harga', data: priceData, borderColor: 'black', fill: false },
-      { label: 'EMA-12', data: [], borderColor: 'blue', fill: false },
-      { label: 'EMA-26', data: [], borderColor: 'purple', fill: false },
-      { label: 'Upper BB', data: [], borderColor: 'green', borderDash: [5,5], fill: false },
-      { label: 'Lower BB', data: [], borderColor: 'red', borderDash: [5,5], fill: false },
-      { label: 'SMA-10', data: [], borderColor: 'orange', fill: false },
-    ]
-  },
-  options: { responsive: true, scales: { x: { display: true }, y: { display: true } } }
-});
-
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logDiv.textContent;
-}
-
-function updateCapitalDisplay() {
-  document.getElementById("capital").textContent = `$${currentCapital.toFixed(2)}`;
-}
-
-function calculateSMA(data, period) {
-  const result = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) result.push(null);
-    else result.push(data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
+  // EmailJS helpers
+  function loadEmailCfg(){
+    try{
+      const raw = localStorage.getItem('emailjs_cfg');
+      if(!raw) return;
+      const cfg = JSON.parse(raw);
+      state.email = Object.assign(state.email, cfg);
+      $("emailService").value = state.email.service || '';
+      $("emailTemplate").value = state.email.template || '';
+      $("emailUser").value = state.email.user || '';
+      $("emailTo").value = state.email.to || '';
+      if(state.email.user && window.emailjs && typeof emailjs.init === 'function'){
+        try{ emailjs.init(state.email.user); log('EmailJS initialized with saved user id'); }catch(e){ log('EmailJS init error', e.message); }
+      }
+      updateEmailBadge();
+    }catch(e){ log('LoadEmailCfg error: ' + e.message); }
   }
-  return result;
-}
-
-function calculateEMA(data, period) {
-  const result = [];
-  const k = 2 / (period + 1);
-  let emaPrev = data[0];
-  result.push(emaPrev);
-  for (let i = 1; i < data.length; i++) {
-    const ema = data[i] * k + emaPrev * (1 - k);
-    result.push(ema);
-    emaPrev = ema;
+  function saveEmailCfg(){
+    state.email.service = $("emailService").value.trim();
+    state.email.template = $("emailTemplate").value.trim();
+    state.email.user = $("emailUser").value.trim();
+    state.email.to = $("emailTo").value.trim();
+    localStorage.setItem('emailjs_cfg', JSON.stringify(state.email));
+    // init emailjs if user id provided
+    if(state.email.user && window.emailjs && typeof emailjs.init === 'function'){
+      try{ emailjs.init(state.email.user); log('EmailJS initialized with user id'); }catch(e){ log('EmailJS init failed: '+e.message); }
+    }
+    updateEmailBadge();
+    log('EmailJS config saved');
   }
-  return result;
-}
+  function updateEmailBadge(){
+    const ok = state.email.service && state.email.template && state.email.user && state.email.to;
+    $("emailStatus").textContent = ok ? 'EmailJS: Ready' : 'EmailJS: Not set';
+  }
 
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      upper.push(null);
-      lower.push(null);
-    } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period);
-      upper.push(mean + multiplier * stdDev);
-      lower.push(mean - multiplier * stdDev);
+  // basic kline fetch from Binance (500 limit default)
+  async function getKlines(symbol, interval, limit){
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('Klines fetch failed: ' + r.status);
+    const j = await r.json();
+    return j.map(d => ({ time: Math.floor(d[0]/1000), open:+d[1], high:+d[2], low:+d[3], close:+d[4] }));
+  }
+
+  // ATR + UT Bot simple (as before)
+  function trueRange(c){ const tr = new Array(c.length).fill(NaN); for(let i=1;i<c.length;i++){ const a=c[i], b=c[i-1]; tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close)); } return tr; }
+  function atr(c,p=10){ const tr=trueRange(c); const out=new Array(c.length).fill(NaN); let s=0; for(let i=1;i<=p;i++) s += (tr[i]||0); out[p] = s/p; for(let i=p+1;i<tr.length;i++) out[i] = ((out[i-1]*(p-1)) + tr[i]) / p; return out; }
+  function utBot(c,kv=2,aP=10){ const n=c.length; const A=atr(c,aP); const trend=new Array(n).fill(0), upper=new Array(n).fill(NaN), lower=new Array(n).fill(NaN), line=new Array(n).fill(NaN); for(let i=0;i<n;i++){ if(!isFinite(A[i])){ trend[i]=0; continue; } const hl2=(c[i].high+c[i].low)/2; const nLoss = kv * A[i]; const bU = hl2 + nLoss, bL = hl2 - nLoss; if(i===0){ upper[i]=bU; lower[i]=bL; trend[i]=1; line[i]=bL; continue; } const pU = upper[i-1], pL = lower[i-1]; upper[i] = (bU < pU || c[i].close > pU) ? bU : pU; lower[i] = (bL > pL || c[i].close < pL) ? bL : pL; const prev = trend[i-1] || 1; const cur = c[i].close > upper[i-1] ? 1 : (c[i].close < lower[i-1] ? -1 : prev); trend[i] = cur; line[i] = cur===1 ? lower[i] : upper[i]; } return { trend, upper, lower, line }; }
+
+  // linear regression channel
+  function linRegChannel(c,l=100,upFactor=2,downFactor=2){
+    const n=c.length; const mid=new Array(n).fill(NaN), up=new Array(n).fill(NaN), dn=new Array(n).fill(NaN);
+    for(let i=l-1;i<n;i++){
+      const sl=c.slice(i-l+1,i+1); const y=sl.map(z=>z.close); const m=y.length;
+      let SX=0,SY=0,SXY=0,SXX=0;
+      for(let k=0;k<m;k++){ SX+=k; SY+=y[k]; SXY+=k*y[k]; SXX+=k*k; }
+      const denom = m*SXX - SX*SX;
+      if(denom === 0) continue;
+      const a = (m*SXY - SX*SY) / denom;
+      const b = (SY - a*SX) / m;
+      const yAtEnd = a*(m-1) + b;
+      mid[i] = yAtEnd;
+      let ss=0; for(let k=0;k<m;k++){ const fitted = a*k + b; ss += (y[k]-fitted)*(y[k]-fitted); }
+      const sd = Math.sqrt(ss/m);
+      up[i] = yAtEnd + upFactor*sd;
+      dn[i] = yAtEnd - downFactor*sd;
+    }
+    return { mid, up, dn };
+  }
+
+  // Email send
+  async function sendEmail(params){
+    if(!window.emailjs || typeof emailjs.send !== 'function') throw new Error('EmailJS SDK not loaded');
+    return emailjs.send(state.email.service, state.email.template, params);
+  }
+
+  // when signal occurs
+  async function fireAlert(side, last, lr){
+    try{
+      beep();
+      log((side==='BUY'?'🚀 ':'🔻 ') + side + ` signal • ${last.close} USDT`);
+      // send email if configured
+      const ok = state.email.service && state.email.template && state.email.user && state.email.to;
+      if(!ok){ log('EmailJS not configured — skipping email'); return; }
+      const params = {
+        pair: 'XRP/USDT',
+        side,
+        price: String(last.close),
+        time: new Date(last.time*1000).toLocaleString(),
+        interval: state.interval,
+        dev_up: lr && lr.up ? String(lr.up.at(-1) || '') : '',
+        dev_dn: lr && lr.dn ? String(lr.dn.at(-1) || '') : '',
+        to: state.email.to
+      };
+      log('Sending email...', params);
+      await sendEmail(params);
+      log('Email sent to ' + state.email.to);
+    }catch(err){
+      log('Email send error: ' + (err.text || err.message || err));
     }
   }
-  return { upper, lower };
-}
 
-function sendEmail(subject, body) {
-  emailjs.send("service_5hxo1hk", "template_iq87egh", {
-    subject: subject,
-    body: body,
-    time: new Date().toLocaleString()
-  }).then(() => {
-    log(`📧 Email terkirim: ${subject}`);
-  }).catch(err => {
-    log("⚠️ Gagal kirim email: " + err.text);
-  });
-}
-
-function updateIndicators() {
-  const sma10 = calculateSMA(priceData, 10);
-  const ema12 = calculateEMA(priceData, 12);
-  const ema26 = calculateEMA(priceData, 26);
-  const bb = calculateBollingerBands(priceData);
-
-  chart.data.datasets[1].data = ema12;
-  chart.data.datasets[2].data = ema26;
-  chart.data.datasets[3].data = bb.upper;
-  chart.data.datasets[4].data = bb.lower;
-  chart.data.datasets[5].data = sma10;
-}
-
-async function fetchAndEvaluate() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd");
-    const data = await res.json();
-    const price = parseFloat(data["the-open-network"].usd);
-    document.getElementById("livePrice").textContent = `Harga: $${price.toFixed(4)}`;
-
-    const now = new Date().toLocaleTimeString();
-    priceData.push(price);
-    timeLabels.push(now);
-    if (priceData.length > 100) {
-      priceData.shift();
-      timeLabels.shift();
-    }
-    updateIndicators();
-    chart.update();
-
-    if (!lastBuy) {
-      const lowest = Math.min(...priceData.slice(-50));
-
-      if (price <= lowest) {
-        if (!buySignalStart) {
-          buySignalStart = Date.now();
-          localStorage.setItem("buySignalStart", buySignalStart);
-          log(`⏳ Sinyal BUY terdeteksi, tunggu konfirmasi 15 menit...`);
-        } else {
-          const elapsed = (Date.now() - buySignalStart) / 1000;
-          if (elapsed >= 900) {
-            lastBuy = price;
-            highestSinceBuy = price;
-            currentPositionAmount = qtyPerTrade / price;
-            currentCapital -= qtyPerTrade;
-            updateCapitalDisplay();
-            log(`📥 BUY di $${price.toFixed(4)} setelah konfirmasi 15 menit`);
-            sendEmail("BUY Signal", `Beli TON di $${price.toFixed(4)} setelah konfirmasi 15 menit`);
-            buySignalStart = null;
-            localStorage.removeItem("buySignalStart");
-          } else {
-            log(`⏳ Sinyal BUY bertahan ${(elapsed/60).toFixed(1)} menit, tunggu sampai 15 menit...`);
+  // main step: fetch klines, compute indicators, check flip
+  async function step(){
+    try{
+      // sync input values
+      state.interval = $("interval").value;
+      state.limit = +$("limit").value;
+      state.kv = +$("kv").value;
+      state.atr = +$("atr").value;
+      state.lrLen = +$("lrLen").value;
+      state.devUp = +$("devUp").value;
+      state.devDn = +$("devDn").value;
+      // fetch klines
+      const candles = await getKlines(state.symbol, state.interval, state.limit);
+      if(!candles || !candles.length) { log('No candle data'); return; }
+      const ut = utBot(candles, state.kv, state.atr);
+      const lr = linRegChannel(candles, state.lrLen, state.devUp, state.devDn);
+      const last = candles[candles.length-1];
+      const prevIdx = candles.length-2;
+      const prevTrend = ut.trend[prevIdx] || 0;
+      const lastTrend = ut.trend[candles.length-1] || 0;
+      $("live").textContent = `${fmt(last.close)} USDT`;
+      $("lastUpdate").textContent = `TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;
+      $("trendBadge").textContent = `Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;
+      // detect flips: prevTrend -> lastTrend
+      if(state.alarmOn){
+        const barKey = last.time;
+        // only trigger when trend flips and not same bar as lastAlert
+        if(state.lastTrend !== null && state.lastAlertBar !== barKey){
+          if(prevTrend === -1 && lastTrend === 1){ // sell->buy flip => BUY signal
+            await fireAlert('BUY', last, lr);
+            state.lastAlertBar = barKey;
+          } else if(prevTrend === 1 && lastTrend === -1){
+            await fireAlert('SELL', last, lr);
+            state.lastAlertBar = barKey;
           }
         }
-      } else {
-        buySignalStart = null;
-        localStorage.removeItem("buySignalStart");
-        log(`⏳ Tunggu harga | Sekarang: $${price.toFixed(4)} | Terendah: $${lowest.toFixed(4)}`);
       }
-    } else {
-      if (price > highestSinceBuy) highestSinceBuy = price;
-      const drop = ((highestSinceBuy - price) / highestSinceBuy) * 100;
-      const loss = ((lastBuy - price) / lastBuy) * 100;
-
-      if (drop > 1.0) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Trailing Profit) di $${price.toFixed(4)}`);
-        sendEmail("SELL (Trailing Profit)", `Jual TON di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-      } else if (loss > 1.5) {
-        const sellValue = price * currentPositionAmount;
-        currentCapital += sellValue;
-        updateCapitalDisplay();
-        log(`📤 SELL (Cut Loss) di $${price.toFixed(4)} | Rugi: ${loss.toFixed(2)}%`);
-        sendEmail("SELL (Cut Loss)", `Cut loss TON di $${price.toFixed(4)} | Modal: $${currentCapital.toFixed(2)}`);
-        lastBuy = null; highestSinceBuy = null; currentPositionAmount = 0;
-      } else {
-        log(`⏳ HOLD | Harga: $${price.toFixed(4)} | Peak: $${highestSinceBuy.toFixed(4)}`);
-      }
+      state.lastTrend = lastTrend;
+    }catch(e){
+      log('Step error: ' + (e.message || e));
     }
-
-    // Simpan state
-    localStorage.setItem("capital", currentCapital);
-    localStorage.setItem("lastBuy", lastBuy ?? "");
-    localStorage.setItem("highestSinceBuy", highestSinceBuy ?? "");
-    localStorage.setItem("currentPositionAmount", currentPositionAmount);
-
-  } catch (err) {
-    log("❌ Gagal ambil harga TON");
-    console.error(err);
   }
-}
 
-updateCapitalDisplay();
-setInterval(fetchAndEvaluate, 15000);
-fetchAndEvaluate();
+  // UI handlers
+  const btnToggle = $("btnToggle");
+  const btnAlarm = $("btnToggleAlarm");
+  const btnTest = $("btnTest");
+  const btnSaveEmail = $("btnSaveEmail");
+
+  btnToggle.onclick = () => {
+    state.running = !state.running;
+    setStatus(state.running ? 'Running' : 'Stopped');
+    btnToggle.textContent = state.running ? 'Stop' : 'Start';
+    if(state.running){
+      step(); // run immediately
+      if(!state._timer) state._timer = setInterval(step, 30 * 1000); // every 30s
+    } else {
+      if(state._timer){ clearInterval(state._timer); state._timer = null; }
+    }
+  };
+
+  btnAlarm.onclick = () => { state.alarmOn = !state.alarmOn; btnAlarm.textContent = state.alarmOn ? '🔔 Alarm ON' : '🔕 Alarm OFF'; }
+  btnTest.onclick = async () => { const now = Math.floor(Date.now()/1000); await fireAlert('TEST', {close:'0.00', time: now}, {}); }
+  btnSaveEmail.onclick = saveEmailCfg;
+
+  // Initialize TradingView embed
+  try{
+    new TradingView.widget({
+      autosize: true,
+      symbol: "BINANCE:XRPUSDT",
+      interval: "5",
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      container_id: "tv_chart"
+    });
+    log('TradingView widget loaded');
+  }catch(e){
+    log('TradingView widget failed to load: ' + (e.message||e));
+  }
+
+  // load email config from localStorage (and init EmailJS if user_id present)
+  loadEmailCfg();
+  setStatus('Idle');
+  // run one step so UI shows something
+  // we don't auto-start; user must click Start
+})();
 </script>
 </body>
 </html>
