@@ -1,326 +1,249 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TradingView XRP/USDT + UT Bot (2,10) + LRC (100,2,2) — Email Alerts</title>
-  <script src="https://s3.tradingview.com/tv.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-  <style>
-    :root{--bg:#0b0f14;--panel:#0f1720;--muted:#8aa0b6;--text:#e6eef7;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
-    header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #1e293b}
-    h1{font-size:18px;margin:0}
-    .wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px}
-    .card{background:var(--panel);border:1px solid #1e293b;border-radius:14px;padding:12px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    label{font-size:12px;color:var(--muted)}
-    input,select,button{background:#09111e;color:var(--text);border:1px solid #213047;border-radius:12px;padding:8px 10px;font-size:13px}
-    button{cursor:pointer}
-    button.primary{background:var(--accent);color:#001018;border:none}
-    .badge{padding:3px 8px;border-radius:999px;background:#0b1220;border:1px solid #213047;color:#a7c7de;font-size:11px}
-    #tv_chart{height:520px}
-    #log{height:220px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#0a0f18;border-radius:12px;padding:10px}
-    .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .ok{color:var(--ok)}.bad{color:var(--bad)}
-    @media(max-width:1100px){.wrap{grid-template-columns:1fr}#tv_chart{height:420px}}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>UT-Bot Markers — Lightweight Charts + Binance</title>
+
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+<style>
+  :root{--bg:#07121a;--card:#0b1820;--muted:#9fb4c9;--accent:#06b6d4}
+  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6f6ff}
+  .wrap{max-width:1100px;margin:12px auto;padding:12px}
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  h1{margin:0;font-size:16px}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  input,select,button{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#071927;color:#eaf6ff}
+  button{cursor:pointer;background:var(--accent);color:#042a2f;border:0}
+  #chartContainer{height:560px;border-radius:8px;overflow:hidden;background:#07121a;margin-top:12px}
+  .log{margin-top:12px;background:#06121a;padding:10px;border-radius:8px;font-family:monospace;height:160px;overflow:auto;font-size:13px}
+  .small{color:var(--muted);font-size:13px}
+  label{font-size:13px;color:var(--muted);margin-right:6px}
+  @media(max-width:800px){#chartContainer{height:420px}}
+</style>
 </head>
 <body>
-<header>
-  <h1>TradingView • XRP/USDT • UT Bot (2,10) + LRC (100,2,2)</h1>
-  <div class="row">
-    <span class="badge" id="status">Idle</span>
-    <button class="primary" id="btnToggle">Start</button>
-  </div>
-</header>
-
 <div class="wrap">
-  <aside class="card">
-    <div class="row" style="justify-content:space-between">
-      <label>Exchange / Pair</label>
-      <span class="badge">BINANCE:XRPUSDT</span>
+  <header>
+    <div>
+      <h1>UT-Bot Markers — Binance (Lightweight Chart)</h1>
+      <div class="small">Marker BUY / SELL akan muncul berdasarkan UT-Bot ATR trailing flip</div>
     </div>
+    <div class="small" id="status">Idle</div>
+  </header>
 
-    <div class="row" style="margin-top:8px">
-      <label>Timeframe</label>
-      <select id="interval">
-        <option value="1m">1m</option>
-        <option value="3m">3m</option>
-        <option value="5m" selected>5m</option>
-        <option value="15m">15m</option>
-        <option value="1h">1h</option>
-      </select>
-      <label>Candles</label>
-      <select id="limit">
-        <option>300</option>
-        <option selected>500</option>
-        <option>800</option>
-        <option>1000</option>
-      </select>
-    </div>
+  <div class="controls">
+    <label>Symbol</label>
+    <input id="symbol" value="CAKEUSDT" style="width:140px" />
+    <label>Interval</label>
+    <select id="interval">
+      <option value="1m">1m</option>
+      <option value="5m" selected>5m</option>
+      <option value="15m">15m</option>
+      <option value="1h">1h</option>
+      <option value="4h">4h</option>
+      <option value="1d">1d</option>
+    </select>
+    <label>Candles</label>
+    <input id="limit" type="number" value="500" min="50" max="1000" style="width:90px" />
+    <label>ATR len</label>
+    <input id="atrLen" type="number" value="14" min="2" style="width:80px" />
+    <label>Mult</label>
+    <input id="mult" type="number" step="0.1" value="3" style="width:80px" />
+    <button id="btnLoad">Load</button>
+    <button id="btnStart">Start</button>
+    <button id="btnStop" disabled>Stop</button>
+  </div>
 
-    <h3 class="muted" style="margin:10px 0 6px">UT Bot (2,10)</h3>
-    <div class="row">
-      <label>KV</label>
-      <input type="number" id="kv" value="2" step="0.1" style="width:80px">
-      <label>ATR</label>
-      <input type="number" id="atr" value="10" step="1" style="width:80px">
-    </div>
+  <div id="chartContainer"></div>
 
-    <h3 class="muted" style="margin:10px 0 6px">Linear Regression Channel</h3>
-    <div class="row">
-      <label>Length</label>
-      <input type="number" id="lrLen" value="100" step="1" style="width:80px">
-      <label>DevUp</label>
-      <input type="number" id="devUp" value="2" step="0.1" style="width:80px">
-      <label>DevDn</label>
-      <input type="number" id="devDn" value="2" step="0.1" style="width:80px">
-    </div>
-
-    <h3 class="muted" style="margin:10px 0 6px">Alarm</h3>
-    <div class="row">
-      <button id="btnToggleAlarm" class="primary">🔔 Alarm ON</button>
-      <button id="btnTest">Test Alarm</button>
-    </div>
-    <div class="grid" style="margin-top:8px">
-      <div>
-        <label>Email Service ID</label>
-        <input id="emailService" placeholder="e.g. service_xxx">
-      </div>
-      <div>
-        <label>Email Template ID</label>
-        <input id="emailTemplate" placeholder="e.g. template_xxx">
-      </div>
-      <div>
-        <label>Public Key (user_id)</label>
-        <input id="emailUser" placeholder="e.g. user_xxx">
-      </div>
-      <div>
-        <label>Kirim ke Email</label>
-        <input id="emailTo" placeholder="nama@domain.com">
-      </div>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button id="btnSaveEmail">Simpan EmailJS</button>
-      <span id="emailStatus" class="badge">EmailJS: Not set</span>
-    </div>
-
-    <div class="muted" style="margin-top:10px">Catatan: sinyal dihitung lokal dari data Binance. Tampilan chart dari TradingView embed.</div>
-  </aside>
-
-  <main class="card">
-    <div id="tv_chart"></div>
-    <div class="card" style="margin-top:12px">
-      <div class="row" style="justify-content:space-between">
-        <div><b>Live:</b> <span id="live"></span> • <span class="muted" id="lastUpdate"></span></div>
-        <div><span class="badge" id="trendBadge">Trend: -</span></div>
-      </div>
-    </div>
-    <div id="log" class="card"></div>
-  </main>
+  <div class="log" id="log"></div>
 </div>
 
 <script>
 (function(){
-  // State and helpers
-  const state={running:false,alarmOn:true,symbol:"XRPUSDT",interval:"5m",limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null};
-  const $=id=>document.getElementById(id);
-  function log(msg){ const el=$("log"); el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML; console.log(msg); }
-  function setStatus(s){ $("status").textContent = s; }
-  function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.03; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(()=>{ o.stop(); ctx.close(); },250);}catch(e){} }
-
-  // EmailJS helpers
-  function loadEmailCfg(){
-    try{
-      const raw = localStorage.getItem('emailjs_cfg');
-      if(!raw) return;
-      const cfg = JSON.parse(raw);
-      state.email = Object.assign(state.email, cfg);
-      $("emailService").value = state.email.service || '';
-      $("emailTemplate").value = state.email.template || '';
-      $("emailUser").value = state.email.user || '';
-      $("emailTo").value = state.email.to || '';
-      if(state.email.user && window.emailjs && typeof emailjs.init === 'function'){
-        try{ emailjs.init(state.email.user); log('EmailJS initialized with saved user id'); }catch(e){ log('EmailJS init error', e.message); }
-      }
-      updateEmailBadge();
-    }catch(e){ log('LoadEmailCfg error: ' + e.message); }
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  function log(msg, obj){
+    const t = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.textContent = `[${t}] ${msg}` + (obj ? ' ' + JSON.stringify(obj) : '');
+    logEl.prepend(line);
+    while(logEl.childNodes.length > 400) logEl.removeChild(logEl.lastChild);
+    console.log(msg, obj || '');
   }
-  function saveEmailCfg(){
-    state.email.service = $("emailService").value.trim();
-    state.email.template = $("emailTemplate").value.trim();
-    state.email.user = $("emailUser").value.trim();
-    state.email.to = $("emailTo").value.trim();
-    localStorage.setItem('emailjs_cfg', JSON.stringify(state.email));
-    // init emailjs if user id provided
-    if(state.email.user && window.emailjs && typeof emailjs.init === 'function'){
-      try{ emailjs.init(state.email.user); log('EmailJS initialized with user id'); }catch(e){ log('EmailJS init failed: '+e.message); }
-    }
-    updateEmailBadge();
-    log('EmailJS config saved');
-  }
-  function updateEmailBadge(){
-    const ok = state.email.service && state.email.template && state.email.user && state.email.to;
-    $("emailStatus").textContent = ok ? 'EmailJS: Ready' : 'EmailJS: Not set';
-  }
+  function setStatus(s){ $('status').textContent = s; }
 
-  // basic kline fetch from Binance (500 limit default)
-  async function getKlines(symbol, interval, limit){
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const r = await fetch(url);
-    if(!r.ok) throw new Error('Klines fetch failed: ' + r.status);
-    const j = await r.json();
-    return j.map(d => ({ time: Math.floor(d[0]/1000), open:+d[1], high:+d[2], low:+d[3], close:+d[4] }));
-  }
-
-  // ATR + UT Bot simple (as before)
-  function trueRange(c){ const tr = new Array(c.length).fill(NaN); for(let i=1;i<c.length;i++){ const a=c[i], b=c[i-1]; tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close)); } return tr; }
-  function atr(c,p=10){ const tr=trueRange(c); const out=new Array(c.length).fill(NaN); let s=0; for(let i=1;i<=p;i++) s += (tr[i]||0); out[p] = s/p; for(let i=p+1;i<tr.length;i++) out[i] = ((out[i-1]*(p-1)) + tr[i]) / p; return out; }
-  function utBot(c,kv=2,aP=10){ const n=c.length; const A=atr(c,aP); const trend=new Array(n).fill(0), upper=new Array(n).fill(NaN), lower=new Array(n).fill(NaN), line=new Array(n).fill(NaN); for(let i=0;i<n;i++){ if(!isFinite(A[i])){ trend[i]=0; continue; } const hl2=(c[i].high+c[i].low)/2; const nLoss = kv * A[i]; const bU = hl2 + nLoss, bL = hl2 - nLoss; if(i===0){ upper[i]=bU; lower[i]=bL; trend[i]=1; line[i]=bL; continue; } const pU = upper[i-1], pL = lower[i-1]; upper[i] = (bU < pU || c[i].close > pU) ? bU : pU; lower[i] = (bL > pL || c[i].close < pL) ? bL : pL; const prev = trend[i-1] || 1; const cur = c[i].close > upper[i-1] ? 1 : (c[i].close < lower[i-1] ? -1 : prev); trend[i] = cur; line[i] = cur===1 ? lower[i] : upper[i]; } return { trend, upper, lower, line }; }
-
-  // linear regression channel
-  function linRegChannel(c,l=100,upFactor=2,downFactor=2){
-    const n=c.length; const mid=new Array(n).fill(NaN), up=new Array(n).fill(NaN), dn=new Array(n).fill(NaN);
-    for(let i=l-1;i<n;i++){
-      const sl=c.slice(i-l+1,i+1); const y=sl.map(z=>z.close); const m=y.length;
-      let SX=0,SY=0,SXY=0,SXX=0;
-      for(let k=0;k<m;k++){ SX+=k; SY+=y[k]; SXY+=k*y[k]; SXX+=k*k; }
-      const denom = m*SXX - SX*SX;
-      if(denom === 0) continue;
-      const a = (m*SXY - SX*SY) / denom;
-      const b = (SY - a*SX) / m;
-      const yAtEnd = a*(m-1) + b;
-      mid[i] = yAtEnd;
-      let ss=0; for(let k=0;k<m;k++){ const fitted = a*k + b; ss += (y[k]-fitted)*(y[k]-fitted); }
-      const sd = Math.sqrt(ss/m);
-      up[i] = yAtEnd + upFactor*sd;
-      dn[i] = yAtEnd - downFactor*sd;
-    }
-    return { mid, up, dn };
-  }
-
-  // Email send
-  async function sendEmail(params){
-    if(!window.emailjs || typeof emailjs.send !== 'function') throw new Error('EmailJS SDK not loaded');
-    return emailjs.send(state.email.service, state.email.template, params);
-  }
-
-  // when signal occurs
-  async function fireAlert(side, last, lr){
-    try{
-      beep();
-      log((side==='BUY'?'🚀 ':'🔻 ') + side + ` signal • ${last.close} USDT`);
-      // send email if configured
-      const ok = state.email.service && state.email.template && state.email.user && state.email.to;
-      if(!ok){ log('EmailJS not configured — skipping email'); return; }
-      const params = {
-        pair: 'XRP/USDT',
-        side,
-        price: String(last.close),
-        time: new Date(last.time*1000).toLocaleString(),
-        interval: state.interval,
-        dev_up: lr && lr.up ? String(lr.up.at(-1) || '') : '',
-        dev_dn: lr && lr.dn ? String(lr.dn.at(-1) || '') : '',
-        to: state.email.to
-      };
-      log('Sending email...', params);
-      await sendEmail(params);
-      log('Email sent to ' + state.email.to);
-    }catch(err){
-      log('Email send error: ' + (err.text || err.message || err));
-    }
-  }
-
-  // main step: fetch klines, compute indicators, check flip
-  async function step(){
-    try{
-      // sync input values
-      state.interval = $("interval").value;
-      state.limit = +$("limit").value;
-      state.kv = +$("kv").value;
-      state.atr = +$("atr").value;
-      state.lrLen = +$("lrLen").value;
-      state.devUp = +$("devUp").value;
-      state.devDn = +$("devDn").value;
-      // fetch klines
-      const candles = await getKlines(state.symbol, state.interval, state.limit);
-      if(!candles || !candles.length) { log('No candle data'); return; }
-      const ut = utBot(candles, state.kv, state.atr);
-      const lr = linRegChannel(candles, state.lrLen, state.devUp, state.devDn);
-      const last = candles[candles.length-1];
-      const prevIdx = candles.length-2;
-      const prevTrend = ut.trend[prevIdx] || 0;
-      const lastTrend = ut.trend[candles.length-1] || 0;
-      $("live").textContent = `${fmt(last.close)} USDT`;
-      $("lastUpdate").textContent = `TF ${state.interval} • ${new Date(last.time*1000).toLocaleString()}`;
-      $("trendBadge").textContent = `Trend: ${lastTrend>0?'UP':lastTrend<0?'DOWN':'-'}`;
-      // detect flips: prevTrend -> lastTrend
-      if(state.alarmOn){
-        const barKey = last.time;
-        // only trigger when trend flips and not same bar as lastAlert
-        if(state.lastTrend !== null && state.lastAlertBar !== barKey){
-          if(prevTrend === -1 && lastTrend === 1){ // sell->buy flip => BUY signal
-            await fireAlert('BUY', last, lr);
-            state.lastAlertBar = barKey;
-          } else if(prevTrend === 1 && lastTrend === -1){
-            await fireAlert('SELL', last, lr);
-            state.lastAlertBar = barKey;
-          }
-        }
-      }
-      state.lastTrend = lastTrend;
-    }catch(e){
-      log('Step error: ' + (e.message || e));
-    }
-  }
-
-  // UI handlers
-  const btnToggle = $("btnToggle");
-  const btnAlarm = $("btnToggleAlarm");
-  const btnTest = $("btnTest");
-  const btnSaveEmail = $("btnSaveEmail");
-
-  btnToggle.onclick = () => {
-    state.running = !state.running;
-    setStatus(state.running ? 'Running' : 'Stopped');
-    btnToggle.textContent = state.running ? 'Stop' : 'Start';
-    if(state.running){
-      step(); // run immediately
-      if(!state._timer) state._timer = setInterval(step, 30 * 1000); // every 30s
-    } else {
-      if(state._timer){ clearInterval(state._timer); state._timer = null; }
-    }
-  };
-
-  btnAlarm.onclick = () => { state.alarmOn = !state.alarmOn; btnAlarm.textContent = state.alarmOn ? '🔔 Alarm ON' : '🔕 Alarm OFF'; }
-  btnTest.onclick = async () => { const now = Math.floor(Date.now()/1000); await fireAlert('TEST', {close:'0.00', time: now}, {}); }
-  btnSaveEmail.onclick = saveEmailCfg;
-
-  // Initialize TradingView embed
-  try{
-    new TradingView.widget({
-      autosize: true,
-      symbol: "BINANCE:XRPUSDT",
-      interval: "5",
-      timezone: "Etc/UTC",
-      theme: "dark",
-      style: "1",
-      locale: "en",
-      container_id: "tv_chart"
+  // Chart
+  const container = $('chartContainer');
+  let chart = null;
+  let candleSeries = null;
+  function createChart(){
+    container.innerHTML = '';
+    chart = LightweightCharts.createChart(container, {
+      layout: { backgroundColor: '#07121a', textColor: '#e6eef7' },
+      grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+      timeScale: { borderColor: 'rgba(255,255,255,0.06)' }
     });
-    log('TradingView widget loaded');
-  }catch(e){
-    log('TradingView widget failed to load: ' + (e.message||e));
+    candleSeries = chart.addCandlestickSeries({
+      upColor: '#26a69a', downColor: '#ef5350', wickUpColor: '#26a69a', wickDownColor: '#ef5350', borderVisible: false
+    });
+    window.addEventListener('resize', ()=> chart.applyOptions({ width: container.clientWidth }));
   }
 
-  // load email config from localStorage (and init EmailJS if user_id present)
-  loadEmailCfg();
-  setStatus('Idle');
-  // run one step so UI shows something
-  // we don't auto-start; user must click Start
+  // Fetch klines from Binance
+  async function fetchKlines(symbol, interval, limit=500){
+    symbol = symbol.toUpperCase();
+    const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+    log('Fetching klines', {symbol, interval, limit});
+    const resp = await fetch(url);
+    if(resp.status === 429) throw new Error('Binance rate limited (429). Reduce limit or add delay.');
+    if(!resp.ok) {
+      const t = await resp.text();
+      throw new Error('Klines fetch failed: ' + resp.status + ' ' + t);
+    }
+    const data = await resp.json();
+    return data.map(d => ({
+      time: Math.floor(d[0]/1000),
+      open: Number(d[1]), high: Number(d[2]), low: Number(d[3]), close: Number(d[4]), volume: Number(d[5])
+    }));
+  }
+
+  // Indicator helpers: TR and ATR (Wilder / RMA)
+  function trueRange(c){
+    const tr = new Array(c.length).fill(NaN);
+    for(let i=1;i<c.length;i++){
+      const a=c[i], b=c[i-1];
+      tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close));
+    }
+    return tr;
+  }
+  function computeATR(candles, period){
+    const tr = trueRange(candles);
+    const atr = new Array(candles.length).fill(NaN);
+    let sum = 0;
+    for(let i=1;i<=period && i<tr.length; i++) sum += tr[i] || 0;
+    if(tr.length <= period) return atr;
+    atr[period] = sum / period;
+    for(let i=period+1;i<tr.length;i++){
+      atr[i] = ((atr[i-1] * (period - 1)) + tr[i]) / period;
+    }
+    return atr;
+  }
+
+  // UT-like trailing bands + flip detection
+  function computeUTSignals(candles, atrLen=14, mult=3){
+    const n = candles.length;
+    const atr = computeATR(candles, atrLen);
+    const upper = new Array(n).fill(NaN), lower = new Array(n).fill(NaN), finalUpper = new Array(n).fill(NaN), finalLower = new Array(n).fill(NaN);
+    const trend = new Array(n).fill(0), signals = new Array(n).fill(null);
+
+    for(let i=0;i<n;i++){
+      if(!isFinite(atr[i])) continue;
+      const hl2 = (candles[i].high + candles[i].low) / 2;
+      upper[i] = hl2 + mult * atr[i];
+      lower[i] = hl2 - mult * atr[i];
+      if(i === 0){
+        finalUpper[i] = upper[i];
+        finalLower[i] = lower[i];
+        trend[i] = 1;
+        continue;
+      }
+      // adjust final bands
+      finalUpper[i] = (upper[i] < finalUpper[i-1]) ? upper[i] : finalUpper[i-1];
+      finalLower[i] = (lower[i] > finalLower[i-1]) ? lower[i] : finalLower[i-1];
+
+      // determine trend using previous final bands
+      let prev = trend[i-1] || 1;
+      if(candles[i].close > finalUpper[i-1]) trend[i] = 1;
+      else if(candles[i].close < finalLower[i-1]) trend[i] = -1;
+      else trend[i] = prev;
+
+      // detect flip
+      if(trend[i] !== (trend[i-1] || prev)){
+        signals[i] = trend[i] === 1 ? 'BUY' : 'SELL';
+      }
+    }
+
+    return { atr, finalUpper, finalLower, trend, signals };
+  }
+
+  // draw markers based on signals
+  function drawMarkers(candles, signals){
+    const markers = [];
+    for(let i=0;i<signals.length;i++){
+      const s = signals[i];
+      if(!s) continue;
+      markers.push({
+        time: candles[i].time,
+        position: s === 'BUY' ? 'belowBar' : 'aboveBar',
+        color: s === 'BUY' ? '#00d28a' : '#ff6b6b',
+        shape: s === 'BUY' ? 'arrowUp' : 'arrowDown',
+        text: s
+      });
+    }
+    candleSeries.setMarkers(markers);
+  }
+
+  // main flow: load and render once
+  let lastAlertKey = null;
+  async function loadAndRender(){
+    try{
+      setStatus('Loading...');
+      const symbol = $('symbol').value.trim().toUpperCase() || 'CAKEUSDT';
+      const interval = $('interval').value;
+      const limit = Math.max(50, Math.min(1000, Number($('limit').value) || 500));
+      const atrLen = Math.max(2, Number($('atrLen').value) || 14);
+      const mult = Math.max(0.1, Number($('mult').value) || 3);
+
+      const candles = await fetchKlines(symbol, interval, limit);
+      if(!chart) createChart();
+      candleSeries.setData(candles);
+
+      const ut = computeUTSignals(candles, atrLen, mult);
+      drawMarkers(candles, ut.signals);
+
+      log(`Rendered ${symbol} ${interval} (${candles.length} candles). Signals: ${ut.signals.filter(Boolean).length}`);
+      setStatus(`Loaded ${symbol} ${interval} — signals: ${ut.signals.filter(Boolean).length}`);
+    }catch(err){
+      log('Load error: ' + (err.message || err));
+      setStatus('Error: ' + (err.message || 'unknown'));
+    }
+  }
+
+  // auto-polling
+  let timer = null;
+  function startAutoPoll(){
+    if(timer) return;
+    timer = setInterval(async ()=>{
+      try{ await loadAndRender(); }catch(e){ log('Poll error: ' + (e.message||e)); }
+    }, 30_000); // every 30s
+    $('btnStart').disabled = true; $('btnStop').disabled = false;
+    setStatus('Running (polling)');
+  }
+  function stopAutoPoll(){
+    if(timer) clearInterval(timer); timer = null;
+    $('btnStart').disabled = false; $('btnStop').disabled = true;
+    setStatus('Stopped');
+  }
+
+  // events
+  $('btnLoad').addEventListener('click', loadAndRender);
+  $('btnStart').addEventListener('click', ()=>{
+    loadAndRender().then(()=> startAutoPoll());
+  });
+  $('btnStop').addEventListener('click', stopAutoPoll);
+
+  // init chart and initial load
+  createChart();
+  setTimeout(()=> { loadAndRender(); }, 200);
+
+  // expose for debug
+  window._utbot = { loadAndRender, computeUTSignals };
+
 })();
 </script>
 </body>
