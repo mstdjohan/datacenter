@@ -1,317 +1,319 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>UT-Bot + EmailJS — Lightweight Chart</title>
-
-<!-- Lightweight Charts -->
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-<!-- EmailJS -->
-<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-
-<style>
-  :root{--bg:#07121a;--card:#0b1820;--muted:#9fb4c9;--accent:#06b6d4}
-  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6f6ff}
-  .wrap{max-width:1100px;margin:12px auto;padding:12px}
-  header{display:flex;justify-content:space-between;align-items:center;gap:12px}
-  h1{margin:0;font-size:16px}
-  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  input,select,button,textarea{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#071927;color:#eaf6ff}
-  button{cursor:pointer;background:var(--accent);color:#042a2f;border:0}
-  #chartContainer{height:520px;border-radius:8px;overflow:hidden;background:#07121a;margin-top:12px}
-  .panel{margin-top:12px;background:#071827;padding:10px;border-radius:8px}
-  .small{color:var(--muted);font-size:13px}
-  label{font-size:13px;color:var(--muted);margin-right:6px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .log{margin-top:12px;background:#06121a;padding:10px;border-radius:8px;font-family:monospace;height:160px;overflow:auto;font-size:13px}
-  .badge{padding:4px 8px;border-radius:8px;background:#071827;border:1px solid rgba(255,255,255,0.03)}
-  @media(max-width:800px){#chartContainer{height:420px}}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UT Bot Alerts — HTML implementation</title>
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:16px;background:#0f172a;color:#e6eef8}
+    .card{background:#071020;padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,.6)}
+    label{display:block;margin-top:8px}
+    input,select{width:100%;padding:8px;border-radius:6px;border:1px solid #1f2937;background:#0b1220;color:#e6eef8}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    .controls{margin-bottom:12px}
+    #chartContainer{height:520px}
+    .signal{display:inline-block;padding:6px 10px;border-radius:8px;margin:6px 4px;font-weight:600}
+    .long{background:#064e3b;color:#b7f5dd}
+    .short{background:#6b021a;color:#ffd5da}
+    .info{margin-top:8px;color:#9aa7b6}
+    button{padding:8px 12px;border-radius:8px;border:0;background:#0ea5a1;color:#02111a;font-weight:700;cursor:pointer}
+    pre{white-space:pre-wrap;background:#021627;padding:8px;border-radius:8px;margin-top:10px}
+  </style>
+  <!-- Chart.js and financial plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.0/dist/chartjs-chart-financial.min.js"></script>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>UT-Bot + EmailJS — Binance (Lightweight)</h1>
-      <div class="small">Sinyal BUY/SELL akan dikirim via EmailJS (isi config & Simpan)</div>
-    </div>
-    <div class="small" id="status">Idle</div>
-  </header>
+  <div class="card">
+    <h2>UT Bot Alerts — HTML (logic port from PineScript)</h2>
 
-  <div class="controls">
-    <label>Symbol</label>
-    <input id="symbol" value="CAKEUSDT" style="width:140px" />
-    <label>Interval</label>
-    <select id="interval">
-      <option value="1m">1m</option>
-      <option value="5m" selected>5m</option>
-      <option value="15m">15m</option>
-      <option value="1h">1h</option>
-      <option value="4h">4h</option>
-      <option value="1d">1d</option>
-    </select>
-    <label>Candles</label>
-    <input id="limit" type="number" value="500" min="50" max="1000" style="width:90px" />
-    <label>ATR len</label>
-    <input id="atrLen" type="number" value="14" min="2" style="width:80px" />
-    <label>Mult</label>
-    <input id="mult" type="number" step="0.1" value="3" style="width:80px" />
-    <button id="btnLoad">Load</button>
-    <button id="btnStart">Start</button>
-    <button id="btnStop" disabled>Stop</button>
-  </div>
-
-  <div id="chartContainer"></div>
-
-  <div class="panel">
-    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
-      <div class="small">EmailJS configuration — <span id="emailReady" class="badge">Not ready</span></div>
-      <div class="small">Email will be sent once per bar flip (deduped)</div>
-    </div>
-
-    <div class="grid" style="margin-top:8px">
-      <div>
-        <label>Service ID</label>
-        <input id="emailService" placeholder="service_xxx">
+    <div class="controls row">
+      <div class="col">
+        <label>Key Value (a) — sensitivity</label>
+        <input id="inputA" type="number" step="0.1" value="1">
       </div>
-      <div>
-        <label>Template ID</label>
-        <input id="emailTemplate" placeholder="template_xxx">
+      <div class="col">
+        <label>ATR Period (c)</label>
+        <input id="inputC" type="number" step="1" value="10">
       </div>
-      <div>
-        <label>User ID (public)</label>
-        <input id="emailUser" placeholder="user_xxx">
-      </div>
-      <div>
-        <label>Recipient email</label>
-        <input id="emailTo" placeholder="you@domain.com">
+      <div class="col">
+        <label>Use Heikin Ashi</label>
+        <select id="inputHA"><option value="false">False</option><option value="true">True</option></select>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="btnSaveEmail">Save EmailJS</button>
-      <button id="btnTestEmail">Send Test Email</button>
+    <div style="display:flex;gap:12px;align-items:center">
+      <button id="btnGenerate">Generate demo data & run</button>
+      <button id="btnLoadSample">Load sample (random walk)</button>
       <div style="flex:1"></div>
-      <div class="small" id="lastEmailStatus"></div>
+      <div id="latestSignals"></div>
     </div>
-  </div>
 
-  <div class="log" id="log"></div>
-</div>
+    <div id="chartContainer" class="card" style="margin-top:12px">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="info">
+      <strong>Notes:</strong> This page implements the UT Bot Alerts logic from the Pine Script you provided: ATR trailing stop, position flip logic, EMA(1) crossover check and buy/sell labels. Use the inputs and press <em>Generate demo data & run</em>. To use real data, replace the sample generator with your OHLC feed and call <code>processSeries(ohlc)</code>.
+    </div>
+
+    <pre id="log"></pre>
+  </div>
 
 <script>
-(function(){
-  // DOM helpers
-  const $ = id => document.getElementById(id);
-  const logEl = $('log');
-  function log(msg, obj){ const t=new Date().toLocaleTimeString(); const el=document.createElement('div'); el.textContent=`[${t}] ${msg}` + (obj ? ' ' + JSON.stringify(obj) : ''); logEl.prepend(el); while(logEl.childNodes.length>400) logEl.removeChild(logEl.lastChild); console.log(msg, obj||''); }
-  function setStatus(s){ $('status').textContent = s; }
+// -----------------------------
+// Utilities and technical indicators
+// -----------------------------
+function ema(values, period){
+  const k = 2/(period+1);
+  let out = [];
+  let prev = values[0];
+  out.push(prev);
+  for(let i=1;i<values.length;i++){
+    const v = values[i]*k + prev*(1-k);
+    out.push(v);
+    prev = v;
+  }
+  return out;
+}
 
-  // Chart setup
-  const holder = $('chartContainer');
-  let chart=null, candleSeries=null;
-  function createChart(){
-    holder.innerHTML=''; chart = LightweightCharts.createChart(holder, {
-      layout:{backgroundColor:'#07121a', textColor:'#e6eef7'},
-      grid:{vertLines:{color:'rgba(255,255,255,0.02)'}, horzLines:{color:'rgba(255,255,255,0.02)'}},
-      rightPriceScale:{borderColor:'rgba(255,255,255,0.06)'},
-      timeScale:{borderColor:'rgba(255,255,255,0.06)'}
-    });
-    candleSeries = chart.addCandlestickSeries({ upColor:'#26a69a', downColor:'#ef5350', wickUpColor:'#26a69a', wickDownColor:'#ef5350', borderVisible:false });
-    window.addEventListener('resize', ()=> chart.applyOptions({ width: holder.clientWidth }));
+function trueRangeSeries(hlc){
+  // hlc: array of {high, low, close}
+  const tr = [];
+  for(let i=0;i<hlc.length;i++){
+    if(i===0){ tr.push(hlc[i].high - hlc[i].low); continue; }
+    const cur = hlc[i];
+    const prevClose = hlc[i-1].close;
+    const a = cur.high - cur.low;
+    const b = Math.abs(cur.high - prevClose);
+    const c = Math.abs(cur.low - prevClose);
+    tr.push(Math.max(a,b,c));
   }
+  return tr;
+}
 
-  // Binance fetch
-  async function fetchKlines(symbol, interval, limit=500){
-    symbol = symbol.toUpperCase();
-    const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
-    log('Fetching klines', {symbol, interval, limit});
-    const r = await fetch(url);
-    if(r.status === 429) throw new Error('Binance rate limited (429). Reduce limit or add delay.');
-    if(!r.ok){ const t = await r.text(); throw new Error('Klines fetch failed: ' + r.status + ' ' + t); }
-    const j = await r.json();
-    return j.map(d => ({ time: Math.floor(d[0]/1000), open:+d[1], high:+d[2], low:+d[3], close:+d[4], volume:+d[5] }));
-  }
-
-  // ATR, TR
-  function trueRange(c){ const tr=new Array(c.length).fill(NaN); for(let i=1;i<c.length;i++){ const a=c[i], b=c[i-1]; tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close)); } return tr; }
-  function computeATR(candles, period){ const tr=trueRange(candles); const atr=new Array(candles.length).fill(NaN); if(tr.length<=period) return atr; let sum=0; for(let i=1;i<=period;i++) sum += tr[i]||0; atr[period] = sum/period; for(let i=period+1;i<tr.length;i++){ atr[i] = ((atr[i-1]*(period-1)) + tr[i]) / period; } return atr; }
-
-  // UT-like trailing bands + flip detection
-  function computeUTSignals(candles, atrLen=14, mult=3){
-    const n=candles.length;
-    const atr = computeATR(candles, atrLen);
-    const finalUpper=new Array(n).fill(NaN), finalLower=new Array(n).fill(NaN), trend=new Array(n).fill(0), signals=new Array(n).fill(null);
-    for(let i=0;i<n;i++){
-      if(!isFinite(atr[i])) continue;
-      const hl2=(candles[i].high + candles[i].low)/2;
-      const up = hl2 + mult*atr[i];
-      const low = hl2 - mult*atr[i];
-      if(i===0){ finalUpper[i]=up; finalLower[i]=low; trend[i]=1; continue; }
-      finalUpper[i] = (up < finalUpper[i-1]) ? up : finalUpper[i-1];
-      finalLower[i] = (low > finalLower[i-1]) ? low : finalLower[i-1];
-      const prev = trend[i-1] || 1;
-      if(candles[i].close > finalUpper[i-1]) trend[i] = 1;
-      else if(candles[i].close < finalLower[i-1]) trend[i] = -1;
-      else trend[i] = prev;
-      if(trend[i] !== trend[i-1]) signals[i] = trend[i] === 1 ? 'BUY' : 'SELL';
-    }
-    return {atr, finalUpper, finalLower, trend, signals};
-  }
-
-  // draw markers
-  function drawMarkers(candles, signals){
-    const markers=[];
-    for(let i=0;i<signals.length;i++){
-      const s = signals[i];
-      if(!s) continue;
-      markers.push({ time: candles[i].time, position: s==='BUY' ? 'belowBar':'aboveBar', color: s==='BUY' ? '#00d28a':'#ff6b6b', shape: s==='BUY' ? 'arrowUp':'arrowDown', text: s });
-    }
-    candleSeries.setMarkers(markers);
-  }
-
-  // EmailJS utilities
-  function loadEmailCfg(){
-    try{
-      const raw = localStorage.getItem('ut_email_cfg');
-      if(!raw) return;
-      const cfg = JSON.parse(raw);
-      $('emailService').value = cfg.service || '';
-      $('emailTemplate').value = cfg.template || '';
-      $('emailUser').value = cfg.user || '';
-      $('emailTo').value = cfg.to || '';
-      if(cfg.user && window.emailjs && typeof emailjs.init === 'function'){
-        try{ emailjs.init(cfg.user); log('EmailJS initialized'); }catch(e){ log('EmailJS init error', e.message); }
-      }
-      updateEmailReady();
-    }catch(e){ log('loadEmailCfg error', e.message); }
-  }
-  function saveEmailCfg(){
-    const cfg = { service: $('emailService').value.trim(), template: $('emailTemplate').value.trim(), user: $('emailUser').value.trim(), to: $('emailTo').value.trim() };
-    localStorage.setItem('ut_email_cfg', JSON.stringify(cfg));
-    if(cfg.user && window.emailjs && typeof emailjs.init === 'function'){
-      try{ emailjs.init(cfg.user); log('EmailJS init with user id'); }catch(e){ log('EmailJS init failed', e.message); }
-    }
-    updateEmailReady(); log('EmailJS config saved');
-  }
-  function updateEmailReady(){
-    const ok = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-    $('emailReady').textContent = ok ? 'Ready' : 'Not ready';
-  }
-  async function sendEmail(params){
-    const svc = $('emailService').value.trim();
-    const tmpl = $('emailTemplate').value.trim();
-    if(!svc||!tmpl) throw new Error('EmailJS not configured');
-    return emailjs.send(svc, tmpl, params);
-  }
-
-  // send email for a detected signal (dedupe per bar time)
-  let lastSentBarTime = null;
-  async function handleSignalsAndEmail(candles, signals){
-    drawMarkers(candles, signals);
-    // find latest signal (last index)
-    for(let i=signals.length-1;i>=0;i--){
-      if(signals[i]){
-        const s = signals[i];
-        const barTime = candles[i].time;
-        if(barTime === lastSentBarTime) { log('Signal already sent for this bar (deduped)', {time:barTime, signal:s}); return; }
-        lastSentBarTime = barTime;
-        log('Signal detected: ' + s + ' at bar time ' + new Date(barTime*1000).toLocaleString());
-        // send email if configured
-        const svcOk = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-        if(!svcOk){ log('EmailJS not configured - skipping send'); return; }
-        const payload = {
-          pair: $('symbol').value.trim().toUpperCase(),
-          side: s,
-          price: String(candles[i].close),
-          time: new Date(barTime*1000).toLocaleString(),
-          interval: $('interval').value,
-          to: $('emailTo').value.trim()
-        };
-        try{
-          log('Sending email...', payload);
-          const res = await sendEmail(payload);
-          log('Email sent (EmailJS response)', res);
-          $('lastEmailStatus').textContent = 'Last: sent ' + new Date().toLocaleTimeString();
-        }catch(err){
-          log('Email send failed: ' + (err.text || err.message || err));
-          $('lastEmailStatus').textContent = 'Last: failed ' + new Date().toLocaleTimeString();
-        }
-        return;
-      }
+function atr(hlc, period){
+  const tr = trueRangeSeries(hlc);
+  // simple Wilder smoothing (first ATR = average of first period TRs)
+  let out = [];
+  let sum=0;
+  for(let i=0;i<tr.length;i++){
+    if(i<period){ sum+=tr[i]; if(i===period-1){ out.push(sum/period); } else { out.push(null); } }
+    else{
+      const prev = out[out.length-1];
+      const cur = ( (prev * (period-1)) + tr[i] ) / period; // Wilder
+      out.push(cur);
     }
   }
+  return out;
+}
 
-  // main load & check
-  let pollingTimer = null;
-  async function loadAndCheck(){
-    try{
-      setStatus('Loading...');
-      const sym = $('symbol').value.trim().toUpperCase() || 'CAKEUSDT';
-      const interval = $('interval').value;
-      const limit = Math.max(50, Math.min(1000, Number($('limit').value) || 500));
-      const atrLen = Math.max(2, Number($('atrLen').value) || 14);
-      const mult = Math.max(0.1, Number($('mult').value) || 3);
+function toHeikinAshi(ohlc){
+  const ha = [];
+  for(let i=0;i<ohlc.length;i++){
+    const c = (ohlc[i].open + ohlc[i].high + ohlc[i].low + ohlc[i].close)/4;
+    const o = i===0 ? (ohlc[i].open + ohlc[i].close)/2 : (ha[i-1].open + ha[i-1].close)/2;
+    const h = Math.max(ohlc[i].high, o, c);
+    const l = Math.min(ohlc[i].low, o, c);
+    ha.push({open:o,high:h,low:l,close:c,date:ohlc[i].date});
+  }
+  return ha;
+}
 
-      const candles = await fetchKlines(sym, interval, limit);
-      if(!chart) createChart();
-      candleSeries.setData(candles);
+// -----------------------------
+// UT Bot logic ported from Pine Script
+// -----------------------------
+function computeUT(ohlc, opts){
+  const useHA = opts.heikin;
+  const a = parseFloat(opts.a);
+  const c = parseInt(opts.c,10);
 
-      const ut = computeUTSignals(candles, atrLen, mult);
-      await handleSignalsAndEmail(candles, ut.signals);
+  const series = useHA ? toHeikinAshi(ohlc) : ohlc.map(d=>({open:d.open,high:d.high,low:d.low,close:d.close,date:d.date}));
+  const closes = series.map(d=>d.close);
 
-      setStatus(`Loaded ${sym} ${interval} — signals:${ut.signals.filter(Boolean).length}`);
-      log(`Rendered ${sym} — ${candles.length} candles — signals: ${ut.signals.filter(Boolean).length}`);
-    }catch(err){
-      log('Load/check error: ' + (err.message || err));
-      setStatus('Error: ' + (err.message || 'unknown'));
+  const atrSeries = atr(series, c);
+
+  // xATRTrailingStop logic (iterative)
+  const xATRTrailingStop = [];
+  const pos = [];
+  const buy = [];
+  const sell = [];
+  const barbuy = [];
+  const barsell = [];
+
+  // EMA with period 1 -> it's essentially the close itself, but we compute using ema() for consistency
+  const ema1 = ema(closes,1);
+
+  for(let i=0;i<series.length;i++){
+    const src = series[i].close;
+    const xatr = atrSeries[i] || atrSeries[Math.max(0,i-1)] || 0;
+    const nLoss = a * xatr;
+
+    if(i===0){
+      xATRTrailingStop.push(src + nLoss); // initialize
+      pos.push(0);
+      buy.push(false); sell.push(false); barbuy.push(false); barsell.push(false);
+      continue;
     }
+
+    const prevT = xATRTrailingStop[i-1];
+    const prevSrc = series[i-1].close;
+
+    let newT;
+    if(src > prevT && prevSrc > prevT){
+      newT = Math.max(prevT, src - nLoss);
+    } else if(src < prevT && prevSrc < prevT){
+      newT = Math.min(prevT, src + nLoss);
+    } else if(src > prevT){
+      newT = src - nLoss;
+    } else {
+      newT = src + nLoss;
+    }
+    xATRTrailingStop.push(newT);
+
+    // pos logic
+    const prevPos = pos[i-1] || 0;
+    let newPos = prevPos;
+    if(prevSrc < prevT && src > prevT) newPos = 1;
+    else if(prevSrc > prevT && src < prevT) newPos = -1;
+    pos.push(newPos);
+
+    // crossovers
+    const emaVal = ema1[i];
+    const above = emaVal > newT && (ema1[i-1] <= xATRTrailingStop[i-1]);
+    const below = newT > emaVal && (xATRTrailingStop[i-1] <= ema1[i-1]);
+
+    const isBuy = src > newT && above;
+    const isSell = src < newT && below;
+
+    buy.push(isBuy);
+    sell.push(isSell);
+    barbuy.push(src > newT);
+    barsell.push(src < newT);
   }
 
-  // auto poll
-  function startPoll(){
-    if(pollingTimer) return;
-    loadAndCheck(); // immediate
-    pollingTimer = setInterval(loadAndCheck, 30_000);
-    $('btnStart').disabled = true; $('btnStop').disabled = false;
-    setStatus('Running (polling)');
-  }
-  function stopPoll(){
-    if(pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = null;
-    $('btnStart').disabled = false; $('btnStop').disabled = true;
-    setStatus('Stopped');
-  }
+  // return enriched series
+  const out = series.map((d,i)=>({
+    date:d.date,
+    open:d.open, high:d.high, low:d.low, close:d.close,
+    atr: atrSeries[i] || 0,
+    trStop: xATRTrailingStop[i],
+    pos: pos[i],
+    buy: buy[i],
+    sell: sell[i],
+    barbuy: barbuy[i],
+    barsell: barsell[i]
+  }));
 
-  // wire up UI
-  $('btnLoad').addEventListener('click', loadAndCheck);
-  $('btnStart').addEventListener('click', startPoll);
-  $('btnStop').addEventListener('click', stopPoll);
-  $('btnSaveEmail').addEventListener('click', saveEmailCfg);
-  $('btnTestEmail').addEventListener('click', async ()=>{
-    try{
-      const ok = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-      if(!ok){ alert('Isi semua field EmailJS terlebih dulu'); return; }
-      // init if needed
-      if($('emailUser').value.trim()) try{ emailjs.init($('emailUser').value.trim()); }catch(e){}
-      const payload = { pair: 'TEST/USDT', side: 'TEST', price: '0', time: new Date().toLocaleString(), interval: '1m', to: $('emailTo').value.trim() };
-      log('Sending test email...', payload);
-      await sendEmail(payload);
-      log('Test email sent');
-      $('lastEmailStatus').textContent = 'Last: test sent ' + new Date().toLocaleTimeString();
-    }catch(e){ log('Test email failed: ' + (e.text || e.message || e)); }
+  return out;
+}
+
+// -----------------------------
+// Chart rendering using chartjs-chart-financial
+// -----------------------------
+let chart = null;
+function renderChart(enriched){
+  const ctx = document.getElementById('chart').getContext('2d');
+  const candles = enriched.map(d=>({t: new Date(d.date), o:d.open,h:d.high,l:d.low,c:d.close}));
+  const trStops = enriched.map((d,i)=>({x:new Date(d.date), y:d.trStop}));
+
+  const datasets = [{
+    label:'Candles',
+    type:'candlestick',
+    data:candles,
+    yAxisID: 'y'
+  },{
+    label:'ATR Trailing Stop',
+    type:'line',
+    data:trStops,
+    fill:false,
+    pointRadius:0,
+    borderWidth:1,
+    yAxisID: 'y'
+  }];
+
+  // remove old
+  if(chart) chart.destroy();
+
+  chart = new Chart(ctx,{
+    type:'candlestick',
+    data:{datasets:datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      legend:{display:false},
+      scales:{
+        x:{type:'time', distribution:'series'},
+        y:{position:'right'}
+      },
+      tooltips:{mode:'index'}
+    }
   });
 
-  // load saved email config
-  loadEmailCfg();
-  // init chart and one quick load
-  createChart();
-  setTimeout(()=> { loadAndCheck(); }, 200);
+  // draw signals overlay (HTML markers) — we will append to log for simplicity
+}
 
-  // expose debug
-  window._utemail = { loadAndCheck };
-})();
+// -----------------------------
+// Helpers: generate demo data
+// -----------------------------
+function generateRandomOHLC(count){
+  const out=[];
+  let price = 100;
+  for(let i=0;i<count;i++){
+    const date = new Date(); date.setMinutes(date.getMinutes() + i);
+    const open = price;
+    const change = (Math.random()-0.5) * 2; // +/-1
+    const close = Math.max(0.1, open + change);
+    const high = Math.max(open, close) + Math.random()*0.6;
+    const low = Math.min(open, close) - Math.random()*0.6;
+    out.push({date:date.toISOString(), open, high, low, close});
+    price = close;
+  }
+  return out;
+}
+
+// -----------------------------
+// Wire UI
+// -----------------------------
+document.getElementById('btnGenerate').addEventListener('click', ()=>{
+  const ohlc = generateRandomOHLC(200);
+  processSeries(ohlc);
+});
+
+document.getElementById('btnLoadSample').addEventListener('click', ()=>{
+  const ohlc = generateRandomOHLC(120);
+  processSeries(ohlc);
+});
+
+function processSeries(ohlc){
+  const opts = {
+    a: document.getElementById('inputA').value,
+    c: document.getElementById('inputC').value,
+    heikin: document.getElementById('inputHA').value === 'true'
+  };
+  const enriched = computeUT(ohlc, opts);
+  renderChart(enriched);
+
+  // log latest signals
+  const latest = enriched[enriched.length-1];
+  const logEl = document.getElementById('log');
+  let lines = [];
+  for(let i=0;i<enriched.length;i++){
+    if(enriched[i].buy) lines.push(new Date(enriched[i].date).toISOString() + '  BUY @ ' + enriched[i].close.toFixed(4));
+    if(enriched[i].sell) lines.push(new Date(enriched[i].date).toISOString() + '  SELL @ ' + enriched[i].close.toFixed(4));
+  }
+  if(lines.length===0) lines.push('No buy/sell signals detected in this run.');
+  logEl.textContent = lines.slice(-50).join('\n');
+
+  const latestSignals = document.getElementById('latestSignals');
+  latestSignals.innerHTML = '';
+  if(latest.buy) latestSignals.innerHTML += '<span class="signal long">Latest: BUY</span>';
+  if(latest.sell) latestSignals.innerHTML += '<span class="signal short">Latest: SELL</span>';
+}
+
+// initial run
+processSeries(generateRandomOHLC(120));
 </script>
 </body>
 </html>
