@@ -3,317 +3,218 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UT Bot Alerts — HTML implementation</title>
+  <title>UT Bot Alerts — HTML Clone TradingView</title>
   <style>
-    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:16px;background:#0f172a;color:#e6eef8}
-    .card{background:#071020;padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,.6)}
+    body{font-family:Arial, sans-serif;background:#0f172a;color:#e6eef8;padding:16px}
+    .card{background:#071020;padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.6)}
     label{display:block;margin-top:8px}
-    input,select{width:100%;padding:8px;border-radius:6px;border:1px solid #1f2937;background:#0b1220;color:#e6eef8}
-    .row{display:flex;gap:12px}
-    .col{flex:1}
-    .controls{margin-bottom:12px}
-    #chartContainer{height:520px}
+    input,select{width:100%;padding:6px;border-radius:6px;border:1px solid #1f2937;background:#0b1220;color:#e6eef8}
+    button{padding:8px 12px;border-radius:8px;border:0;background:#0ea5a1;color:#02111a;font-weight:700;cursor:pointer}
+    #chartContainer{height:500px;margin-top:12px}
     .signal{display:inline-block;padding:6px 10px;border-radius:8px;margin:6px 4px;font-weight:600}
     .long{background:#064e3b;color:#b7f5dd}
     .short{background:#6b021a;color:#ffd5da}
-    .info{margin-top:8px;color:#9aa7b6}
-    button{padding:8px 12px;border-radius:8px;border:0;background:#0ea5a1;color:#02111a;font-weight:700;cursor:pointer}
-    pre{white-space:pre-wrap;background:#021627;padding:8px;border-radius:8px;margin-top:10px}
+    pre{white-space:pre-wrap;background:#021627;padding:8px;border-radius:8px;margin-top:10px;max-height:200px;overflow:auto}
   </style>
-  <!-- Chart.js and financial plugin -->
+  <!-- Chart.js & Financial plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.0/dist/chartjs-chart-financial.min.js"></script>
 </head>
 <body>
   <div class="card">
-    <h2>UT Bot Alerts — HTML (logic port from PineScript)</h2>
+    <h2>UT Bot Alerts — HTML clone of Pine Script</h2>
 
-    <div class="controls row">
-      <div class="col">
-        <label>Key Value (a) — sensitivity</label>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label>Key Value (a)</label>
         <input id="inputA" type="number" step="0.1" value="1">
       </div>
-      <div class="col">
+      <div>
         <label>ATR Period (c)</label>
         <input id="inputC" type="number" step="1" value="10">
       </div>
-      <div class="col">
+      <div>
         <label>Use Heikin Ashi</label>
         <select id="inputHA"><option value="false">False</option><option value="true">True</option></select>
       </div>
+      <button id="btnRun">Run Demo</button>
     </div>
 
-    <div style="display:flex;gap:12px;align-items:center">
-      <button id="btnGenerate">Generate demo data & run</button>
-      <button id="btnLoadSample">Load sample (random walk)</button>
-      <div style="flex:1"></div>
-      <div id="latestSignals"></div>
-    </div>
-
-    <div id="chartContainer" class="card" style="margin-top:12px">
+    <div id="chartContainer">
       <canvas id="chart"></canvas>
     </div>
 
-    <div class="info">
-      <strong>Notes:</strong> This page implements the UT Bot Alerts logic from the Pine Script you provided: ATR trailing stop, position flip logic, EMA(1) crossover check and buy/sell labels. Use the inputs and press <em>Generate demo data & run</em>. To use real data, replace the sample generator with your OHLC feed and call <code>processSeries(ohlc)</code>.
-    </div>
-
+    <div id="latestSignals"></div>
     <pre id="log"></pre>
   </div>
 
 <script>
-// -----------------------------
-// Utilities and technical indicators
-// -----------------------------
-function ema(values, period){
-  const k = 2/(period+1);
-  let out = [];
-  let prev = values[0];
-  out.push(prev);
-  for(let i=1;i<values.length;i++){
-    const v = values[i]*k + prev*(1-k);
-    out.push(v);
-    prev = v;
+// ----------------- Helpers mirip Pine -----------------
+function nz(x, y = 0) { return (x === null || x === undefined || isNaN(x)) ? y : x; }
+function iff(cond, a, b) { return cond ? a : b; }
+
+// EMA
+function ema(values, length) {
+  const k = 2 / (length + 1);
+  let out = [], prev = values[0];
+  out[0] = prev;
+  for (let i = 1; i < values.length; i++) {
+    prev = values[i] * k + prev * (1 - k);
+    out[i] = prev;
   }
   return out;
 }
 
-function trueRangeSeries(hlc){
-  // hlc: array of {high, low, close}
-  const tr = [];
-  for(let i=0;i<hlc.length;i++){
-    if(i===0){ tr.push(hlc[i].high - hlc[i].low); continue; }
-    const cur = hlc[i];
-    const prevClose = hlc[i-1].close;
-    const a = cur.high - cur.low;
-    const b = Math.abs(cur.high - prevClose);
-    const c = Math.abs(cur.low - prevClose);
-    tr.push(Math.max(a,b,c));
+// True Range & ATR (Wilder)
+function trueRangeSeries(ohlc) {
+  let tr = [];
+  for (let i = 0; i < ohlc.length; i++) {
+    if (i === 0) {
+      tr.push(ohlc[i].high - ohlc[i].low);
+    } else {
+      let prevClose = ohlc[i - 1].close;
+      tr.push(Math.max(
+        ohlc[i].high - ohlc[i].low,
+        Math.abs(ohlc[i].high - prevClose),
+        Math.abs(ohlc[i].low - prevClose)
+      ));
+    }
   }
   return tr;
 }
-
-function atr(hlc, period){
-  const tr = trueRangeSeries(hlc);
-  // simple Wilder smoothing (first ATR = average of first period TRs)
-  let out = [];
-  let sum=0;
-  for(let i=0;i<tr.length;i++){
-    if(i<period){ sum+=tr[i]; if(i===period-1){ out.push(sum/period); } else { out.push(null); } }
-    else{
-      const prev = out[out.length-1];
-      const cur = ( (prev * (period-1)) + tr[i] ) / period; // Wilder
-      out.push(cur);
+function atr(ohlc, period) {
+  const tr = trueRangeSeries(ohlc);
+  let atrArr = [], sum = 0;
+  for (let i = 0; i < tr.length; i++) {
+    if (i < period) {
+      sum += tr[i];
+      atrArr.push(i === period - 1 ? sum / period : null);
+    } else {
+      atrArr.push(((atrArr[i - 1]) * (period - 1) + tr[i]) / period);
     }
+  }
+  return atrArr;
+}
+
+// Heikin Ashi
+function toHeikinAshi(ohlc) {
+  let out = [];
+  for (let i = 0; i < ohlc.length; i++) {
+    let c = (ohlc[i].open + ohlc[i].high + ohlc[i].low + ohlc[i].close) / 4;
+    let o = i === 0 ? (ohlc[i].open + ohlc[i].close) / 2 : (out[i - 1].open + out[i - 1].close) / 2;
+    let h = Math.max(ohlc[i].high, o, c);
+    let l = Math.min(ohlc[i].low, o, c);
+    out.push({open:o, high:h, low:l, close:c, date:ohlc[i].date});
   }
   return out;
 }
 
-function toHeikinAshi(ohlc){
-  const ha = [];
-  for(let i=0;i<ohlc.length;i++){
-    const c = (ohlc[i].open + ohlc[i].high + ohlc[i].low + ohlc[i].close)/4;
-    const o = i===0 ? (ohlc[i].open + ohlc[i].close)/2 : (ha[i-1].open + ha[i-1].close)/2;
-    const h = Math.max(ohlc[i].high, o, c);
-    const l = Math.min(ohlc[i].low, o, c);
-    ha.push({open:o,high:h,low:l,close:c,date:ohlc[i].date});
-  }
-  return ha;
-}
-
-// -----------------------------
-// UT Bot logic ported from Pine Script
-// -----------------------------
-function computeUT(ohlc, opts){
-  const useHA = opts.heikin;
-  const a = parseFloat(opts.a);
-  const c = parseInt(opts.c,10);
-
-  const series = useHA ? toHeikinAshi(ohlc) : ohlc.map(d=>({open:d.open,high:d.high,low:d.low,close:d.close,date:d.date}));
-  const closes = series.map(d=>d.close);
-
+// UT Bot logic clone
+function computeUT(ohlc, a, c, useHA) {
+  const series = useHA ? toHeikinAshi(ohlc) : ohlc;
+  const closes = series.map(d => d.close);
   const atrSeries = atr(series, c);
+  const ema1 = ema(closes, 1);
 
-  // xATRTrailingStop logic (iterative)
-  const xATRTrailingStop = [];
-  const pos = [];
-  const buy = [];
-  const sell = [];
-  const barbuy = [];
-  const barsell = [];
+  let xATRTrailingStop = [], pos = [], buy = [], sell = [];
 
-  // EMA with period 1 -> it's essentially the close itself, but we compute using ema() for consistency
-  const ema1 = ema(closes,1);
+  for (let i = 0; i < series.length; i++) {
+    let src = series[i].close;
+    let prevStop = nz(xATRTrailingStop[i - 1], 0);
+    let prevSrc = i > 0 ? series[i - 1].close : src;
+    let nLoss = a * nz(atrSeries[i], 0);
 
-  for(let i=0;i<series.length;i++){
-    const src = series[i].close;
-    const xatr = atrSeries[i] || atrSeries[Math.max(0,i-1)] || 0;
-    const nLoss = a * xatr;
-
-    if(i===0){
-      xATRTrailingStop.push(src + nLoss); // initialize
-      pos.push(0);
-      buy.push(false); sell.push(false); barbuy.push(false); barsell.push(false);
-      continue;
-    }
-
-    const prevT = xATRTrailingStop[i-1];
-    const prevSrc = series[i-1].close;
-
-    let newT;
-    if(src > prevT && prevSrc > prevT){
-      newT = Math.max(prevT, src - nLoss);
-    } else if(src < prevT && prevSrc < prevT){
-      newT = Math.min(prevT, src + nLoss);
-    } else if(src > prevT){
-      newT = src - nLoss;
+    let newStop;
+    if (src > prevStop && prevSrc > prevStop) {
+      newStop = Math.max(prevStop, src - nLoss);
+    } else if (src < prevStop && prevSrc < prevStop) {
+      newStop = Math.min(prevStop, src + nLoss);
+    } else if (src > prevStop) {
+      newStop = src - nLoss;
     } else {
-      newT = src + nLoss;
+      newStop = src + nLoss;
     }
-    xATRTrailingStop.push(newT);
+    xATRTrailingStop.push(newStop);
 
-    // pos logic
-    const prevPos = pos[i-1] || 0;
-    let newPos = prevPos;
-    if(prevSrc < prevT && src > prevT) newPos = 1;
-    else if(prevSrc > prevT && src < prevT) newPos = -1;
+    let newPos = nz(pos[i - 1], 0);
+    if (prevSrc < prevStop && src > prevStop) newPos = 1;
+    else if (prevSrc > prevStop && src < prevStop) newPos = -1;
     pos.push(newPos);
 
-    // crossovers
-    const emaVal = ema1[i];
-    const above = emaVal > newT && (ema1[i-1] <= xATRTrailingStop[i-1]);
-    const below = newT > emaVal && (xATRTrailingStop[i-1] <= ema1[i-1]);
+    let above = (ema1[i] > newStop && ema1[i - 1] <= xATRTrailingStop[i - 1]);
+    let below = (newStop > ema1[i] && xATRTrailingStop[i - 1] <= ema1[i - 1]);
 
-    const isBuy = src > newT && above;
-    const isSell = src < newT && below;
-
-    buy.push(isBuy);
-    sell.push(isSell);
-    barbuy.push(src > newT);
-    barsell.push(src < newT);
+    buy.push(src > newStop && above);
+    sell.push(src < newStop && below);
   }
 
-  // return enriched series
-  const out = series.map((d,i)=>({
-    date:d.date,
-    open:d.open, high:d.high, low:d.low, close:d.close,
-    atr: atrSeries[i] || 0,
-    trStop: xATRTrailingStop[i],
-    pos: pos[i],
-    buy: buy[i],
-    sell: sell[i],
-    barbuy: barbuy[i],
-    barsell: barsell[i]
+  return series.map((d,i)=>({
+    ...d, atr: atrSeries[i], stop: xATRTrailingStop[i],
+    pos: pos[i], buy: buy[i], sell: sell[i]
   }));
-
-  return out;
 }
 
-// -----------------------------
-// Chart rendering using chartjs-chart-financial
-// -----------------------------
-let chart = null;
-function renderChart(enriched){
+// ----------------- Chart -----------------
+let chart=null;
+function renderChart(data) {
   const ctx = document.getElementById('chart').getContext('2d');
-  const candles = enriched.map(d=>({t: new Date(d.date), o:d.open,h:d.high,l:d.low,c:d.close}));
-  const trStops = enriched.map((d,i)=>({x:new Date(d.date), y:d.trStop}));
+  const candles = data.map(d=>({t:new Date(d.date), o:d.open, h:d.high, l:d.low, c:d.close}));
+  const stops = data.map(d=>({x:new Date(d.date), y:d.stop}));
 
-  const datasets = [{
-    label:'Candles',
-    type:'candlestick',
-    data:candles,
-    yAxisID: 'y'
-  },{
-    label:'ATR Trailing Stop',
-    type:'line',
-    data:trStops,
-    fill:false,
-    pointRadius:0,
-    borderWidth:1,
-    yAxisID: 'y'
-  }];
-
-  // remove old
   if(chart) chart.destroy();
-
-  chart = new Chart(ctx,{
+  chart = new Chart(ctx, {
     type:'candlestick',
-    data:{datasets:datasets},
+    data:{datasets:[
+      {label:'Price',data:candles,type:'candlestick'},
+      {label:'Stop',data:stops,type:'line',borderColor:'#0ea5a1',fill:false,pointRadius:0}
+    ]},
     options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      legend:{display:false},
-      scales:{
-        x:{type:'time', distribution:'series'},
-        y:{position:'right'}
-      },
-      tooltips:{mode:'index'}
+      responsive:true, maintainAspectRatio:false,
+      scales:{x:{type:'time', distribution:'series'}, y:{position:'right'}}
     }
   });
-
-  // draw signals overlay (HTML markers) — we will append to log for simplicity
 }
 
-// -----------------------------
-// Helpers: generate demo data
-// -----------------------------
-function generateRandomOHLC(count){
-  const out=[];
-  let price = 100;
-  for(let i=0;i<count;i++){
-    const date = new Date(); date.setMinutes(date.getMinutes() + i);
-    const open = price;
-    const change = (Math.random()-0.5) * 2; // +/-1
-    const close = Math.max(0.1, open + change);
-    const high = Math.max(open, close) + Math.random()*0.6;
-    const low = Math.min(open, close) - Math.random()*0.6;
-    out.push({date:date.toISOString(), open, high, low, close});
-    price = close;
+// ----------------- Demo Data -----------------
+function generateRandomOHLC(n) {
+  let out=[], price=100;
+  for(let i=0;i<n;i++){
+    let date=new Date(); date.setMinutes(date.getMinutes()+i);
+    let open=price;
+    let change=(Math.random()-0.5)*2;
+    let close=Math.max(0.1,open+change);
+    let high=Math.max(open,close)+Math.random()*0.5;
+    let low=Math.min(open,close)-Math.random()*0.5;
+    out.push({date:date.toISOString(),open,high,low,close});
+    price=close;
   }
   return out;
 }
 
-// -----------------------------
-// Wire UI
-// -----------------------------
-document.getElementById('btnGenerate').addEventListener('click', ()=>{
-  const ohlc = generateRandomOHLC(200);
-  processSeries(ohlc);
+// ----------------- Run -----------------
+document.getElementById('btnRun').addEventListener('click', ()=>{
+  const ohlc=generateRandomOHLC(150);
+  const a=parseFloat(document.getElementById('inputA').value);
+  const c=parseInt(document.getElementById('inputC').value);
+  const useHA=document.getElementById('inputHA').value==='true';
+
+  const result=computeUT(ohlc,a,c,useHA);
+  renderChart(result);
+
+  let logLines=[];
+  result.forEach(r=>{
+    if(r.buy) logLines.push(`${r.date} BUY @ ${r.close.toFixed(4)}`);
+    if(r.sell) logLines.push(`${r.date} SELL @ ${r.close.toFixed(4)}`);
+  });
+  document.getElementById('log').textContent=logLines.join("\\n") || "No signals.";
+  const latest=result[result.length-1];
+  document.getElementById('latestSignals').innerHTML=
+    (latest.buy?'<span class=\"signal long\">Latest: BUY</span>':'')+
+    (latest.sell?'<span class=\"signal short\">Latest: SELL</span>':'');
 });
 
-document.getElementById('btnLoadSample').addEventListener('click', ()=>{
-  const ohlc = generateRandomOHLC(120);
-  processSeries(ohlc);
-});
-
-function processSeries(ohlc){
-  const opts = {
-    a: document.getElementById('inputA').value,
-    c: document.getElementById('inputC').value,
-    heikin: document.getElementById('inputHA').value === 'true'
-  };
-  const enriched = computeUT(ohlc, opts);
-  renderChart(enriched);
-
-  // log latest signals
-  const latest = enriched[enriched.length-1];
-  const logEl = document.getElementById('log');
-  let lines = [];
-  for(let i=0;i<enriched.length;i++){
-    if(enriched[i].buy) lines.push(new Date(enriched[i].date).toISOString() + '  BUY @ ' + enriched[i].close.toFixed(4));
-    if(enriched[i].sell) lines.push(new Date(enriched[i].date).toISOString() + '  SELL @ ' + enriched[i].close.toFixed(4));
-  }
-  if(lines.length===0) lines.push('No buy/sell signals detected in this run.');
-  logEl.textContent = lines.slice(-50).join('\n');
-
-  const latestSignals = document.getElementById('latestSignals');
-  latestSignals.innerHTML = '';
-  if(latest.buy) latestSignals.innerHTML += '<span class="signal long">Latest: BUY</span>';
-  if(latest.sell) latestSignals.innerHTML += '<span class="signal short">Latest: SELL</span>';
-}
-
-// initial run
-processSeries(generateRandomOHLC(120));
+// auto run
+document.getElementById('btnRun').click();
 </script>
 </body>
 </html>
