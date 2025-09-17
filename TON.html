@@ -1,324 +1,278 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TV-like • UT Bot (2,10) + LRC (100,2,2) • 100R • EmailJS Alerts (CoinGecko)</title>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-  <style>
-    :root{--bg:#0b0f14;--panel:#0f1720;--muted:#8aa0b6;--text:#e6eef7;--accent:#38bdf8;--ok:#22c55e;--bad:#ef4444}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
-    header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #1e293b}
-    h1{font-size:18px;margin:0}
-    .wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px}
-    .card{background:var(--panel);border:1px solid #1e293b;border-radius:14px;padding:12px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    label{font-size:12px;color:var(--muted)}
-    input,select,button{background:#09111e;color:var(--text);border:1px solid #213047;border-radius:12px;padding:8px 10px;font-size:13px}
-    button{cursor:pointer}
-    button.primary{background:var(--accent);color:#001018;border:none}
-    .badge{padding:3px 8px;border-radius:999px;background:#0b1220;border:1px solid #213047;color:#a7c7de;font-size:11px}
-    #tv_chart{height:520px}
-    #log{height:220px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#0a0f18;border-radius:12px;padding:10px}
-    .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .ok{color:var(--ok)}.bad{color:var(--bad)}
-    @media(max-width:1100px){.wrap{grid-template-columns:1fr}#tv_chart{height:420px}}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>UT-Bot Chart — Fixed (Binance live, LRC, markers)</title>
+
+<!-- Lightweight Charts (standalone build) -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+<style>
+  :root{
+    --bg:#071018; --panel:#0b1620; --text:#e6eef7; --muted:#9fb4c9;
+    --up:#26a69a; --down:#ef5350; --lrc:'#60A5FA';
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial}
+  .wrap{max-width:1100px;margin:12px auto;padding:10px;box-sizing:border-box}
+  header{display:flex;justify-content:space-between;align-items:center}
+  h1{margin:0;font-size:18px}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  select,input,button{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#071927;color:var(--text)}
+  button{cursor:pointer}
+  button.primary{background:#06b6d4;border:0;color:#032b30;font-weight:700}
+  #chartHolder{width:100%;height:560px;border-radius:8px;background:#07121a;margin-top:12px;box-shadow:0 8px 30px rgba(0,0,0,0.6)}
+  .row{display:flex;gap:8px;align-items:center}
+  .log{margin-top:10px;background:#05121a;padding:8px;border-radius:8px;height:140px;overflow:auto;font-family:monospace;font-size:13px}
+  .small{color:var(--muted);font-size:13px}
+  @media(max-width:720px){ #chartHolder{height:420px} .controls{gap:6px} }
+</style>
 </head>
 <body>
-<header>
-  <h1>UT Bo (2,10) + Kanal Regresi Linier 100 2 2 • 100R • CoinGecko</h1>
-  <div class="row">
-    <span class="badge" id="status">Idle</span>
-    <button class="primary" id="btnToggle">Start</button>
-  </div>
-</header>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>UT-Bot Live (fixed) — Binance klines, LRC, BUY/SELL markers</h1>
+        <div class="small">Pastikan buka via http/https server (jangan file://). Jika blank, cek console (remote debug).</div>
+      </div>
+      <div class="small">Lightweight Charts demo</div>
+    </header>
 
-<div class="wrap">
-  <aside class="card">
-    <div class="row" style="justify-content:space-between">
-      <label>Exchange / Pair</label>
-      <span class="badge" id="pairBadge">BINANCE:XRPUSDT</span>
-    </div>
+    <div class="controls" style="margin-top:12px">
+      <label class="small">Symbol</label>
+      <input id="symbol" value="CAKEUSDT" style="width:140px" />
 
-    <div class="row" style="margin-top:8px">
-      <label>Symbol</label>
-      <input id="symbol" value="XRPUSDT" style="width:130px">
-      <label>CG ID</label>
-      <input id="cgid" value="ripple" style="width:150px">
-      <button id="applySymbol">Terapkan</button>
-    </div>
-
-    <div class="row" style="margin-top:8px">
-      <label>Timeframe</label>
+      <label class="small">Interval</label>
       <select id="interval">
-        <option value="1m">1m</option>
-        <option value="3m">3m</option>
-        <option value="5m" selected>5m</option>
-        <option value="15m">15m</option>
-        <option value="1h">1h</option>
+        <option value="1m">1m</option><option value="3m">3m</option><option value="5m">5m</option>
+        <option value="15m">15m</option><option value="30m">30m</option><option value="1h">1h</option>
+        <option value="4h">4h</option><option value="1d">1d</option>
       </select>
-      <label>Candles</label>
-      <select id="limit">
-        <option>300</option>
-        <option selected>500</option>
-        <option>800</option>
-        <option>1000</option>
-      </select>
+
+      <label class="small">Candles</label>
+      <input id="limit" type="number" value="500" min="50" max="1000" style="width:90px" />
+
+      <button id="btnLoad" class="primary">Load Chart</button>
+      <button id="btnReload" disabled>Reload</button>
+      <button id="btnDbg">Open Console</button>
     </div>
 
-    <h3 class="muted" style="margin:10px 0 6px">UT Bot (2,10)</h3>
-    <div class="row">
-      <label>KV</label>
-      <input type="number" id="kv" value="2" step="0.1" style="width:80px">
-      <label>ATR</label>
-      <input type="number" id="atr" value="10" step="1" style="width:80px">
-    </div>
+    <div id="chartHolder"></div>
 
-    <h3 class="muted" style="margin:10px 0 6px">Linear Regression Channel</h3>
-    <div class="row">
-      <label>Length</label>
-      <input type="number" id="lrLen" value="100" step="1" style="width:80px">
-      <label>DevUp</label>
-      <input type="number" id="devUp" value="2" step="0.1" style="width:80px">
-      <label>DevDn</label>
-      <input type="number" id="devDn" value="2" step="0.1" style="width:80px">
-    </div>
+    <div style="display:flex;gap:12px;margin-top:12px;align-items:flex-start">
+      <div style="flex:1">
+        <div class="small">Indicator & strategy settings</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <div style="min-width:140px"><label class="small">ATR length</label><input id="atrLen" type="number" value="14" min="2" style="width:100%"/></div>
+          <div style="min-width:140px"><label class="small">ATR mult</label><input id="atrMult" type="number" value="3" step="0.1" style="width:100%"/></div>
+          <div style="min-width:140px"><label class="small">LRC len</label><input id="lrcLen" type="number" value="100" style="width:100%"/></div>
+          <div style="min-width:140px"><label class="small">LRC mult (σ)</label><input id="lrcMult" type="number" value="2" step="0.1" style="width:100%"/></div>
+        </div>
+      </div>
 
-    <h3 class="muted" style="margin:10px 0 6px">Alarm & Email</h3>
-    <div class="row">
-      <button id="btnToggleAlarm" class="primary">🔔 Alarm ON</button>
-      <button id="btnTest">Test Alarm</button>
-    </div>
-    <div class="grid" style="margin-top:8px">
-      <div>
-        <label>Email Service ID</label>
-        <input id="emailService" placeholder="service_xxx">
-      </div>
-      <div>
-        <label>Email Template ID</label>
-        <input id="emailTemplate" placeholder="template_xxx">
-      </div>
-      <div>
-        <label>Public Key</label>
-        <input id="emailUser" placeholder="YOUR_PUBLIC_KEY">
-      </div>
-      <div>
-        <label>Kirim ke Email</label>
-        <input id="emailTo" placeholder="nama@domain.com">
+      <div style="width:360px">
+        <div class="small">Status</div>
+        <div id="status" class="small" style="margin-top:6px;color:var(--muted)"></div>
+        <div class="log" id="log"></div>
       </div>
     </div>
-    <div class="row" style="margin-top:8px">
-      <button id="btnSaveEmail">Simpan EmailJS</button>
-      <span id="emailStatus" class="badge">EmailJS: Not set</span>
-    </div>
-
-    <div class="muted" style="margin-top:10px">Sumber data: CoinGecko market_chart (USD). Candle dibentuk dari agregasi ke TF yang dipilih.</div>
-  </aside>
-
-  <main class="card">
-    <div id="tv_chart"></div>
-    <div class="card" style="margin-top:12px">
-      <div class="row" style="justify-content:space-between">
-        <div><b>Live:</b> <span id="live"></span> • <span class="muted" id="lastUpdate"></span></div>
-        <div><span class="badge" id="trendBadge">Trend: -</span></div>
-      </div>
-    </div>
-    <div id="log" class="card"></div>
-  </main>
-</div>
+  </div>
 
 <script>
-(function(){
-  const symbolToCgId={
-    'XRPUSDT':'ripple',
-    'CAKEUSDT':'pancakeswap-token'
-  };
-  const tfToMinutes={'1m':1,'3m':3,'5m':5,'15m':15,'1h':60};
-  const state={running:false,alarmOn:true,symbol:'XRPUSDT',cgid:'ripple',interval:'5m',limit:500,kv:2,atr:10,lrLen:100,devUp:2,devDn:2,lastTrend:null,lastAlertBar:null,email:{service:'',template:'',user:'',to:''},_timer:null, tradingviewLoaded:false};
-  const $=id=>document.getElementById(id);
-  function log(msg){const el=$("log");el.innerHTML=`[${new Date().toLocaleString()}] ${msg}<br>`+el.innerHTML;}
-  function setStatus(s){$("status").textContent=s;}
-  function beep(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.type='sine';o.frequency.value=880;g.gain.value=0.03;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>{o.stop();ctx.close();},220);}catch(_){} }
-
-  function loadEmailCfg(){const raw=localStorage.getItem('emailjs_cfg');if(raw){try{const x=JSON.parse(raw);state.email=x;$("emailService").value=x.service||'';$("emailTemplate").value=x.template||'';$("emailUser").value=x.user||'';$("emailTo").value=x.to||'';if(x.user){emailjs.init(x.user);}updateEmailBadge();}catch(e){}}
+(async function(){
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  function log(msg, obj){
+    const t = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.textContent = `[${t}] ${msg}` + (obj ? ' ' + JSON.stringify(obj) : '');
+    logEl.prepend(line);
+    if(logEl.childNodes.length > 400) logEl.removeChild(logEl.lastChild);
+    console.log(msg, obj || '');
   }
-  function saveEmailCfg(){state.email.service=$("emailService").value.trim();state.email.template=$("emailTemplate").value.trim();state.email.user=$("emailUser").value.trim();state.email.to=$("emailTo").value.trim();localStorage.setItem('emailjs_cfg',JSON.stringify(state.email));if(state.email.user){emailjs.init(state.email.user);}updateEmailBadge();log('EmailJS disimpan');}
-  function updateEmailBadge(){const ok=state.email.service&&state.email.template&&state.email.user&&state.email.to;$("emailStatus").textContent= ok? 'EmailJS: Ready':'EmailJS: Not set'}
+  function setStatus(s){ $('status').textContent = s; }
 
-  function syncInputs(){state.interval=$("interval").value;state.limit=+$("limit").value;state.kv=+$("kv").value;state.atr=+$("atr").value;state.lrLen=+$("lrLen").value;state.devUp=+$("devUp").value;state.devDn=+$("devDn").value}
-  function applySymbol(){const s=$("symbol").value.trim().toUpperCase();if(!s) return;state.symbol=s;const mapped=symbolToCgId[s];state.cgid=$("cgid").value.trim()||mapped||'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`);}  
+  // --- Chart init & resize handling
+  const holder = $('chartHolder');
+  let chart = null, candleSeries = null, lrcCenter = null, lrcUp = null, lrcLow = null;
+  function createChart(){
+    holder.innerHTML = '';
+    chart = LightweightCharts.createChart(holder, {
+      layout: { backgroundColor: '#07121a', textColor: '#e6eef7' },
+      grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+      timeScale: { borderColor: 'rgba(255,255,255,0.06)' }
+    });
+    candleSeries = chart.addCandlestickSeries({
+      upColor: '#26a69a', downColor: '#ef5350', wickUpColor:'#26a69a', wickDownColor:'#ef5350', borderVisible:false
+    });
+    lrcCenter = chart.addLineSeries({ color:'#60A5FA', lineWidth:2 });
+    lrcUp = chart.addLineSeries({ color:'#7FB3FF', lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted });
+    lrcLow = chart.addLineSeries({ color:'#7FB3FF', lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted });
+    window.addEventListener('resize', ()=> chart.applyOptions({ width: holder.clientWidth }));
+  }
 
-  function fmt(n,d=6){return (typeof n==='number'&&isFinite(n))? n.toFixed(d):'-'}
-
-  async function getPricesFromCG(id, days) {
-  const target = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=minute`;
-
-  const tryFetch = async (u, label="") => {
-    const res = await fetch(u, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} (${label || u})`);
-    return res.json();
-  };
-
-  try {
-    // 1. coba langsung ke CoinGecko
-    const raw = await tryFetch(target, "CoinGecko direct");
-    if (raw?.prices && Array.isArray(raw.prices)) return raw.prices;
-    throw new Error("Invalid prices (direct)");
-  } catch (e1) {
-    console.warn("Direct fetch gagal:", e1.message);
-
-    try {
-      // 2. coba proxy allorigins (raw)
-      const raw = await tryFetch(
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-        "AllOrigins raw"
-      );
-      if (raw?.prices && Array.isArray(raw.prices)) return raw.prices;
-      throw new Error("Invalid prices (raw proxy)");
-    } catch (e2) {
-      console.warn("AllOrigins raw gagal:", e2.message);
-
-      // 3. fallback terakhir: allorigins wrapped
-      const wrapper = await tryFetch(
-  `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
-  "AllOrigins wrapped"
-);
-
-let parsed = {};
-try {
-  parsed = JSON.parse(wrapper.contents || "{}");
-} catch (e) {
-  console.error("Wrapper parse error:", e, "Raw:", wrapper);
-}
-
-if (parsed?.prices && Array.isArray(parsed.prices)) return parsed.prices;
-
-// ⬇️ Tambah debug biar kelihatan isi respons
-console.error("Wrapped proxy response:", parsed);
-throw new Error("Invalid prices (wrapped proxy)");
-
+  // --- Binance klines fetch (single call limit 1000)
+  async function fetchKlines(symbol, interval, limit=500){
+    symbol = symbol.toUpperCase();
+    const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+    log('Fetching klines', {url});
+    const r = await fetch(url);
+    if(r.status===429) throw new Error('Binance rate limited (429). Reduce limit or add delay.');
+    if(!r.ok){
+      const txt = await r.text(); throw new Error('Klines fetch failed: ' + r.status + ' ' + txt);
     }
-  }
-}
-
-
-
-  function aggregateToCandles(prices, tfMin, limit){const byBucket=new Map();for(const [ts,price] of prices){const minute=Math.floor(ts/60000);const bucket=Math.floor(minute/tfMin)*tfMin;const key=bucket*60000;let c=byBucket.get(key);if(!c){c={time:Math.floor(key/1000),open:price,high:price,low:price,close:price,volume:0};byBucket.set(key,c);}else{c.high=Math.max(c.high,price);c.low=Math.min(c.low,price);c.close=price;}}
-    const arr=[...byBucket.values()].sort((a,b)=>a.time-b.time);return limit? arr.slice(-limit):arr;}
-
-  async function getKlinesFromCG(id, interval, limit) {
-  const tfMin = tfToMinutes[interval] || 5;
-  const minutesNeeded = tfMin * limit;
-  let days = Math.ceil(minutesNeeded / 1440) + 1;
-  days = Math.min(Math.max(days, 1), 30);
-
-  const prices = await getPricesFromCG(id, days);
-
-  if (!Array.isArray(prices)) {
-    console.error('Invalid prices data:', prices);
-    throw new Error('prices is not iterable');
+    const j = await r.json();
+    // Map to lightweight-charts format (time in seconds)
+    return j.map(d => ({ time: Math.floor(d[0]/1000), open: +d[1], high:+d[2], low:+d[3], close:+d[4] }));
   }
 
-  return aggregateToCandles(prices, tfMin, limit);
-}
-  
-  function trueRange(c){const t=[NaN];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];const m1=a.high-a.low,m2=Math.abs(a.high-b.close),m3=Math.abs(a.low-b.close);t.push(Math.max(m1,m2,m3))}return t}
-  function atr(c,p=10){const t=trueRange(c);let o=new Array(c.length).fill(NaN);let s=0,i=1;while(i<=p&&i<t.length){s+=t[i];i++}if(i<=p)return o;o[p]=s/p;for(let j=p+1;j<t.length;j++){o[j]=(o[j-1]*(p-1)+t[j])/p}return o}
-  function utBot(c,kv=2,aP=10){const n=c.length;const r={trend:new Array(n).fill(0),upper:new Array(n).fill(NaN),lower:new Array(n).fill(NaN),line:new Array(n).fill(NaN)};const A=atr(c,aP);let tr=1,up=NaN,dn=NaN;for(let i=0;i<n;i++){const x=c[i];const hl2=(x.high+x.low)/2;const nLoss=kv*A[i];if(!isFinite(nLoss)){r.trend[i]=0;continue}const bU=hl2+nLoss,bL=hl2-nLoss;if(i===0){up=bU;dn=bL}else{const pU=r.upper[i-1];const pL=r.lower[i-1];up=(bU<pU||x.close>pU)?bU:pU;dn=(bL>pL||x.close<pL)?bL:pL}const pT=i>0?r.trend[i-1]:1;tr=x.close>up?1:x.close<dn?-1:pT;const line=tr===1?dn:up;r.trend[i]=tr;r.upper[i]=up;r.lower[i]=dn;r.line[i]=line}return r}
-  function linRegChannel(c,l=100,u=2,d=2){const n=c.length;const m=new Array(n).fill(NaN),up=new Array(n).fill(NaN),dn=new Array(n).fill(NaN);for(let i=l-1;i<n;i++){const sl=c.slice(i-l+1,i+1);const y=sl.map(z=>z.close);const M=y.length;const X=[...Array(M).keys()];const SX=X.reduce((a,b)=>a+b,0);const SY=y.reduce((a,b)=>a+b,0);const SXX=X.reduce((a,b)=>a+b*b,0);const SXY=X.reduce((a,b,j)=>a+b*y[j],0);const D=M*SXX-SX*SX;const slope=D!==0?(M*SXY-SX*SY)/D:0;const intercept=(SY-slope*SX)/M;const yHat=intercept+slope*(M-1);const s2=y.reduce((a,v,j)=>{const est=intercept+slope*j;return a+(v-est)*(v-est)},0)/M;const sd=Math.sqrt(s2);m[i]=yHat;up[i]=yHat+u*sd;dn[i]=yHat-d*sd}return{mid:m,up, dn}}
+  // --- Indicators (ATR + UT-like Supertrend flip) and LRC
+  function computeTR(candles){
+    const tr = new Array(candles.length).fill(NaN);
+    for(let i=1;i<candles.length;i++){
+      const prev = candles[i-1].close;
+      tr[i] = Math.max(candles[i].high - candles[i].low, Math.abs(candles[i].high - prev), Math.abs(candles[i].low - prev));
+    }
+    return tr;
+  }
+  function computeATR(candles, period){
+    const tr = computeTR(candles);
+    const atr = new Array(candles.length).fill(NaN);
+    let sum = 0;
+    for(let i=1;i<=period;i++) sum += tr[i] || 0;
+    atr[period] = sum/period;
+    for(let i=period+1;i<candles.length;i++){
+      atr[i] = ((atr[i-1] * (period-1)) + tr[i]) / period;
+    }
+    return atr;
+  }
 
-  async function step() {
-  try {
-    syncInputs();
-    const candles = await getKlinesFromCG(state.cgid, state.interval, state.limit);
-    if (!candles.length) return;
-
-    const ut = utBot(candles, state.kv, state.atr);
-    const lr = linRegChannel(candles, state.lrLen, state.devUp, state.devDn);
-    const last = candles[candles.length - 1];
-    const prevTrend = ut.trend[ut.trend.length - 2] ?? null;
-    const lastTrend = ut.trend[ut.trend.length - 1];
-
-    $("live").textContent = `${fmt(last.close)} USD`;
-    $("lastUpdate").textContent = `TF ${state.interval} • ${new Date(last.time * 1000).toLocaleString()}`;
-    $("trendBadge").textContent = `Trend: ${lastTrend > 0 ? 'UP' : lastTrend < 0 ? 'DOWN' : '-'}`;
-
-    const barKey = last.time;
-    if (state.alarmOn) {
-      if (state.lastTrend !== null && state.lastAlertBar !== barKey) {
-        if (prevTrend === -1 && lastTrend === 1) {
-          fireAlert('BUY', last, lr);
-        } else if (prevTrend === 1 && lastTrend === -1) {
-          fireAlert('SELL', last, lr);
-        }
+  function supertrendSignals(candles, atrLen=14, mult=3){
+    const n = candles.length;
+    const atr = computeATR(candles, atrLen);
+    const hl2 = candles.map(c => (c.high + c.low)/2);
+    const upper = new Array(n).fill(NaN), lower = new Array(n).fill(NaN), finalUpper = new Array(n).fill(NaN), finalLower = new Array(n).fill(NaN);
+    const trend = new Array(n).fill(1);
+    const signals = []; // {index, type, time, price}
+    for(let i=atrLen;i<n;i++){
+      upper[i] = hl2[i] + mult * atr[i];
+      lower[i] = hl2[i] - mult * atr[i];
+      // final adjust
+      if(i===atrLen){ finalUpper[i] = upper[i]; finalLower[i] = lower[i]; continue; }
+      finalUpper[i] = (upper[i] < finalUpper[i-1]) ? upper[i] : finalUpper[i-1];
+      finalLower[i] = (lower[i] > finalLower[i-1]) ? lower[i] : finalLower[i-1];
+      // determine trend flip
+      let dirPrev = (candles[i-1].close > finalLower[i-1]) ? 1 : -1;
+      let dirNow = dirPrev;
+      if(candles[i].close > finalUpper[i-1]) dirNow = 1;
+      else if(candles[i].close < finalLower[i-1]) dirNow = -1;
+      trend[i] = dirNow;
+      if(dirNow !== dirPrev){
+        signals.push({ index:i, type: dirNow===1 ? 'BUY' : 'SELL', time: candles[i].time, price: candles[i].close });
       }
     }
-
-    state.lastTrend = lastTrend;
-    state.lastAlertBar = barKey;
-  } catch (e) {
-    console.error('Step error:', e);
-    log('Error: ' + e.message);
+    return { atr, finalUpper, finalLower, signals, hl2 };
   }
-}
 
-function fireAlert(side,last,lr){
-  beep();
-  log((side==='BUY'?'🚀 ':'🔻 ')+side+` ${state.symbol} • ${fmt(last.close)} USD`);
-
-  if(state.email.service && state.email.template && state.email.user && state.email.to){
-    const params={
-      side,
-      price: fmt(last.close),
-      time: new Date(last.time*1000).toLocaleString(),
-      pair: `${state.symbol.replace('USDT','')}/USD`,
-      interval: state.interval,
-      dev_up: fmt(lr.up.at(-1)),
-      dev_dn: fmt(lr.dn.at(-1)),
-      to: state.email.to
-    };
-
-    emailjs.send(state.email.service, state.email.template, params)
-      .then(()=>{
-        log('✅ Email terkirim');
-      })
-      .catch(err=>{
-        // Tampilkan info error lebih detail
-        const msg = err?.status === 401
-          ? '❌ Email gagal: HTTP 401 Unauthorized (cek Public Key / Service ID / Template ID)'
-          : '❌ Email gagal: ' + (err?.text || err?.message || JSON.stringify(err));
-        log(msg);
-        console.error("EmailJS Error:", err);
-      });
-  } else {
-    log("⚠️ EmailJS belum diset (isi Service ID, Template ID, Public Key, dan Email tujuan)");
+  function linearRegressionChannel(candles, len, mult){
+    const n = candles.length;
+    const center = new Array(n).fill(NaN);
+    const up = new Array(n).fill(NaN);
+    const low = new Array(n).fill(NaN);
+    for(let i=len-1;i<n;i++){
+      const slice = candles.slice(i-len+1, i+1);
+      const closes = slice.map(s => s.close);
+      // compute linear regression slope & intercept via least squares
+      const m = len;
+      let sumX=0,sumY=0,sumXY=0,sumXX=0;
+      for(let k=0;k<m;k++){ sumX+=k; sumY+=closes[k]; sumXY+=k*closes[k]; sumXX+=k*k; }
+      const denom = (m*sumXX - sumX*sumX);
+      if(denom === 0) continue;
+      const a = (m*sumXY - sumX*sumY)/denom;
+      const b = (sumY - a*sumX)/m;
+      const yAtEnd = a*(m-1) + b;
+      center[i] = yAtEnd;
+      let ss=0;
+      for(let k=0;k<m;k++){ const yk = a*k + b; ss += (closes[k]-yk)*(closes[k]-yk); }
+      const sd = Math.sqrt(ss/m);
+      up[i] = yAtEnd + mult*sd;
+      low[i] = yAtEnd - mult*sd;
+    }
+    return { center, up, low };
   }
-}
 
+  // --- draw helpers (only set points that are finite)
+  function arrToSeriesForLine(candles, arr){
+    const out = [];
+    for(let i=0;i<candles.length;i++){
+      if(Number.isFinite(arr[i])) out.push({ time: candles[i].time, value: arr[i] });
+    }
+    return out;
+  }
 
-  
-  const btnToggle=$("btnToggle");
-  const btnAlarm=$("btnToggleAlarm");
-  const btnTest=$("btnTest");
-  const btnSaveEmail=$("btnSaveEmail");
-  const applyBtn=$("applySymbol");
+  // --- load and render
+  async function loadAndRender(){
+    try{
+      setStatus('Loading...');
+      const symbol = $('symbol').value.trim() || 'CAKEUSDT';
+      const interval = $('interval').value;
+      const limit = Math.max(50, Math.min(1000, Number($('limit').value) || 500));
+      log('Load start', {symbol, interval, limit});
+      const candles = await fetchKlines(symbol, interval, limit);
+      if(!chart) createChart();
+      candleSeries.setData(candles);
+      // LRC
+      const lrcLen = Math.max(10, parseInt($('lrcLen').value)||100);
+      const lrcMult = Math.max(0.1, parseFloat($('lrcMult').value)||2);
+      const lrc = linearRegressionChannel(candles, lrcLen, lrcMult);
+      lrcCenter.setData(arrToSeriesForLine(candles, lrc.center));
+      lrcUp.setData(arrToSeriesForLine(candles, lrc.up));
+      lrcLow.setData(arrToSeriesForLine(candles, lrc.low));
+      // UT supertrend
+      const atrLen = Math.max(2, parseInt($('atrLen').value)||14);
+      const atrMult = Math.max(0.1, parseFloat($('atrMult').value)||3);
+      const ut = supertrendSignals(candles, atrLen, atrMult);
+      // markers
+      const markers = ut.signals.map(s => ({
+        time: candles[s.index].time,
+        position: s.type==='BUY' ? 'belowBar' : 'aboveBar',
+        color: s.type==='BUY' ? '#00d28a' : '#ff6b6b',
+        shape: s.type==='BUY' ? 'arrowUp' : 'arrowDown',
+        text: `${s.type}`
+      }));
+      candleSeries.setMarkers(markers);
+      log('Rendered: candles', candles.length, 'signals', ut.signals.length);
+      setStatus(`Loaded ${symbol} ${interval} (${candles.length} candles). Signals: ${ut.signals.length}`);
+      $('btnReload').disabled = false;
+      // scroll to rightmost
+      chart.timeScale().scrollToRealTime();
+    }catch(err){
+      log('Load error: ' + (err.message || err));
+      setStatus('Error: ' + (err.message || 'unknown'));
+      $('btnReload').disabled = false;
+    }
+  }
 
-  btnToggle.onclick=()=>{state.running=!state.running;setStatus(state.running? 'Running':'Stopped');btnToggle.textContent=state.running? 'Stop':'Start'; if(state.running){step(); if(!state._timer) state._timer=setInterval(step,30000);} else { if(state._timer){clearInterval(state._timer);state._timer=null;} } };
-  btnAlarm.onclick=()=>{state.alarmOn=!state.alarmOn;btnAlarm.textContent=state.alarmOn? '🔔 Alarm ON':'🔕 Alarm OFF'};
-  btnTest.onclick=()=>{fireAlert('TEST',{close:NaN,time:Math.floor(Date.now()/1000)},{up:[NaN],dn:[NaN]})};
-  btnSaveEmail.onclick=saveEmailCfg;
-  applyBtn.onclick=()=>{const s=$("symbol").value.trim().toUpperCase();const idField=$("cgid").value.trim();state.symbol=s;state.cgid=idField || symbolToCgId[s] || 'ripple';$("pairBadge").textContent=`BINANCE:${s}`;renderTV();log(`Symbol diterapkan: ${s} • CG: ${state.cgid}`)};
+  // events
+  $('btnLoad').addEventListener('click', async ()=>{
+    $('btnReload').disabled = true;
+    try{ await loadAndRender(); }catch(e){ log('btnLoad err', e.message); }
+  });
+  $('btnReload').addEventListener('click', async ()=>{ $('btnReload').disabled=true; await loadAndRender(); });
 
-  function renderTV(){ new TradingView.widget({autosize:true,symbol:`BINANCE:${state.symbol}`,interval:"5",timezone:"Etc/UTC",theme:"dark",style:"1",locale:"en",hide_top_toolbar:false,hide_legend:false,container_id:"tv_chart"}); }
+  $('btnDbg').addEventListener('click', ()=>{ alert('Open browser console (F12) or use remote debugging for mobile.'); });
 
-  (function initDefaults(){const s=$("symbol").value.trim().toUpperCase();$("cgid").value=symbolToCgId[s]||'ripple';state.symbol=s;state.cgid=$("cgid").value.trim();})();
-  loadEmailCfg();
-  setStatus('Idle');
-  renderTV();
-  step();
+  // initial create + small delay then auto load (fix for mobile where container may be zero height initially)
+  createChart();
+  // ensure chart has correct size after layout stabilized
+  setTimeout(()=> {
+    try{ chart.applyOptions({ width: holder.clientWidth }); }catch(e){}
+    $('btnLoad').click();
+  }, 300);
+
+  // expose for debug
+  window._utfix = { createChart, loadAndRender };
 })();
 </script>
 </body>
