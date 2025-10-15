@@ -75,8 +75,8 @@
                 <input id="barsKeep" type="number" value="600" />
               </div>
               <div>
-                <label>Slippage (e.g. 0.01)</label>
-                <input id="slippage" value="0.01" />
+                <label>Slippage (e.g. 0.1)</label>
+                <input id="slippage" value="0.1" />
               </div>
               <div>
                 <label>UT ATR</label>
@@ -456,7 +456,7 @@
         log('Estimating amountsOut for sell...');
         const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
-        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
         log(`Estimate out: ${outBig} | min after slip: ${outMin}`);
 
         const confirmMsg = `CONFIRM SELL?\\nToken: ${token}\\nBase: ${base}\\nAmountToken (raw): ${amountIn}\\nEstimatedBase (raw): ${outBig}\\nSlippage: ${elSlippage.value}\\nReply CONFIRM to proceed.`;
