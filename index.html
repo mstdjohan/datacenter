@@ -1,573 +1,164 @@
-<!doctype html>
-<html lang="id">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoBot PancakeSwap — USDT↔CAKE · LRC(open,100,2,2) + UTBot(1,10)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAKE/USDT Precision Reversal Auto-Trade</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <style>
-    :root { --bg:#fffaf2; --card:#ffffffcc; --border:#e8e2d9; --text:#1e1b16; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; color:var(--text); background:linear-gradient(#fff7e6,#fff); }
-    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-    .row { display:grid; grid-template-columns: 1.6fr 1fr; gap:16px; }
-    h1 { font-size: 20px; margin:0 0 12px; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow: 0 8px 20px rgba(0,0,0,.04); }
-    .controls { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
-    .controls label { font-size:12px; opacity:.8; }
-    .controls input, .controls select { width:100%; padding:8px 10px; border-radius:12px; border:1px solid #ddd; background:#fff; }
-    .controls .col3 { grid-column: span 2; }
-    .btn { border:0; border-radius:16px; padding:10px 14px; font-weight:600; cursor:pointer; }
-    .btn.primary{ background:#111; color:#fff; }
-    .btn.buy{ background:#2563eb; color:#fff; }
-    .btn.sell{ background:#f59e0b; color:#fff; }
-    .btn.auto{ background:#16a34a; color:#fff; }
-    .btn.stop{ background:#dc2626; color:#fff; }
-    .statgrid{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
-    .stat{ background:#ffffff80; border:1px solid var(--border); border-radius:14px; padding:12px; }
-    .stat .lbl{ font-size:12px; opacity:.7 }
-    .stat .val{ font-size:18px; font-weight:700 }
-    .log{ max-height:240px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; white-space:pre-wrap }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:#fff; font-size:12px }
-    .tests li.pass{ color:#15803d } .tests li.fail{ color:#b91c1c }
-    #tvwrap{ height:420px; }
-    #lwchart{ height:420px; }
+    body { background:#0b0f19; color:#fff; font-family:Arial; text-align:center; }
+    #chart-container { width:95%; height:500px; margin:20px auto; }
+    button { margin:5px; padding:10px 20px; border:none; border-radius:8px; background:#1e88e5; color:white; cursor:pointer; }
+    button:hover { background:#1565c0; }
+    #status { margin-top:10px; }
   </style>
-  <!-- Ethers v6 UMD -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
-  <!-- TradingView Lightweight Charts (untuk indikator & sinyal) -->
-  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="row">
-      <div>
-        <div class="card">
-          <h1>AutoBot — USDT↔CAKE · LRC(<b>open</b>,100,2,2) + UTBot(1,10)</h1>
-
-          <!-- TradingView Widget (grafik live) -->
-          <div class="card" style="padding:0; overflow:hidden; margin-bottom:10px">
-            <div id="tvwrap">
-              <div class="tradingview-widget-container" style="height:100%; width:100%">
-                <div id="tv_chart" style="height:100%; width:100%"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Chart indikator & sinyal (Lightweight Charts) -->
-          <div class="card" style="padding:8px">
-            <div id="lwchart"></div>
-          </div>
-
-          <div class="statgrid" style="margin-top:12px">
-            <div class="stat"><div class="lbl">Price (1 USDT → CAKE)</div><div class="val" id="statPrice">—</div></div>
-            <div class="stat"><div class="lbl">Bars</div><div class="val" id="statBars">0</div></div>
-            <div class="stat"><div class="lbl">Last Signal</div><div class="val" id="statSignal">—</div></div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-            <button class="btn primary" id="btnConnect">Connect (TrustWallet/MetaMask)</button>
-            <span class="pill">Addr: <span id="addr">—</span></span>
-            <button class="btn auto" id="btnAuto">Start Auto</button>
-            <button class="btn buy" id="btnBuy">Manual BUY</button>
-            <button class="btn sell" id="btnSell">Manual SELL</button>
-            <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
-          </div>
-          <div class="controls" style="margin-top:10px">
-            <div>
-              <label>BASE (USDT)</label>
-              <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
-            </div>
-            <div>
-              <label>TOKEN (CAKE)</label>
-              <input id="token" value="0x0E09FABB73Bd3ADE0a17ECC321fD13a19e81cE82" />
-            </div>
-            <div>
-              <label>Exch Symbol (TV/Binance)</label>
-              <select id="symbol">
-                <option value="CAKEUSDT" selected>CAKEUSDT (Binance spot)</option>
-                <option value="XRPUSDT">XRPUSDT (contoh)</option>
-                <option value="BNBUSDT">BNBUSDT (contoh)</option>
-              </select>
-            </div>
-            <div>
-              <label>Interval</label>
-              <select id="interval">
-                <option value="1m" selected>1m</option>
-                <option value="5m">5m</option>
-                <option value="15m">15m</option>
-              </select>
-            </div>
-            <div>
-              <label>Bars to keep</label>
-              <input id="barsKeep" type="number" value="600" />
-            </div>
-            <div>
-              <label>Amount In (BASE)</label>
-              <input id="amountIn" value="1.0" />
-            </div>
-            <div>
-              <label>Slippage (e.g. 0.005)</label>
-              <input id="slippage" value="0.005" />
-            </div>
-            <div>
-              <label>UT ATR</label>
-              <input id="utAtr" type="number" value="1" />
-            </div>
-            <div>
-              <label>UT Factor</label>
-              <input id="utFactor" type="number" value="10" />
-            </div>
-            <div class="col3">
-              <small>
-                TV widget = tampilan live TradingView. Indikator dihitung lokal dan divisualkan pada chart kedua.
-                Rule: <b>BUY</b> jika UTBot=buy & harga ≤ LRC <i>lower</i>. <b>SELL</b> jika UTBot=sell atau harga ≥ LRC <i>upper</i>.
-              </small>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <b>Logs</b>
-          <div class="log" id="logs"></div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <b>Self-Tests</b>
-          <ul class="tests" id="tests"></ul>
-        </div>
-      </div>
-
-      <div>
-        <div class="card">
-          <b>Aturan Eksekusi</b>
-          <ol>
-            <li><b>BUY</b> jika UT Bot = <i>buy</i> dan harga ≤ LRC lower.</li>
-            <li><b>SELL</b> jika UT Bot = <i>sell</i> atau harga ≥ LRC upper.</li>
-          </ol>
-          <p>Default pair: <b>USDT ↔ CAKE</b> (BSC mainnet).</p>
-          <p>Connect memprioritaskan TrustWallet bila tersedia, lalu MetaMask / penyedia EIP-1193 lain.</p>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <b>Disclaimer</b>
-          <ul>
-            <li>Contoh edukasi. Risiko ditanggung pengguna.</li>
-            <li>Biaya gas berlaku untuk trade nyata. Pastikan likuiditas & token benar.</li>
-            <li>Desimal disederhanakan 18; produksi sebaiknya query decimals token.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+  <h2>CAKE/USDT — Precision Reversal Auto-Trader</h2>
+  <div id="chart-container"><canvas id="chart"></canvas></div>
+  <div>
+    <button id="connectBtn">🔗 Connect Wallet</button>
+    <button id="manualBuy">🟢 Manual BUY</button>
+    <button id="manualSell">🔴 Manual SELL</button>
   </div>
+  <div id="status">Status: <span id="walletStatus">Disconnected</span></div>
 
-  <!-- TradingView widget loader -->
-  <script src="https://s3.tradingview.com/tv.js"></script>
+  <script>
+    const pairAddress = "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0";
+    const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+    const cakeToken = "0x0E09FABB73Bd3ADE0a17ECC321fD13a19e81cE82";
+    const usdtToken = "0x55d398326f99059fF775485246999027B3197955";
+    let provider, signer, walletAddress;
 
-<script>
-(() => {
-  const { BrowserProvider, JsonRpcProvider, Contract, ZeroAddress, formatUnits, parseUnits, getAddress } = ethers;
+    async function connectWallet() {
+      if (!window.ethereum) return alert("MetaMask not detected");
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      walletAddress = await signer.getAddress();
+      document.getElementById("walletStatus").textContent = walletAddress;
+      console.log("✅ Connected:", walletAddress);
+    }
+    document.getElementById("connectBtn").onclick = connectWallet;
 
-  // ---------- Konstanta ----------
-  const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
-  const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
-  const ROUTER_ABI = [
-    "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
-    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
-  ];
-  const ERC20_ABI = [
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    "function balanceOf(address) view returns (uint256)",
-    "function allowance(address owner, address spender) view returns (uint256)",
-    "function approve(address spender, uint256 amount) returns (bool)"
-  ];
-
-  // ---------- DOM ----------
-  const $ = (id) => document.getElementById(id);
-  const elPrice = $("statPrice"), elBars = $("statBars"), elSignal = $("statSignal"), elLogs = $("logs");
-  const elBase = $("base"), elToken = $("token"), elBarsKeep = $("barsKeep"), elAmountIn=$("amountIn"), elSlip=$("slippage");
-  const elUtAtr=$("utAtr"), elUtFactor=$("utFactor"), elAddr=$("addr"), elPaper=$("paper");
-  const btnConn=$("btnConnect"), btnAuto=$("btnAuto"), btnBuy=$("btnBuy"), btnSell=$("btnSell");
-  const elSymbol=$("symbol"), elInterval=$("interval");
-
-  // ---------- Provider ----------
-  const readProvider = new JsonRpcProvider(DEFAULT_RPC);
-  let walletProvider = null; // BrowserProvider
-  let signer = null; let address = null;
-
-  // ---------- TradingView Live Widget ----------
-  function mountTradingView() {
-    const tvSymbol = (elSymbol.value || "CAKEUSDT");
-    const tvSymbolFull = tvSymbol.endsWith("USDT") ? `BINANCE:${tvSymbol}` : tvSymbol;
-    /* global TradingView */
-    new TradingView.widget({
-      autosize: true,
-      symbol: tvSymbolFull,
-      interval: elInterval.value || "1",
-      timezone: "Etc/UTC",
-      theme: "light",
-      style: "1",
-      locale: "id",
-      toolbar_bg: "#f1f3f6",
-      enable_publishing: false,
-      hide_side_toolbar: false,
-      withdateranges: true,
-      container_id: "tv_chart"
+    const ctx = document.getElementById('chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'candlestick',
+      data: { datasets: [{ label: 'CAKE/USDT', data: [] }] },
+      options: {
+        plugins: { legend: { labels: { color: '#fff' } } },
+        scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } }
+      }
     });
-  }
 
-  // ---------- Chart indikator (LWC) ----------
-  const lwc = LightweightCharts.createChart(document.getElementById('lwchart'), {
-    layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
-    rightPriceScale: { borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } },
-    crosshair:{ mode:1 }
-  });
-  const candleSeries = lwc.addCandlestickSeries();
-  const upperLine = lwc.addLineSeries({ lineWidth:1, lineStyle:1 });
-  const lowerLine = lwc.addLineSeries({ lineWidth:1, lineStyle:1 });
-  const midLine   = lwc.addLineSeries({ lineWidth:2 });
-  const trailLine = lwc.addLineSeries({ lineWidth:1, lineStyle:3 });
-
-  // ---------- State ----------
-  let bars = []; // {t, open, high, low, close}
-  let auto = false;
-  let polling = null;
-  let isHolding = false;
-  let entryPrice = null;
-
-  const routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
-
-  // --- FIX “Alamat tidak valid” robust normalization (ONLY for addresses) ---
-  const safeAddr = (v) => {
-    try {
-      const raw = String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g, ''); // hapus karakter tak terlihat
-      try { return getAddress(raw); } catch { return getAddress(raw.toLowerCase()); } // fallback: lower → re-checksum
-    } catch (e) {
-      log('Alamat tidak valid: ' + v);
-      return null;
-    }
-  };
-
-  const getPathBuy = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [a,b]: null; };
-  const getPathSell = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [b,a]: null; };
-
-  // ---------- Utils ----------
-  function log(msg){ const line = `[${new Date().toLocaleTimeString()}] ${msg}`; elLogs.textContent = line + "\n" + elLogs.textContent; }
-
-  // Linear regression over array y using x=1..n (untuk LRC open)
-  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
-  function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
-  // ATR(period=1) = TR
-  function computeATR(ohlc, period=1){ if(ohlc.length<2) return Array(ohlc.length).fill(null); const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high,l=ohlc[i].low,pc=ohlc[i-1].close; const tr=Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)); trs.push(tr);} const atr=[]; let ema=null; const k=2/(period+1); for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i]+(1-k)*ema; atr.push(ema);} return [null,...atr]; }
-
-  // LRC (open, 100, 2, 2)
-  function computeLRC_Open(bars, length=100, devUp=2, devDn=2){
-    const opens=bars.map(b=>b.open); const n=opens.length;
-    const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null);
-    if(n<length) return {mid,upper,lower};
-    for(let i=length-1;i<n;i++){
-      const win=opens.slice(i-length+1,i+1);
-      const {slope,intercept}=linearRegression(win);
-      const xLast = length; // regresi pada titik terakhir
-      const midVal=slope*xLast+intercept;
-      const resid=win.map((v,idx)=>v-(slope*(idx+1)+intercept));
-      const sd=stdev(resid);
-      mid[i]=midVal; upper[i]=midVal+devUp*sd; lower[i]=midVal-devDn*sd;
-    }
-    return {mid,upper,lower};
-  }
-
-  // UT Bot Alerts (atr=1, factor=10) - simplified trailing-stop behaviour
-  function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){
-    const atrArr=computeATR(ohlc, atrPeriod);
-    const signals=new Array(ohlc.length).fill(null);
-    const trail=new Array(ohlc.length).fill(null);
-    if(ohlc.length===0) return {signals,trail};
-    // initialize trend neutral
-    let trend = 0;
-    let ts = null;
-    for(let i=0;i<ohlc.length;i++){
-      const c = ohlc[i].close;
-      const atr = atrArr[i] ?? 0;
-      const buyTs = c - factor * atr;
-      const sellTs = c + factor * atr;
-      if (i === 0){
-        // no decision on first bar
-        ts = buyTs;
-        trail[i] = ts;
-        trend = 1;
-        continue;
-      }
-      if (trend >= 0){
-        ts = ts == null ? buyTs : Math.max(ts, buyTs);
-        trail[i] = ts;
-        if (c < ts){
-          // flip to down
-          trend = -1;
-          signals[i] = 'sell';
-          ts = sellTs;
-          trail[i] = ts;
-        } else {
-          trend = 1;
-        }
-      } else {
-        ts = ts == null ? sellTs : Math.min(ts, sellTs);
-        trail[i] = ts;
-        if (c > ts){
-          // flip to up
-          trend = 1;
-          signals[i] = 'buy';
-          ts = buyTs;
-          trail[i] = ts;
-        } else {
-          trend = -1;
+    function calcRSI(data, period = 14) {
+      let gains = 0, losses = 0, rsi = [];
+      for (let i = 1; i < data.length; i++) {
+        const diff = data[i].c - data[i-1].c;
+        gains += diff > 0 ? diff : 0;
+        losses += diff < 0 ? -diff : 0;
+        if (i >= period) {
+          const avgGain = gains / period;
+          const avgLoss = losses / period;
+          const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+          rsi.push(100 - 100 / (1 + rs));
+          gains -= (data[i - period + 1].c - data[i - period].c) > 0 ? (data[i - period + 1].c - data[i - period].c) : 0;
+          losses -= (data[i - period + 1].c - data[i - period].c) < 0 ? -(data[i - period + 1].c - data[i - period].c) : 0;
         }
       }
+      return rsi;
     }
-    return {signals, trail};
-  }
 
-  function toSeries(arr){ return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean); }
-
-  function renderAll(){
-    const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
-    candleSeries.setData(cand);
-    const lrc = computeLRC_Open(bars, 100, 2, 2);
-    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
-    upperLine.setData(toSeries(lrc.upper));
-    lowerLine.setData(toSeries(lrc.lower));
-    midLine.setData(toSeries(lrc.mid));
-    trailLine.setData(toSeries(ut.trail));
-
-    // markers di candleSeries (UT signals)
-    const markers = [];
-    for(let i=0;i<bars.length;i++){
-      if(!ut.signals[i]) continue;
-      const m = {
-        time: Math.floor(bars[i].t/1000),
-        position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar',
-        shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown',
-        text: ut.signals[i].toUpperCase()
-      };
-      markers.push(m);
+    function linearRegression(data, length = 100) {
+      const sliced = data.slice(-length);
+      const n = sliced.length;
+      const sumX = sliced.reduce((a, _, i) => a + i, 0);
+      const sumY = sliced.reduce((a, b) => a + b.c, 0);
+      const sumXY = sliced.reduce((a, b, i) => a + i * b.c, 0);
+      const sumX2 = sliced.reduce((a, _, i) => a + i * i, 0);
+      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      const intercept = (sumY - slope * sumX) / n;
+      const channel = sliced.map((_, i) => ({ mid: slope * i + intercept, up: slope * i + intercept * 1.02, low: slope * i + intercept * 0.98 }));
+      return channel;
     }
-    candleSeries.setMarkers(markers);
-  }
 
-  // ---------- Data: Binance klines ----------
-  const BINANCE_BASE = "https://api.binance.com/api/v3";
-  const intervalMap = { "1m":"1m", "5m":"5m", "15m":"15m" };
+    async function fetchData() {
+      const res = await fetch("https://api.dexscreener.com/latest/dex/pairs/bsc/" + pairAddress);
+      const json = await res.json();
+      const price = parseFloat(json.pair.priceUsd);
+      const candle = { t: new Date(), o: price, h: price*1.001, l: price*0.999, c: price };
+      chart.data.datasets[0].data.push(candle);
+      if (chart.data.datasets[0].data.length > 200) chart.data.datasets[0].data.shift();
+      chart.update();
 
-  async function fetchInitial(symbol, interval, limit=600){
-    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
-    const res = await fetch(url); const arr = await res.json();
-    return arr.map(k=>({ t: k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
-  }
+      const data = chart.data.datasets[0].data;
+      if (data.length < 20) return;
 
-  async function fetchLatest(symbol, interval){
-    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=2`;
-    const res = await fetch(url); const arr = await res.json();
-    const k = arr[arr.length-1];
-    return { t:k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
-  }
+      const rsi = calcRSI(data);
+      const lr = linearRegression(data);
+      const last = data[data.length - 1];
+      const lastRSI = rsi[rsi.length - 1];
+      const lastLR = lr[lr.length - 1];
 
-  async function startPolling(){
-    if (polling) clearInterval(polling);
-    const sym = elSymbol.value || "CAKEUSDT";
-    const tf = elInterval.value || "1m";
-    try {
-      bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
-      renderAll();
-      mountTradingView(); // pasang/refresh TV widget untuk simbol & interval yang sama
-      log(`Loaded ${bars.length} bars from Binance for ${sym} ${tf}`);
-    } catch(e){ log('Load error: '+(e.message||e)); }
-
-    // jadwal polling
-    const ms = tf==="1m" ? 10_000 : tf==="5m" ? 30_000 : 60_000;
-    polling = setInterval(async () => {
-      try{
-        const latest = await fetchLatest(sym, tf);
-        // replace last if same t, else push
-        const keep = Number(elBarsKeep.value||600);
-        if (bars.length && bars[bars.length-1].t === latest.t) bars[bars.length-1] = latest;
-        else bars = [...bars, latest].slice(-keep);
-        renderAll();
-        elBars.textContent = bars.length;
-        // update statPrice sebagai 1 USDT -> CAKE dengan router on-chain (approx)
-        const p = await fetchRouterQuote();
-        if (p!=null) elPrice.textContent = p.toFixed(8);
-        // auto evaluate ONLY if auto enabled
-        if (auto) await evaluateAndMaybeTrade();
-      }catch(e){ log('Poll error: '+(e.message||e)); }
-    }, ms);
-  }
-
-  async function fetchRouterQuote(){
-    try{
-      const one = parseUnits('1', 18);
-      const path = getPathBuy(); if(!path) return null;
-      const amounts = await routerRead.getAmountsOut(one, path);
-      const out = Number(formatUnits(amounts[amounts.length-1], 18));
-      return out; // 1 USDT → CAKE
-    }catch(e){ log('Price error: '+(e.message||e)); return null; }
-  }
-
-  // ---------- Wallet ----------
-  async function detectWalletProvider(){
-    const any = window.ethereum;
-    if (!any) return null;
-    if (window.trustwallet) return new BrowserProvider(window.trustwallet);
-    if (any.providers && Array.isArray(any.providers)){
-      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
-      if (trust) return new BrowserProvider(trust);
-      const mm = any.providers.find(p=>p.isMetaMask);
-      if (mm) return new BrowserProvider(mm);
-      return new BrowserProvider(any.providers[0]);
-    }
-    return new BrowserProvider(any);
-  }
-
-  async function connectWallet(){
-    walletProvider = await detectWalletProvider();
-    if (!walletProvider){ alert('EIP-1193 wallet tidak ditemukan'); return; }
-    await walletProvider.send('eth_requestAccounts', []);
-    signer = await walletProvider.getSigner();
-    address = await signer.getAddress();
-    $("addr").textContent = address.slice(0,6)+"…"+address.slice(-4);
-    log('Wallet terhubung.');
-  }
-
-  // ---------- Trading logic ----------
-  function decide(){
-    if (!bars.length) return null;
-    const lrc = computeLRC_Open(bars, 100, 2, 2);
-    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
-    const i = bars.length-1;
-    const sig = ut.signals[i];
-    const price = bars[i].close;
-
-    // prefer BUY at LRC LOWER (ambil titik bawah channel)
-    if (sig === 'buy' && lrc.lower[i]!=null && price <= lrc.lower[i]) return 'buy';
-    // SELL if UT says sell OR price above/at upper channel
-    if ((sig === 'sell') || (lrc.upper[i]!=null && price >= lrc.upper[i])) return 'sell';
-    return null;
-  }
-
-  async function ensureApproval(tokenAddr, spender, amount){
-    if (!signer) return;
-    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
-    const allowance = await erc.allowance(address, spender);
-    if (allowance < amount){ const tx = await erc.approve(spender, amount); log('Approve: '+tx.hash); await tx.wait(); }
-  }
-
-  function calcOutMin(amountOut, slipFloat){ const bps=10000n; const slipBps = BigInt(Math.floor((slipFloat||0)*10000)); return (BigInt(amountOut.toString()) * (bps - slipBps))/bps; }
-
-  async function executeTrade(direction){
-    if (elPaper.checked){ 
-      log('[PAPER] '+direction.toUpperCase());
-      // simulate position changes in paper mode
-      if (direction === 'buy'){ isHolding = true; entryPrice = bars[bars.length-1].close; log(`[PAPER] entryPrice=${entryPrice}`); }
-      if (direction === 'sell'){ isHolding = false; log('[PAPER] position closed'); entryPrice = null; }
-      return; 
-    }
-    if (!signer){ alert('Connect wallet dulu'); return; }
-    const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
-    const base = safeAddr(elBase.value), token = safeAddr(elToken.value);
-    if (!base || !token){ alert('Alamat token tidak valid'); return; }
-
-    try{
-      const baseDecimals = 18; // Sederhana; produksi: query decimals()
-      const amountInUnits = parseUnits(String(elAmountIn.value||'0'), baseDecimals);
-      const deadline = Math.floor(Date.now()/1000) + 300;
-      const path = direction==='buy' ? [base, token] : [token, base];
-
-      const amountsOut = await router.getAmountsOut(amountInUnits, path);
-      const outMin = calcOutMin(amountsOut[amountsOut.length-1], Number(elSlip.value||0));
-
-      let tx;
-      if (direction==='buy'){
-        if (path[0] === ZeroAddress){
-          tx = await router.swapExactETHForTokens(outMin, path, address, deadline, { value: amountInUnits });
-        } else {
-          await ensureApproval(path[0], PCS_V2_ROUTER, amountInUnits);
-          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
-        }
-      } else {
-        await ensureApproval(path[0], PCS_V2_ROUTER, amountInUnits);
-        if (path[path.length-1] === ZeroAddress){
-          tx = await router.swapExactTokensForETH(amountInUnits, outMin, path, address, deadline);
-        } else {
-          tx = await router.swapExactTokensForTokens(amountInUnits, outMin, path, address, deadline);
-        }
+      if (last.c <= lastLR.low && lastRSI < 30) {
+        console.log('🟢 BUY Signal');
+        autoSwap('BUY');
+      } else if (last.c >= lastLR.up && lastRSI > 70) {
+        console.log('🔴 SELL Signal');
+        autoSwap('SELL');
       }
-      log(direction.toUpperCase()+" sent: "+tx.hash);
-      await tx.wait();
-      log(direction.toUpperCase()+" confirmed");
-      // update holding state after confirmation
-      if (direction === 'buy'){ isHolding = true; entryPrice = bars[bars.length-1].close; log('EntryPrice set: '+entryPrice); }
-      if (direction === 'sell'){ isHolding = false; entryPrice = null; log('Position closed'); }
-    }catch(e){ log('Trade failed: '+(e.reason||e.message||e)); }
-  }
+    }
 
-  async function evaluateAndMaybeTrade(){
-    // only evaluate when auto on
-    if (!auto) return;
-    const d = decide();
-    if (!d) return;
-    // basic position logic: only buy if not holding, only sell if holding
-    if (d === 'buy' && isHolding){ log('Signal BUY but already holding — skip'); return; }
-    if (d === 'sell' && !isHolding){ log('Signal SELL but not holding — skip'); return; }
-    const i = bars.length-1;
-    $("statSignal").textContent = d.toUpperCase();
-    log(`Signal ${d.toUpperCase()} @ ${bars[i].close}`);
-    await executeTrade(d);
-  }
+    async function getBalance(tokenAddress) {
+      try {
+        tokenAddress = ethers.utils.getAddress(tokenAddress);
+        const erc = new ethers.Contract(tokenAddress, ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"], signer);
+        const decimals = await erc.decimals().catch(() => 18);
+        let balRaw;
+        try {
+          balRaw = await erc.balanceOf(walletAddress);
+        } catch (err) {
+          balRaw = 0;
+        }
+        const balance = BigInt(balRaw.toString());
+        return { balance, decimals };
+      } catch (e) {
+        console.error('⚠️ Invalid token address:', tokenAddress);
+        return { balance: 0n, decimals: 18 };
+      }
+    }
 
-  // ---------- Events ----------
-  $("btnConnect").onclick = connectWallet;
-  $("btnAuto").onclick = async () => {
-    auto = !auto;
-    $("btnAuto").textContent = auto? 'Stop Auto' : 'Start Auto';
-    $("btnAuto").className = 'btn ' + (auto? 'stop' : 'auto');
-    log('Auto: '+(auto?'ON':'OFF'));
-    // if just turned on, evaluate once immediately (will respect isHolding)
-    if (auto) await evaluateAndMaybeTrade();
-  };
-  $("btnBuy").onclick  = async () => { await executeTrade('buy'); };
-  $("btnSell").onclick = async () => { await executeTrade('sell'); };
-  elSymbol.onchange = startPolling;
-  elInterval.onchange = startPolling;
+    async function autoSwap(type) {
+      if (!signer) return console.log('Wallet not connected');
+      console.log(`${type} triggered (30% balance)`);
+      const router = new ethers.Contract(routerAddress, ["function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256) external"], signer);
+      let tokenIn = type === 'BUY' ? usdtToken : cakeToken;
+      let tokenOut = type === 'BUY' ? cakeToken : usdtToken;
 
-  // ---------- Start ----------
-  startPolling(); // load data + pasang TV
-  window.addEventListener('resize', () => {
-    const lw = document.getElementById('lwchart').clientWidth;
-    const lh = document.getElementById('lwchart').clientHeight;
-    lwc.applyOptions({ width: lw, height: lh });
-  });
+      const { balance, decimals } = await getBalance(tokenIn);
+      if (balance === 0n) return console.log('⚠️ No balance for', tokenIn);
+      const amountIn = (balance * 30n) / 100n;
 
-  // ---------- Self Tests ----------
-  (function runTests(){
-    const tests = [];
-    const lr = (arr)=>{ const {slope,intercept} = (function(y){ const n=y.length; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; })(arr); return {slope,intercept}; };
-    const lrRes = lr([5,7,9,11,13]);
-    tests.push({name:'LR slope≈2', pass: Math.abs(lrRes.slope-2) < 1e-9});
-    tests.push({name:'LR intercept≈3', pass: Math.abs(lrRes.intercept-3) < 1e-9});
-    const dummyBars = Array.from({length:100}, (_,i)=>({open:i, high:i, low:i, close:i}));
-    const lrc = computeLRC_Open(dummyBars, 100, 2, 2);
-    tests.push({name:'LRC(open) mid defined', pass: lrc.mid[lrc.mid.length-1]!=null});
-    const flat = Array.from({length:20},()=>({open:1,high:1,low:1,close:1}));
-    const ut = computeUTBotSignals(flat, 1, 10);
-    tests.push({name:'UT(flat) no signals', pass: ut.signals.every(x=>x==null)});
+      try {
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+          amountIn.toString(),
+          0,
+          [tokenIn, tokenOut],
+          walletAddress,
+          Math.floor(Date.now() / 1000) + 60 * 5
+        );
+        console.log('✅ Swap TX sent:', tx.hash);
+      } catch (e) {
+        console.error('❌ Swap failed:', e.message);
+      }
+    }
 
-    const ul = document.getElementById('tests');
-    ul.innerHTML = tests.map(t=>`<li class="${t.pass?'pass':'fail'}">${t.name}: ${t.pass?'PASS':'FAIL'}</li>`).join('');
-  })();
-})();
-</script>
+    document.getElementById('manualBuy').onclick = () => autoSwap('BUY');
+    document.getElementById('manualSell').onclick = () => autoSwap('SELL');
+
+    setInterval(fetchData, 60000);
+  </script>
 </body>
 </html>
