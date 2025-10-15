@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoBot CAKE/USDT — Precision Reversal (LRC+UTBot+RSI)</title>
+  <title>AutoBot CAKE/USDT — Fixed Exec + Email Alerts</title>
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:20px}
@@ -26,12 +26,14 @@
   <script src="https://s3.tradingview.com/tv.js"></script>
   <!-- Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- EmailJS -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h2>AutoBot — CAKE/USDT · Precision Reversal (LRC open,100,2,2 + UTBot(1,10) + RSI)</h2>
-      <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell. Jumlah = 30% saldo.</small>
+      <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec)</h2>
+      <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell.</small>
     </div>
 
     <div class="row">
@@ -75,8 +77,8 @@
                 <input id="barsKeep" type="number" value="600" />
               </div>
               <div>
-                <label>Slippage (e.g. 0.01)</label>
-                <input id="slippage" value="0.01" />
+                <label>Slippage (e.g. 0.1)</label>
+                <input id="slippage" value="0.1" />
               </div>
               <div>
                 <label>UT ATR</label>
@@ -101,7 +103,7 @@
           <ol>
             <li>BUY: UTBot=buy & price ≤ LRC lower & RSI &lt; 30.</li>
             <li>SELL: UTBot=sell OR price ≥ LRC upper & RSI &gt; 70.</li>
-            <li>Amount: 30% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
+            <li>Amount: 100% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
           </ol>
         </div>
 
@@ -118,8 +120,21 @@
 
 <script>
 (async () => {
-  // ethers
-  const { BrowserProvider, JsonRpcProvider, Contract, formatUnits, parseUnits, getAddress, ZeroAddress } = ethers;
+  // ---------- CONFIG: Fill these with your EmailJS values ----------
+  const EMAILJS_PUBLIC_KEY = "REPLACE_WITH_YOUR_EMAILJS_PUBLIC_KEY";
+  const EMAILJS_SERVICE_ID = "REPLACE_WITH_YOUR_SERVICE_ID";
+  const EMAILJS_TEMPLATE_ID = "REPLACE_WITH_YOUR_TEMPLATE_ID";
+  // -----------------------------------------------------------------
+
+  // init emailjs
+  if (window.emailjs && typeof window.emailjs.init === 'function') {
+    try { window.emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e){ console.warn('EmailJS init error', e); }
+  } else {
+    console.warn('EmailJS not available');
+  }
+
+  // use ethers v6 from window.ethers (UMD)
+  const { BrowserProvider, JsonRpcProvider, Contract, getAddress } = window.ethers;
 
   // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
@@ -138,7 +153,7 @@
     "function approve(address spender, uint256 amount) returns (bool)"
   ];
 
-  // DOM
+  // DOM helpers
   const $ = id => document.getElementById(id);
   const elAddr = $('addr'), elLogs = $('logs');
   const btnConnect = $('btnConnect'), btnAuto = $('btnAuto'), btnBuy = $('btnBuy'), btnSell = $('btnSell');
@@ -146,14 +161,12 @@
   const elSymbol = $('symbol'), elInterval = $('interval'), elBarsKeep = $('barsKeep');
   const elUtAtr = $('utAtr'), elUtFactor = $('utFactor');
 
-  // providers & state
   const readProvider = new JsonRpcProvider(DEFAULT_RPC);
   let walletProvider = null;
   let signer = null;
   let address = null;
-  let routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
 
-  // Chart (LightweightCharts)
+  // lightweight charts (minimal)
   const lwc = LightweightCharts.createChart(document.getElementById('lwchart'), {
     layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
     rightPriceScale:{ borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } }
@@ -164,29 +177,48 @@
   const midLine = lwc.addLineSeries({ lineWidth:2 });
   const trailLine = lwc.addLineSeries({ lineWidth:1, lineStyle:3 });
 
-  let bars = []; // {t,open,high,low,close}
+  let bars = [];
   let polling = null;
   let auto = false;
   let isHolding = false;
   let entryPrice = null;
 
-  // safe address helper
-  const safeAddr = v => {
-    try{
-      const raw = String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g,'');
-      return getAddress(raw);
-    }catch(e){ log('Alamat tidak valid: ' + v); return null; }
-  };
-
   function log(msg){
     const time = new Date().toLocaleTimeString();
     elLogs.textContent = `[${time}] ${msg}\n` + elLogs.textContent;
+    console.log(`[LOG] ${msg}`);
   }
 
-  // LRC helpers (open)
+  const safeAddr = v=>{
+    try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
+  };
+
+  // ---------- Email helper ----------
+  async function sendEmail(action, price, txHash = '-', amountHuman = '-') {
+    if (!window.emailjs || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
+      log(`(email) missing config or emailjs not loaded — skip send: ${action} @ ${price}`);
+      return;
+    }
+    try {
+      const templateParams = {
+        pair: elSymbol.value || 'CAKEUSDT',
+        action: action.toUpperCase(),
+        price: String(price),
+        txhash: txHash,
+        amount: String(amountHuman),
+        wallet: address || '-',
+        time: new Date().toLocaleString()
+      };
+      await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+      log(`📧 Email sent: ${action} @ ${price}`);
+    } catch (e) {
+      log('⚠️ Email failed: ' + (e.text || e.message || e));
+    }
+  }
+
+  // --- TA helpers (same as your original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
   function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
-
   function computeLRC_Open(bars, length=100, devUp=2, devDn=2){
     const opens = bars.map(b=>b.open); const n=opens.length;
     const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null);
@@ -202,8 +234,6 @@
     }
     return {mid,upper,lower};
   }
-
-  // ATR & UTBot
   function computeATR(ohlc, period=1){
     if(ohlc.length<2) return Array(ohlc.length).fill(null);
     const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high, l=ohlc[i].low, pc=ohlc[i-1].close; trs.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc))); }
@@ -211,7 +241,6 @@
     for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i] + (1-k)*ema; atr.push(ema); }
     return [null, ...atr];
   }
-
   function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){
     const atrArr = computeATR(ohlc, atrPeriod);
     const signals = new Array(ohlc.length).fill(null);
@@ -232,8 +261,6 @@
     }
     return {signals, trail};
   }
-
-  // RSI
   function computeRSI(ohlc, period=14){
     if (ohlc.length <= period) return Array(ohlc.length).fill(null);
     const rsi = Array(ohlc.length).fill(null);
@@ -259,6 +286,7 @@
     return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
   }
 
+  // render
   function renderAll(){
     const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
     candleSeries.setData(cand);
@@ -266,8 +294,6 @@
     const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
     upperLine.setData(toSeries(lrc.upper)); lowerLine.setData(toSeries(lrc.lower)); midLine.setData(toSeries(lrc.mid));
     trailLine.setData(toSeries(ut.trail));
-
-    // markers UT
     const markers = [];
     for (let i=0;i<bars.length;i++){
       if (!ut.signals[i]) continue;
@@ -276,16 +302,14 @@
     candleSeries.setMarkers(markers);
   }
 
-  // fetch from Binance klines (public)
+  // fetch klines
   const BINANCE_BASE = "https://api.binance.com/api/v3";
   const intervalMap = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h"};
-
   async function fetchInitial(symbol, interval, limit=600){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
     return arr.map(k=>({ t: k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
   }
-
   async function fetchLatest(symbol, interval){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=2`;
     const res = await fetch(url); const arr = await res.json();
@@ -312,13 +336,12 @@
         if (bars.length && bars[bars.length-1].t === latest.t) bars[bars.length-1] = latest;
         else bars = [...bars, latest].slice(-keep);
         renderAll();
-        // auto-evaluate only if auto on
         if (auto) await evaluateAndMaybeTrade();
       }catch(e){ log('Poll error: '+(e.message||e)); }
     }, ms);
   }
 
-  // TradingView robust mount (only when needed)
+  // tradingview mount
   let _tvWidgetInited=false,_tvPrevSymbol=null,_tvPrevInterval=null;
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
@@ -340,7 +363,7 @@
     } catch(e){ log('TV init err: '+(e.message||e)); container.innerHTML='<div style="padding:12px;color:#a00">Gagal memuat TradingView</div>'; }
   }
 
-  // ---------- DEcision logic ----------
+  // decision logic (unchanged)
   function decide(){
     if (!bars.length) return null;
     const lrc = computeLRC_Open(bars, 100, 2, 2);
@@ -351,24 +374,43 @@
     const price = bars[i].close;
     const lower = lrc.lower[i], upper = lrc.upper[i];
     const curRSI = rsi[i] ?? null;
-
-    // BUY: UTBot=buy + price <= lower + RSI<30
     if (sigUT === 'buy' && lower!=null && price <= lower && curRSI !== null && curRSI < 30) return 'buy';
-    // SELL: UTBot=sell OR (price >= upper && RSI>70)
     if ((sigUT === 'sell') || (upper!=null && price >= upper && curRSI !== null && curRSI > 70)) return 'sell';
     return null;
   }
 
-  // ---------- On-chain helpers ----------
+  // ---- on-chain helpers: corrected for ethers v6 usage ----
+  function toBigInt(amount) {
+    if (typeof amount === 'bigint') return amount;
+    if (typeof amount === 'number') return BigInt(Math.floor(amount));
+    if (typeof amount === 'string') {
+      try { return BigInt(amount); } catch(e){ return BigInt(Number(amount)); }
+    }
+    return BigInt(0);
+  }
+
+  async function getDecimalsAndBalance(tokenAddr) {
+    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
+    const decimals = Number(await erc.decimals().catch(()=>18));
+    const balRaw = await erc.balanceOf(address).catch(()=>0);
+    const bal = BigInt(balRaw.toString ? balRaw.toString() : balRaw);
+    return { decimals, bal };
+  }
+
   async function ensureApproval(tokenAddr, spender, amountBig) {
     if (!signer) throw new Error('Signer not ready');
     const erc = new Contract(tokenAddr, ERC20_ABI, signer);
-    const allowance = BigInt((await erc.allowance(address, spender)).toString());
+    const allowanceRaw = await erc.allowance(address, spender).catch(()=>0);
+    const allowance = BigInt(allowanceRaw.toString ? allowanceRaw.toString() : allowanceRaw);
+    log(`Allowance current: ${allowance}`);
     if (allowance < BigInt(amountBig)) {
-      const tx = await erc.approve(spender, amountBig);
-      log('Approve sent: '+tx.hash);
+      log('Approving router to spend token...');
+      const tx = await erc.approve(spender, BigInt(amountBig));
+      log('Approve tx sent: ' + tx.hash);
       await tx.wait();
       log('Approve confirmed');
+    } else {
+      log('Approval sufficient');
     }
   }
 
@@ -378,86 +420,107 @@
     return (BigInt(amountOutBig) * (bps - slipBps)) / bps;
   }
 
-  // fetch decimals & balance via readProvider
-  async function getDecimalsAndBalance(tokenAddr) {
-    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
-    const decimals = Number(await erc.decimals().catch(()=>18));
-    const bal = BigInt((await erc.balanceOf(address)).toString().catch(()=>'0'));
-    return { decimals, bal };
-  }
-
-  // core execute trade
   async function executeTrade(direction, opts={force:false}) {
     try {
-      // ensure signer
       if (!signer) {
         const ok = await connectWallet();
         if (!ok) { log('Wallet not connected - abort'); return; }
       }
       const base = safeAddr(elBase.value);
       const token = safeAddr(elToken.value);
-      if (!base || !token) { log('Alamat base/token invalid'); return; }
+      if (!base || !token) { log('Invalid base/token'); return; }
 
-      // paper simulation
+      // paper mode
       if (elPaper.checked) {
         if (direction === 'buy') {
           const {decimals, bal} = await getDecimalsAndBalance(base);
-          const amt = (bal * 30n) / 100n;
+          const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
+          // send email for paper simulation too
+          await sendEmail('PAPER BUY', entryPrice, '-', `${amt} (dec ${decimals})`);
           return;
         } else {
           const {decimals, bal} = await getDecimalsAndBalance(token);
-          const amt = (bal * 30n) / 100n;
+          const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
           isHolding = false; entryPrice = null;
           log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
+          await sendEmail('PAPER SELL', bars[bars.length-1].close, '-', `${amt} (dec ${decimals})`);
           return;
         }
       }
 
       const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
 
-      // prevent duplicate actions (unless forced)
       if (direction === 'buy' && isHolding && !opts.force) { log('BUY skipped — already holding'); return; }
       if (direction === 'sell' && !isHolding && !opts.force) { log('SELL skipped — not holding'); return; }
 
       if (direction === 'buy') {
-        const {decimals, bal} = await getDecimalsAndBalance(base);
-        const amountIn = (bal * 30n) / 100n;
-        if (amountIn === 0n) { log('BUY aborted — USDT balance zero'); return; }
-        // approval & swap
-        await ensureApproval(base, PCS_V2_ROUTER, amountIn);
-        const path = [base, token];
-        const amountsOut = await router.getAmountsOut(amountIn, path);
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
+        // buy path: BASE -> TOKEN
+        const {decimals: baseDec, bal: baseBal} = await getDecimalsAndBalance(base);
+        const {decimals: tokenDec} = await getDecimalsAndBalance(token);
+        const amountIn = (baseBal * 100n) / 100n;
+        if (amountIn === 0n) { log('BUY aborted — base balance zero'); return; }
+
+        // estimate amounts out (read-only)
+        log('Estimating amountsOut for buy...');
+        const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
+        const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
+        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), tokenDec));
+        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+
+        // ask confirmation
+        const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const ok = prompt(confirmMsg,'');
+        if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
+
+        // ensure approval of base to router
+        await ensureApproval(base, PCS_V2_ROUTER, amountIn);
+
+        // execute swap
+        log('Sending swapExactTokensForTokens (BUY)...');
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, [base, token], address, Math.floor(Date.now()/1000)+300);
         log('BUY tx sent: '+tx.hash);
-        await tx.wait();
+        const receipt = await tx.wait();
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
+        // send email with tx hash and human amount
+        await sendEmail('BUY', entryPrice, tx.hash, outHuman);
       } else {
-        const {decimals, bal} = await getDecimalsAndBalance(token);
-        const amountIn = (bal * 30n) / 100n;
-        if (amountIn === 0n) { log('SELL aborted — CAKE balance zero'); return; }
+        // SELL: TOKEN -> BASE
+        const {decimals: tokenDec, bal: tokenBal} = await getDecimalsAndBalance(token);
+        const {decimals: baseDec} = await getDecimalsAndBalance(base);
+        const amountIn = (tokenBal * 100n) / 100n;
+        if (amountIn === 0n) { log('SELL aborted — token balance zero'); return; }
+
+        log('Estimating amountsOut for sell...');
+        const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
+        const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
+        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), baseDec));
+        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+
+        const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const ok = prompt(confirmMsg,'');
+        if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
+
         await ensureApproval(token, PCS_V2_ROUTER, amountIn);
-        const path = [token, base];
-        const amountsOut = await router.getAmountsOut(amountIn, path);
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
-        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
+
+        log('Sending swapExactTokensForTokens (SELL)...');
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, [token, base], address, Math.floor(Date.now()/1000)+300);
         log('SELL tx sent: '+tx.hash);
         await tx.wait();
         log('SELL confirmed: '+tx.hash);
         isHolding = false;
         entryPrice = null;
+        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethers.utils.formatUnits(amountIn.toString(), tokenDec)));
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
-      // retry once
       if (!opts._retry) {
         log('Retrying trade once...');
         await new Promise(r=>setTimeout(r,2000));
@@ -466,7 +529,6 @@
     }
   }
 
-  // evaluate and maybe trade
   async function evaluateAndMaybeTrade(){
     if (!auto) return;
     const d = decide();
@@ -477,7 +539,7 @@
     await executeTrade(d);
   }
 
-  // wallet connect
+  // wallet detection & connect (works with MetaMask & Trust if injected)
   async function detectWalletProvider(){
     const any = window.ethereum;
     if (!any) return null;
@@ -504,7 +566,7 @@
     } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
   }
 
-  // manual buttons
+  // manual UI bindings
   btnConnect.onclick = async ()=> await connectWallet();
   btnAuto.onclick = async ()=>{
     auto = !auto;
@@ -518,15 +580,12 @@
   elSymbol.onchange = startPolling;
   elInterval.onchange = startPolling;
 
-  // start polling on load
+  // start
   startPolling();
-
-  // resize chart on window resize
-  window.addEventListener('resize', ()=> lwc.applyOptions({ width: document.getElementById('lwchart').clientWidth, height: document.getElementById('lwchart').clientHeight }));
 
   // small self-tests
   (function runTests(){
-    log('Self-test: LRC+UTBot+RSI module loaded.');
+    log('Self-test: Fixed exec module loaded.');
   })();
 
 })();
