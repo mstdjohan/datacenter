@@ -101,7 +101,7 @@
           <ol>
             <li>BUY: UTBot=buy & price ≤ LRC lower & RSI &lt; 30.</li>
             <li>SELL: UTBot=sell OR price ≥ LRC upper & RSI &gt; 70.</li>
-            <li>Amount: 30% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
+            <li>Amount: 100% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
           </ol>
         </div>
 
@@ -398,14 +398,14 @@
       if (elPaper.checked) {
         if (direction === 'buy') {
           const {decimals, bal} = await getDecimalsAndBalance(base);
-          const amt = (bal * 30n) / 100n;
+          const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
           return;
         } else {
           const {decimals, bal} = await getDecimalsAndBalance(token);
-          const amt = (bal * 30n) / 100n;
+          const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
           isHolding = false; entryPrice = null;
           log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
@@ -421,7 +421,7 @@
       if (direction === 'buy') {
         // buy path: BASE -> TOKEN
         const {decimals, bal} = await getDecimalsAndBalance(base);
-        const amountIn = (bal * 30n) / 100n;
+        const amountIn = (bal * 100n) / 100n;
         if (amountIn === 0n) { log('BUY aborted — base balance zero'); return; }
 
         // estimate amounts out (read-only)
@@ -450,7 +450,7 @@
       } else {
         // SELL: TOKEN -> BASE
         const {decimals, bal} = await getDecimalsAndBalance(token);
-        const amountIn = (bal * 30n) / 100n;
+        const amountIn = (bal * 100n) / 100n;
         if (amountIn === 0n) { log('SELL aborted — token balance zero'); return; }
 
         log('Estimating amountsOut for sell...');
