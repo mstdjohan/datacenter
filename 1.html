@@ -3,182 +3,132 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoBot PancakeSwap — USDT↔CAKE · LRC(open,100,2,2) + UTBot(1,10)</title>
+  <title>AutoBot CAKE/USDT — Precision Reversal (LRC+UTBot+RSI)</title>
   <style>
-    :root { --bg:#fffaf2; --card:#ffffffcc; --border:#e8e2d9; --text:#1e1b16; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; color:var(--text); background:linear-gradient(#fff7e6,#fff); }
-    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-    .row { display:grid; grid-template-columns: 1.6fr 1fr; gap:16px; }
-    h1 { font-size: 20px; margin:0 0 12px; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow: 0 8px 20px rgba(0,0,0,.04); }
-    .controls { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
-    .controls label { font-size:12px; opacity:.8; }
-    .controls input, .controls select { width:100%; padding:8px 10px; border-radius:12px; border:1px solid #ddd; background:#fff; }
-    .controls .col3 { grid-column: span 2; }
-    .btn { border:0; border-radius:16px; padding:10px 14px; font-weight:600; cursor:pointer; }
-    .btn.primary{ background:#111; color:#fff; }
-    .btn.buy{ background:#2563eb; color:#fff; }
-    .btn.sell{ background:#f59e0b; color:#fff; }
-    .btn.auto{ background:#16a34a; color:#fff; }
-    .btn.stop{ background:#dc2626; color:#fff; }
-    .statgrid{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
-    .stat{ background:#ffffff80; border:1px solid var(--border); border-radius:14px; padding:12px; }
-    .stat .lbl{ font-size:12px; opacity:.7 }
-    .stat .val{ font-size:18px; font-weight:700 }
-    .log{ max-height:240px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; white-space:pre-wrap }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:#fff; font-size:12px }
-    .tests li.pass{ color:#15803d } .tests li.fail{ color:#b91c1c }
-    #tvwrap{ height:420px; }
-    #lwchart{ height:420px; }
+    :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
+    body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:20px}
+    .wrap{max-width:1200px;margin:0 auto}
+    .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
+    .row{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
+    .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    button{padding:8px 12px;border-radius:10px;border:0;cursor:pointer}
+    .btn-primary{background:#111;color:#fff}
+    .btn-buy{background:#2563eb;color:#fff}
+    .btn-sell{background:#f59e0b;color:#fff}
+    .log{height:220px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
+    #lwchart{height:420px}
+    .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #e6e6e6}
   </style>
+
   <!-- Ethers v6 UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
-  <!-- TradingView Lightweight Charts (untuk indikator & sinyal) -->
+  <!-- TradingView widget -->
+  <script src="https://s3.tradingview.com/tv.js"></script>
+  <!-- Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <div class="wrap">
+    <div class="card">
+      <h2>AutoBot — CAKE/USDT · Precision Reversal (LRC open,100,2,2 + UTBot(1,10) + RSI)</h2>
+      <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell. Jumlah = 30% saldo.</small>
+    </div>
+
     <div class="row">
       <div>
         <div class="card">
-          <h1>AutoBot — USDT↔CAKE · LRC(<b>open</b>,100,2,2) + UTBot(1,10)</h1>
+          <div id="tvwrap" style="height:300px;border-radius:8px;overflow:hidden;margin-bottom:10px">
+            <div id="tv_chart" style="height:100%;width:100%"></div>
+          </div>
 
-          <!-- TradingView Widget (grafik live) -->
-          <div class="card" style="padding:0; overflow:hidden; margin-bottom:10px">
-            <div id="tvwrap">
-              <div class="tradingview-widget-container" style="height:100%; width:100%">
-                <div id="tv_chart" style="height:100%; width:100%"></div>
+          <div id="lwchart" class="card"></div>
+
+          <div class="card">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button id="btnConnect" class="btn-primary">Connect (MetaMask/Trust)</button>
+              <span class="pill">Addr: <span id="addr">—</span></span>
+              <button id="btnAuto" class="btn-primary">Start Auto</button>
+              <button id="btnBuy" class="btn-buy">Manual BUY</button>
+              <button id="btnSell" class="btn-sell">Manual SELL</button>
+              <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
+            </div>
+
+            <div class="controls" style="margin-top:12px">
+              <div>
+                <label>BASE (USDT)</label>
+                <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
+              </div>
+              <div>
+                <label>TOKEN (CAKE)</label>
+                <input id="token" value="0x0E09FABB73Bd3ADE0a17ECC321fD13a19e81cE82" />
+              </div>
+              <div>
+                <label>Symbol (Binance)</label>
+                <select id="symbol"><option value="CAKEUSDT" selected>CAKEUSDT</option></select>
+              </div>
+              <div>
+                <label>Interval</label>
+                <select id="interval"><option value="15m" selected>15m</option><option value="5m">5m</option><option value="1m">1m</option></select>
+              </div>
+              <div>
+                <label>Bars keep</label>
+                <input id="barsKeep" type="number" value="600" />
+              </div>
+              <div>
+                <label>Slippage (e.g. 0.01)</label>
+                <input id="slippage" value="0.01" />
+              </div>
+              <div>
+                <label>UT ATR</label>
+                <input id="utAtr" type="number" value="1" />
+              </div>
+              <div>
+                <label>UT Factor</label>
+                <input id="utFactor" type="number" value="10" />
               </div>
             </div>
           </div>
 
-          <!-- Chart indikator & sinyal (Lightweight Charts) -->
-          <div class="card" style="padding:8px">
-            <div id="lwchart"></div>
+          <div class="card">
+            <div class="log" id="logs"></div>
           </div>
-
-          <div class="statgrid" style="margin-top:12px">
-            <div class="stat"><div class="lbl">Price (1 USDT → CAKE)</div><div class="val" id="statPrice">—</div></div>
-            <div class="stat"><div class="lbl">Bars</div><div class="val" id="statBars">0</div></div>
-            <div class="stat"><div class="lbl">Last Signal</div><div class="val" id="statSignal">—</div></div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-            <button class="btn primary" id="btnConnect">Connect (TrustWallet/MetaMask)</button>
-            <span class="pill">Addr: <span id="addr">—</span></span>
-            <button class="btn auto" id="btnAuto">Start Auto</button>
-            <button class="btn buy" id="btnBuy">Manual BUY</button>
-            <button class="btn sell" id="btnSell">Manual SELL</button>
-            <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
-          </div>
-          <div class="controls" style="margin-top:10px">
-            <div>
-              <label>BASE (USDT)</label>
-              <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
-            </div>
-            <div>
-              <label>TOKEN (CAKE)</label>
-              <input id="token" value="0x0E09FABB73Bd3ADE0a17ECC321fD13a19e81cE82" />
-            </div>
-            <div>
-              <label>Exch Symbol (TV/Binance)</label>
-              <select id="symbol">
-                <option value="CAKEUSDT" selected>CAKEUSDT (Binance spot)</option>
-                <option value="XRPUSDT">XRPUSDT (contoh)</option>
-                <option value="BNBUSDT">BNBUSDT (contoh)</option>
-              </select>
-            </div>
-            <div>
-              <label>Interval</label>
-              <select id="interval">
-                <option value="1m" selected>1m</option>
-                <option value="5m">5m</option>
-                <option value="15m">15m</option>
-              </select>
-            </div>
-            <div>
-              <label>Bars to keep</label>
-              <input id="barsKeep" type="number" value="600" />
-            </div>
-            <div>
-              <label>Amount Mode</label>
-              <select id="amountMode" disabled>
-                <option value="pct">30% of balance (fixed)</option>
-              </select>
-            </div>
-            <div>
-              <label>Slippage (e.g. 0.005)</label>
-              <input id="slippage" value="0.005" />
-            </div>
-            <div>
-              <label>UT ATR</label>
-              <input id="utAtr" type="number" value="1" />
-            </div>
-            <div>
-              <label>UT Factor</label>
-              <input id="utFactor" type="number" value="10" />
-            </div>
-            <div class="col3">
-              <small>
-                Mode: **30% dari saldo** dipakai untuk setiap trade. Manual BUY/SELL memaksa eksekusi walau sudah holding.
-                Rule: <b>BUY</b> jika UTBot=buy & harga ≤ LRC lower. <b>SELL</b> jika UTBot=sell atau harga ≥ LRC upper.
-              </small>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <b>Logs</b>
-          <div class="log" id="logs"></div>
-        </div>
-
-        <div class="card" style="margin-top:12px">
-          <b>Self-Tests</b>
-          <ul class="tests" id="tests"></ul>
         </div>
       </div>
 
       <div>
         <div class="card">
-          <b>Aturan Eksekusi</b>
+          <h3>Execution Rules</h3>
           <ol>
-            <li><b>BUY</b> jika UT Bot = <i>buy</i> dan harga ≤ LRC lower.</li>
-            <li><b>SELL</b> jika UT Bot = <i>sell</i> atau harga ≥ LRC upper.</li>
+            <li>BUY: UTBot=buy & price ≤ LRC lower & RSI &lt; 30.</li>
+            <li>SELL: UTBot=sell OR price ≥ LRC upper & RSI &gt; 70.</li>
+            <li>Amount: 30% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
           </ol>
-          <p>Default pair: <b>USDT ↔ CAKE</b> (BSC mainnet).</p>
-          <p>Connect memprioritaskan TrustWallet bila tersedia, lalu MetaMask / penyedia EIP-1193 lain.</p>
         </div>
 
-        <div class="card" style="margin-top:12px">
-          <b>Disclaimer</b>
+        <div class="card">
+          <h3>Disclaimer</h3>
           <ul>
-            <li>Contoh edukasi. Risiko ditanggung pengguna.</li>
-            <li>Biaya gas berlaku untuk trade nyata. Pastikan likuiditas & token benar.</li>
-            <li>Kami memakai 30% saldo (otomatis). Untuk produksi, uji di paper mode dulu.</li>
+            <li>Contoh edukasi. Uji di paper mode dulu.</li>
+            <li>Pastikan saldo & gas BNB cukup.</li>
           </ul>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- TradingView widget loader -->
-  <script src="https://s3.tradingview.com/tv.js"></script>
-
 <script>
-(() => {
-  const { BrowserProvider, JsonRpcProvider, Contract, ZeroAddress, formatUnits, parseUnits, getAddress } = ethers;
+(async () => {
+  // ethers
+  const { BrowserProvider, JsonRpcProvider, Contract, formatUnits, parseUnits, getAddress, ZeroAddress } = ethers;
 
-  // ---------- Konstanta ----------
+  // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
   const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
   const ROUTER_ABI = [
     "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
+    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
     "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
-    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
+    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
   ];
   const ERC20_ABI = [
     "function decimals() view returns (uint8)",
@@ -188,194 +138,156 @@
     "function approve(address spender, uint256 amount) returns (bool)"
   ];
 
-  // ---------- DOM ----------
-  const $ = (id) => document.getElementById(id);
-  const elPrice = $("statPrice"), elBars = $("statBars"), elSignal = $("statSignal"), elLogs = $("logs");
-  const elBase = $("base"), elToken = $("token"), elBarsKeep = $("barsKeep"), elSlip=$("slippage");
-  const elUtAtr=$("utAtr"), elUtFactor=$("utFactor"), elAddr=$("addr"), elPaper=$("paper");
-  const btnConn=$("btnConnect"), btnAuto=$("btnAuto"), btnBuy=$("btnBuy"), btnSell=$("btnSell");
-  const elSymbol=$("symbol"), elInterval=$("interval");
+  // DOM
+  const $ = id => document.getElementById(id);
+  const elAddr = $('addr'), elLogs = $('logs');
+  const btnConnect = $('btnConnect'), btnAuto = $('btnAuto'), btnBuy = $('btnBuy'), btnSell = $('btnSell');
+  const elBase = $('base'), elToken = $('token'), elPaper = $('paper'), elSlippage = $('slippage');
+  const elSymbol = $('symbol'), elInterval = $('interval'), elBarsKeep = $('barsKeep');
+  const elUtAtr = $('utAtr'), elUtFactor = $('utFactor');
 
-  // ---------- Provider ----------
+  // providers & state
   const readProvider = new JsonRpcProvider(DEFAULT_RPC);
-  let walletProvider = null; // BrowserProvider
-  let signer = null; let address = null;
+  let walletProvider = null;
+  let signer = null;
+  let address = null;
+  let routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
 
-  // ---------- TradingView Live Widget ----------
-  function mountTradingView() {
-    const tvSymbol = (elSymbol.value || "CAKEUSDT");
-    const tvSymbolFull = tvSymbol.endsWith("USDT") ? `BINANCE:${tvSymbol}` : tvSymbol;
-    /* global TradingView */
-    try {
-      new TradingView.widget({
-        autosize: true,
-        symbol: tvSymbolFull,
-        interval: elInterval.value || "1",
-        timezone: "Etc/UTC",
-        theme: "light",
-        style: "1",
-        locale: "id",
-        toolbar_bg: "#f1f3f6",
-        enable_publishing: false,
-        hide_side_toolbar: false,
-        withdateranges: true,
-        container_id: "tv_chart"
-      });
-    } catch(e){
-      // ignore if tv.js belum siap atau gagal
-    }
-  }
-
-  // ---------- Chart indikator (LWC) ----------
+  // Chart (LightweightCharts)
   const lwc = LightweightCharts.createChart(document.getElementById('lwchart'), {
     layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
-    rightPriceScale: { borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } },
-    crosshair:{ mode:1 }
+    rightPriceScale:{ borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } }
   });
   const candleSeries = lwc.addCandlestickSeries();
-  const upperLine = lwc.addLineSeries({ lineWidth:1, lineStyle:1 });
-  const lowerLine = lwc.addLineSeries({ lineWidth:1, lineStyle:1 });
-  const midLine   = lwc.addLineSeries({ lineWidth:2 });
+  const upperLine = lwc.addLineSeries({ lineWidth:1 });
+  const lowerLine = lwc.addLineSeries({ lineWidth:1 });
+  const midLine = lwc.addLineSeries({ lineWidth:2 });
   const trailLine = lwc.addLineSeries({ lineWidth:1, lineStyle:3 });
 
-  // ---------- State ----------
-  let bars = []; // {t, open, high, low, close}
-  let auto = false;
+  let bars = []; // {t,open,high,low,close}
   let polling = null;
+  let auto = false;
   let isHolding = false;
   let entryPrice = null;
 
-  const routerRead = new Contract(PCS_V2_ROUTER, ROUTER_ABI, readProvider);
-
-  // --- FIX “Alamat tidak valid” robust normalization (ONLY for addresses) ---
-  const safeAddr = (v) => {
-    try {
-      const raw = String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g, ''); // hapus karakter tak terlihat
-      try { return getAddress(raw); } catch { return getAddress(raw.toLowerCase()); } // fallback: lower → re-checksum
-    } catch (e) {
-      log('Alamat tidak valid: ' + v);
-      return null;
-    }
+  // safe address helper
+  const safeAddr = v => {
+    try{
+      const raw = String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g,'');
+      return getAddress(raw);
+    }catch(e){ log('Alamat tidak valid: ' + v); return null; }
   };
 
-  const getPathBuy = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [a,b]: null; };
-  const getPathSell = () => { const a=safeAddr(elBase.value), b=safeAddr(elToken.value); return (a&&b)? [b,a]: null; };
+  function log(msg){
+    const time = new Date().toLocaleTimeString();
+    elLogs.textContent = `[${time}] ${msg}\n` + elLogs.textContent;
+  }
 
-  // ---------- Utils ----------
-  function log(msg){ const line = `[${new Date().toLocaleTimeString()}] ${msg}`; elLogs.textContent = line + "\n" + elLogs.textContent; }
-
-  // Linear regression over array y using x=1..n (untuk LRC open)
-  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
+  // LRC helpers (open)
+  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
   function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
-  // ATR(period=1) = TR
-  function computeATR(ohlc, period=1){ if(ohlc.length<2) return Array(ohlc.length).fill(null); const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high,l=ohlc[i].low,pc=ohlc[i-1].close; const tr=Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)); trs.push(tr);} const atr=[]; let ema=null; const k=2/(period+1); for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i]+(1-k)*ema; atr.push(ema);} return [null,...atr]; }
 
-  // LRC (open, 100, 2, 2)
   function computeLRC_Open(bars, length=100, devUp=2, devDn=2){
-    const opens=bars.map(b=>b.open); const n=opens.length;
+    const opens = bars.map(b=>b.open); const n=opens.length;
     const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null);
     if(n<length) return {mid,upper,lower};
     for(let i=length-1;i<n;i++){
       const win=opens.slice(i-length+1,i+1);
       const {slope,intercept}=linearRegression(win);
-      const xLast = length; // regresi pada titik terakhir
-      const midVal=slope*xLast+intercept;
-      const resid=win.map((v,idx)=>v-(slope*(idx+1)+intercept));
-      const sd=stdev(resid);
-      mid[i]=midVal; upper[i]=midVal+devUp*sd; lower[i]=midVal-devDn*sd;
+      const xLast = length;
+      const midVal = slope*xLast + intercept;
+      const resid = win.map((v,idx)=>v - (slope*(idx+1) + intercept));
+      const sd = stdev(resid);
+      mid[i]=midVal; upper[i]=midVal + devUp*sd; lower[i]=midVal - devDn*sd;
     }
     return {mid,upper,lower};
   }
 
-  // UT Bot Alerts (atr=1, factor=10) - simplified trailing-stop behaviour
+  // ATR & UTBot
+  function computeATR(ohlc, period=1){
+    if(ohlc.length<2) return Array(ohlc.length).fill(null);
+    const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high, l=ohlc[i].low, pc=ohlc[i-1].close; trs.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc))); }
+    const atr=[]; let ema=null; const k=2/(period+1);
+    for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i] + (1-k)*ema; atr.push(ema); }
+    return [null, ...atr];
+  }
+
   function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){
-    const atrArr=computeATR(ohlc, atrPeriod);
-    const signals=new Array(ohlc.length).fill(null);
-    const trail=new Array(ohlc.length).fill(null);
-    if(ohlc.length===0) return {signals,trail};
-    // initialize trend neutral
-    let trend = 0;
-    let ts = null;
+    const atrArr = computeATR(ohlc, atrPeriod);
+    const signals = new Array(ohlc.length).fill(null);
+    const trail = new Array(ohlc.length).fill(null);
+    if(ohlc.length===0) return {signals, trail};
+    let trend = 0; let ts = null;
     for(let i=0;i<ohlc.length;i++){
-      const c = ohlc[i].close;
-      const atr = atrArr[i] ?? 0;
-      const buyTs = c - factor * atr;
-      const sellTs = c + factor * atr;
-      if (i === 0){
-        // no decision on first bar
-        ts = buyTs;
-        trail[i] = ts;
-        trend = 1;
-        continue;
-      }
+      const c = ohlc[i].close; const atr = atrArr[i] ?? 0;
+      const buyTs = c - factor*atr; const sellTs = c + factor*atr;
+      if (i===0){ ts = buyTs; trail[i]=ts; trend=1; continue; }
       if (trend >= 0){
-        ts = ts == null ? buyTs : Math.max(ts, buyTs);
-        trail[i] = ts;
-        if (c < ts){
-          // flip to down
-          trend = -1;
-          signals[i] = 'sell';
-          ts = sellTs;
-          trail[i] = ts;
-        } else {
-          trend = 1;
-        }
+        ts = ts == null ? buyTs : Math.max(ts, buyTs); trail[i] = ts;
+        if (c < ts){ trend = -1; signals[i] = 'sell'; ts = sellTs; trail[i]=ts; } else trend = 1;
       } else {
-        ts = ts == null ? sellTs : Math.min(ts, sellTs);
-        trail[i] = ts;
-        if (c > ts){
-          // flip to up
-          trend = 1;
-          signals[i] = 'buy';
-          ts = buyTs;
-          trail[i] = ts;
-        } else {
-          trend = -1;
-        }
+        ts = ts == null ? sellTs : Math.min(ts, sellTs); trail[i] = ts;
+        if (c > ts){ trend = 1; signals[i] = 'buy'; ts = buyTs; trail[i]=ts; } else trend = -1;
       }
     }
     return {signals, trail};
   }
 
-  function toSeries(arr){ return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean); }
+  // RSI
+  function computeRSI(ohlc, period=14){
+    if (ohlc.length <= period) return Array(ohlc.length).fill(null);
+    const rsi = Array(ohlc.length).fill(null);
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++){
+      const diff = ohlc[i].close - ohlc[i-1].close;
+      if (diff > 0) gains += diff; else losses += -diff;
+    }
+    let avgGain = gains / period, avgLoss = losses / period;
+    rsi[period] = avgLoss === 0 ? 100 : 100 - 100/(1 + (avgGain/avgLoss));
+    for (let i = period+1; i < ohlc.length; i++){
+      const diff = ohlc[i].close - ohlc[i-1].close;
+      const gain = diff > 0 ? diff : 0;
+      const loss = diff < 0 ? -diff : 0;
+      avgGain = (avgGain*(period-1) + gain)/period;
+      avgLoss = (avgLoss*(period-1) + loss)/period;
+      rsi[i] = avgLoss === 0 ? 100 : 100 - 100/(1 + (avgGain/avgLoss));
+    }
+    return rsi;
+  }
+
+  function toSeries(arr){
+    return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
+  }
 
   function renderAll(){
     const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
     candleSeries.setData(cand);
     const lrc = computeLRC_Open(bars, 100, 2, 2);
-    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
-    upperLine.setData(toSeries(lrc.upper));
-    lowerLine.setData(toSeries(lrc.lower));
-    midLine.setData(toSeries(lrc.mid));
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    upperLine.setData(toSeries(lrc.upper)); lowerLine.setData(toSeries(lrc.lower)); midLine.setData(toSeries(lrc.mid));
     trailLine.setData(toSeries(ut.trail));
 
-    // markers di candleSeries (UT signals)
+    // markers UT
     const markers = [];
-    for(let i=0;i<bars.length;i++){
-      if(!ut.signals[i]) continue;
-      const m = {
-        time: Math.floor(bars[i].t/1000),
-        position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar',
-        shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown',
-        text: ut.signals[i].toUpperCase()
-      };
-      markers.push(m);
+    for (let i=0;i<bars.length;i++){
+      if (!ut.signals[i]) continue;
+      markers.push({ time: Math.floor(bars[i].t/1000), position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar', color: ut.signals[i]==='buy' ? 'green' : 'red', shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown', text: ut.signals[i].toUpperCase() });
     }
     candleSeries.setMarkers(markers);
   }
 
-  // ---------- Data: Binance klines ----------
+  // fetch from Binance klines (public)
   const BINANCE_BASE = "https://api.binance.com/api/v3";
-  const intervalMap = { "1m":"1m", "5m":"5m", "15m":"15m" };
+  const intervalMap = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h"};
 
   async function fetchInitial(symbol, interval, limit=600){
-    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
+    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
     return arr.map(k=>({ t: k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
   }
 
   async function fetchLatest(symbol, interval){
-    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=2`;
+    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=2`;
     const res = await fetch(url); const arr = await res.json();
     const k = arr[arr.length-1];
     return { t:k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
@@ -384,49 +296,191 @@
   async function startPolling(){
     if (polling) clearInterval(polling);
     const sym = elSymbol.value || "CAKEUSDT";
-    const tf = elInterval.value || "1m";
+    const tf = elInterval.value || "15m";
     try {
       bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
       renderAll();
-      mountTradingView(); // pasang/refresh TV widget untuk simbol & interval yang sama
-      log(`Loaded ${bars.length} bars from Binance for ${sym} ${tf}`);
+      await mountTradingViewOnce();
+      log(`Loaded ${bars.length} bars for ${sym} ${tf}`);
     } catch(e){ log('Load error: '+(e.message||e)); }
 
-    // jadwal polling
-    const ms = tf==="1m" ? 10_000 : tf==="5m" ? 30_000 : 60_000;
-    polling = setInterval(async () => {
+    const ms = tf==="1m"?10000:tf==="5m"?30000:60000;
+    polling = setInterval(async ()=>{
       try{
         const latest = await fetchLatest(sym, tf);
-        // replace last if same t, else push
         const keep = Number(elBarsKeep.value||600);
         if (bars.length && bars[bars.length-1].t === latest.t) bars[bars.length-1] = latest;
         else bars = [...bars, latest].slice(-keep);
         renderAll();
-        elBars.textContent = bars.length;
-        // update statPrice sebagai 1 USDT -> CAKE dengan router on-chain (approx)
-        const p = await fetchRouterQuote();
-        if (p!=null) elPrice.textContent = p.toFixed(8);
-        // auto evaluate ONLY if auto enabled
+        // auto-evaluate only if auto on
         if (auto) await evaluateAndMaybeTrade();
       }catch(e){ log('Poll error: '+(e.message||e)); }
     }, ms);
   }
 
-  async function fetchRouterQuote(){
-    try{
-      const one = parseUnits('1', 18);
-      const path = getPathBuy(); if(!path) return null;
-      const amounts = await routerRead.getAmountsOut(one, path);
-      const out = Number(formatUnits(amounts[amounts.length-1], 18));
-      return out; // 1 USDT → CAKE
-    }catch(e){ /* silent */ return null; }
+  // TradingView robust mount (only when needed)
+  let _tvWidgetInited=false,_tvPrevSymbol=null,_tvPrevInterval=null;
+  async function mountTradingViewOnce(){
+    const tvSymbol = elSymbol.value || 'CAKEUSDT';
+    const tvFull = `BINANCE:${tvSymbol}`;
+    const iv = elInterval.value||'15m';
+    const ivMap = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60'};
+    const tvInterval = ivMap[iv]||iv;
+    if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
+    _tvPrevSymbol=tvFull; _tvPrevInterval=tvInterval;
+    const container = document.getElementById('tv_chart');
+    container.innerHTML = '';
+    let attempts=0;
+    while(typeof window.TradingView==='undefined' && attempts<6){ await new Promise(r=>setTimeout(r,300)); attempts++; }
+    if(typeof window.TradingView==='undefined'){ log('TradingView unavailable'); container.innerHTML='<div style="padding:12px;color:#a00">TradingView tidak tersedia</div>'; return; }
+    try {
+      new TradingView.widget({ autosize:true, symbol:tvFull, interval:tvInterval, timezone:"Etc/UTC", theme:"light", style:"1", locale:"id", container_id:"tv_chart" });
+      _tvWidgetInited=true;
+      log('TradingView mounted: '+tvFull+' @'+tvInterval);
+    } catch(e){ log('TV init err: '+(e.message||e)); container.innerHTML='<div style="padding:12px;color:#a00">Gagal memuat TradingView</div>'; }
   }
 
-  // ---------- Wallet ----------
+  // ---------- DEcision logic ----------
+  function decide(){
+    if (!bars.length) return null;
+    const lrc = computeLRC_Open(bars, 100, 2, 2);
+    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const rsi = computeRSI(bars, 14);
+    const i = bars.length-1;
+    const sigUT = ut.signals[i];
+    const price = bars[i].close;
+    const lower = lrc.lower[i], upper = lrc.upper[i];
+    const curRSI = rsi[i] ?? null;
+
+    // BUY: UTBot=buy + price <= lower + RSI<30
+    if (sigUT === 'buy' && lower!=null && price <= lower && curRSI !== null && curRSI < 30) return 'buy';
+    // SELL: UTBot=sell OR (price >= upper && RSI>70)
+    if ((sigUT === 'sell') || (upper!=null && price >= upper && curRSI !== null && curRSI > 70)) return 'sell';
+    return null;
+  }
+
+  // ---------- On-chain helpers ----------
+  async function ensureApproval(tokenAddr, spender, amountBig) {
+    if (!signer) throw new Error('Signer not ready');
+    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
+    const allowance = BigInt((await erc.allowance(address, spender)).toString());
+    if (allowance < BigInt(amountBig)) {
+      const tx = await erc.approve(spender, amountBig);
+      log('Approve sent: '+tx.hash);
+      await tx.wait();
+      log('Approve confirmed');
+    }
+  }
+
+  function calcOutMinBig(amountOutBig, slipFloat){
+    const bps = 10000n;
+    const slipBps = BigInt(Math.floor((slipFloat||0)*10000));
+    return (BigInt(amountOutBig) * (bps - slipBps)) / bps;
+  }
+
+  // fetch decimals & balance via readProvider
+  async function getDecimalsAndBalance(tokenAddr) {
+    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
+    const decimals = Number(await erc.decimals().catch(()=>18));
+    const bal = BigInt((await erc.balanceOf(address)).toString().catch(()=>'0'));
+    return { decimals, bal };
+  }
+
+  // core execute trade
+  async function executeTrade(direction, opts={force:false}) {
+    try {
+      // ensure signer
+      if (!signer) {
+        const ok = await connectWallet();
+        if (!ok) { log('Wallet not connected - abort'); return; }
+      }
+      const base = safeAddr(elBase.value);
+      const token = safeAddr(elToken.value);
+      if (!base || !token) { log('Alamat base/token invalid'); return; }
+
+      // paper simulation
+      if (elPaper.checked) {
+        if (direction === 'buy') {
+          const {decimals, bal} = await getDecimalsAndBalance(base);
+          const amt = (bal * 30n) / 100n;
+          if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
+          isHolding = true; entryPrice = bars[bars.length-1].close;
+          log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
+          return;
+        } else {
+          const {decimals, bal} = await getDecimalsAndBalance(token);
+          const amt = (bal * 30n) / 100n;
+          if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
+          isHolding = false; entryPrice = null;
+          log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
+          return;
+        }
+      }
+
+      const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
+
+      // prevent duplicate actions (unless forced)
+      if (direction === 'buy' && isHolding && !opts.force) { log('BUY skipped — already holding'); return; }
+      if (direction === 'sell' && !isHolding && !opts.force) { log('SELL skipped — not holding'); return; }
+
+      if (direction === 'buy') {
+        const {decimals, bal} = await getDecimalsAndBalance(base);
+        const amountIn = (bal * 30n) / 100n;
+        if (amountIn === 0n) { log('BUY aborted — USDT balance zero'); return; }
+        // approval & swap
+        await ensureApproval(base, PCS_V2_ROUTER, amountIn);
+        const path = [base, token];
+        const amountsOut = await router.getAmountsOut(amountIn, path);
+        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
+        log('BUY tx sent: '+tx.hash);
+        await tx.wait();
+        log('BUY confirmed: '+tx.hash);
+        isHolding = true;
+        entryPrice = bars[bars.length-1].close;
+      } else {
+        const {decimals, bal} = await getDecimalsAndBalance(token);
+        const amountIn = (bal * 30n) / 100n;
+        if (amountIn === 0n) { log('SELL aborted — CAKE balance zero'); return; }
+        await ensureApproval(token, PCS_V2_ROUTER, amountIn);
+        const path = [token, base];
+        const amountsOut = await router.getAmountsOut(amountIn, path);
+        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
+        log('SELL tx sent: '+tx.hash);
+        await tx.wait();
+        log('SELL confirmed: '+tx.hash);
+        isHolding = false;
+        entryPrice = null;
+      }
+    } catch(err) {
+      log('Trade error: ' + (err.reason || err.message || err));
+      // retry once
+      if (!opts._retry) {
+        log('Retrying trade once...');
+        await new Promise(r=>setTimeout(r,2000));
+        return executeTrade(direction, {...opts, _retry:true});
+      }
+    }
+  }
+
+  // evaluate and maybe trade
+  async function evaluateAndMaybeTrade(){
+    if (!auto) return;
+    const d = decide();
+    if (!d) return;
+    if (d === 'buy' && isHolding) { log('Auto BUY skipped — holding'); return; }
+    if (d === 'sell' && !isHolding) { log('Auto SELL skipped — not holding'); return; }
+    log('Auto Signal: '+d.toUpperCase() + ' @ ' + bars[bars.length-1].close);
+    await executeTrade(d);
+  }
+
+  // wallet connect
   async function detectWalletProvider(){
     const any = window.ethereum;
     if (!any) return null;
-    if (window.trustwallet) return new BrowserProvider(window.trustwallet);
     if (any.providers && Array.isArray(any.providers)){
       const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
       if (trust) return new BrowserProvider(trust);
@@ -439,215 +493,42 @@
 
   async function connectWallet(){
     walletProvider = await detectWalletProvider();
-    if (!walletProvider){ alert('EIP-1193 wallet tidak ditemukan'); return false; }
+    if (!walletProvider) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
     try {
       await walletProvider.send('eth_requestAccounts', []);
       signer = await walletProvider.getSigner();
       address = await signer.getAddress();
-      $("addr").textContent = address.slice(0,6)+"…"+address.slice(-4);
-      log('Wallet terhubung: ' + address);
+      elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
+      log('Wallet connected: '+address);
       return true;
-    } catch(e){ log('Connect wallet failed: '+(e.message||e)); return false; }
+    } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
   }
 
-  // ---------- Trading helpers (balance 30%) ----------
-  async function getTokenDecimalsAndBalance(tokenAddr){
-    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
-    const decimals = Number(await erc.decimals().catch(()=>18));
-    // use readProvider to query balance (fast), but ensure the address exists
-    const bal = await erc.balanceOf(address).catch(()=>0n);
-    return { decimals, balance: BigInt(bal.toString()) };
-  }
-
-  function pctOfBigInt(big, pct){ return (big * BigInt(Math.floor(pct*100))) / 100n / 100n; } // pct in e.g. 30 => 30%
-
-  // approve helper (signer required)
-  async function ensureApproval(tokenAddr, spender, amountBig){
-    if (!signer) throw new Error('Signer not ready');
-    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
-    const allowance = await erc.allowance(address, spender);
-    if (BigInt(allowance.toString()) < amountBig){
-      const tx = await erc.approve(spender, amountBig);
-      log('Approve tx sent: '+tx.hash);
-      await tx.wait();
-      log('Approve confirmed');
-    }
-  }
-
-  function calcOutMinFromBig(amountOutBig, slipFloat){ // amountOutBig is BigInt
-    const bps = 10000n;
-    const slipBps = BigInt(Math.floor((slipFloat||0)*10000));
-    return (BigInt(amountOutBig) * (bps - slipBps)) / bps;
-  }
-
-  // ---------- Core trade execution ----------
-  // direction: 'buy' (USDT->TOKEN) or 'sell' (TOKEN->USDT)
-  // opts: { force: bool } -> bypass isHolding checks if true
-  async function executeTrade(direction, opts={force:false}){
-    // ensure wallet connected
-    if (!signer){
-      const ok = await connectWallet();
-      if (!ok) { log('No wallet - abort trade'); return; }
-    }
-    const baseAddr = safeAddr(elBase.value);
-    const tokenAddr = safeAddr(elToken.value);
-    if (!baseAddr || !tokenAddr) { log('Alamat token/base tidak valid'); return; }
-
-    // paper simulation
-    if (elPaper.checked){
-      try {
-        if (direction === 'buy'){
-          // simulate 30% of USDT balance
-          const baseRead = new Contract(baseAddr, ERC20_ABI, readProvider);
-          const dec = Number(await baseRead.decimals().catch(()=>18));
-          const bal = BigInt((await baseRead.balanceOf(address)).toString());
-          const amt = (bal * 30n) / 100n;
-          if (amt === 0n) { log('[PAPER] BUY skipped — USDT balance 0'); return; }
-          isHolding = true;
-          entryPrice = bars[bars.length-1].close;
-          log(`[PAPER] BUY simulated — amt(${amt.toString()}) decimals=${dec} entryPrice=${entryPrice}`);
-        } else {
-          const tokRead = new Contract(tokenAddr, ERC20_ABI, readProvider);
-          const dec = Number(await tokRead.decimals().catch(()=>18));
-          const bal = BigInt((await tokRead.balanceOf(address)).toString());
-          const amt = (bal * 30n) / 100n;
-          if (amt === 0n) { log('[PAPER] SELL skipped — token balance 0'); return; }
-          isHolding = false;
-          log(`[PAPER] SELL simulated — amt(${amt.toString()}) decimals=${dec}`);
-        }
-      } catch(e){ log('[PAPER] simulate error: '+(e.message||e)); }
-      return;
-    }
-
-    // non-paper -> perform on-chain
-    try {
-      const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
-      if (direction === 'buy' && isHolding && !opts.force){ log('BUY signal but already holding — skipped'); return; }
-      if (direction === 'sell' && !isHolding && !opts.force){ log('SELL signal but not holding — skipped'); return; }
-
-      // Calculate amountIn = 30% balance
-      if (direction === 'buy'){
-        const baseRead = new Contract(baseAddr, ERC20_ABI, readProvider);
-        const dec = Number(await baseRead.decimals().catch(()=>18));
-        const bal = BigInt((await baseRead.balanceOf(address)).toString());
-        const amountIn = (bal * 30n) / 100n; // 30%
-        if (amountIn === 0n){ log('BUY aborted: USDT balance 0'); return; }
-        const amountInStr = amountIn.toString();
-
-        const path = [baseAddr, tokenAddr];
-        // need approval of USDT -> router
-        await ensureApproval(baseAddr, PCS_V2_ROUTER, amountIn);
-        // get amountsOut
-        const amountsOut = await router.getAmountsOut(amountIn, path);
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
-        const outMin = calcOutMinFromBig(outBig, Number(elSlip.value||0));
-        // execute swapExactTokensForTokens
-        let tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
-        log('BUY tx sent: '+tx.hash);
-        await tx.wait();
-        log('BUY confirmed: '+tx.hash);
-        isHolding = true;
-        entryPrice = bars[bars.length-1].close;
-      } else {
-        const tokRead = new Contract(tokenAddr, ERC20_ABI, readProvider);
-        const dec = Number(await tokRead.decimals().catch(()=>18));
-        const bal = BigInt((await tokRead.balanceOf(address)).toString());
-        const amountIn = (bal * 30n) / 100n; // 30% token
-        if (amountIn === 0n){ log('SELL aborted: token balance 0'); return; }
-        const path = [tokenAddr, baseAddr];
-        await ensureApproval(tokenAddr, PCS_V2_ROUTER, amountIn);
-        const amountsOut = await router.getAmountsOut(amountIn, path);
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString());
-        const outMin = calcOutMinFromBig(outBig, Number(elSlip.value||0));
-        let tx = await router.swapExactTokensForTokens(amountIn, outMin, path, address, Math.floor(Date.now()/1000)+300);
-        log('SELL tx sent: '+tx.hash);
-        await tx.wait();
-        log('SELL confirmed: '+tx.hash);
-        isHolding = false;
-        entryPrice = null;
-      }
-    } catch (err){
-      log('Trade attempt failed: '+(err.reason||err.message||err));
-      // retry once
-      try {
-        log('Retrying trade once...');
-        await new Promise(r=>setTimeout(r, 2000));
-        await executeTrade(direction, {...opts, _retry:true});
-      } catch(e2){
-        log('Retry failed: '+(e2.reason||e2.message||e2));
-      }
-    }
-  }
-
-  // ---------- Decision & eval ----------
-  function decide(){
-    if (!bars.length) return null;
-    const lrc = computeLRC_Open(bars, 100, 2, 2);
-    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
-    const i = bars.length-1;
-    const sig = ut.signals[i];
-    const price = bars[i].close;
-
-    // prefer BUY at LRC LOWER (ambil titik bawah channel)
-    if (sig === 'buy' && lrc.lower[i]!=null && price <= lrc.lower[i]) return 'buy';
-    // SELL if UT says sell OR price above/at upper channel
-    if ((sig === 'sell') || (lrc.upper[i]!=null && price >= lrc.upper[i])) return 'sell';
-    return null;
-  }
-
-  async function evaluateAndMaybeTrade(){
-    if (!auto) return;
-    const d = decide();
-    if (!d) return;
-    // basic position logic: only buy if not holding, only sell if holding
-    if (d === 'buy' && isHolding){ log('Signal BUY but already holding — skip'); return; }
-    if (d === 'sell' && !isHolding){ log('Signal SELL but not holding — skip'); return; }
-    const i = bars.length-1;
-    $("statSignal").textContent = d.toUpperCase();
-    log(`Signal ${d.toUpperCase()} @ ${bars[i].close}`);
-    await executeTrade(d);
-  }
-
-  // ---------- Events ----------
-  $("btnConnect").onclick = async () => { await connectWallet(); };
-  $("btnAuto").onclick = async () => {
+  // manual buttons
+  btnConnect.onclick = async ()=> await connectWallet();
+  btnAuto.onclick = async ()=>{
     auto = !auto;
-    $("btnAuto").textContent = auto? 'Stop Auto' : 'Start Auto';
-    $("btnAuto").className = 'btn ' + (auto? 'stop' : 'auto');
+    btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto';
     log('Auto: '+(auto?'ON':'OFF'));
     if (auto) await evaluateAndMaybeTrade();
   };
-  // Manual buttons force execution regardless of holding (user override)
-  $("btnBuy").onclick  = async () => { log('Manual BUY pressed'); await executeTrade('buy', {force:true}); };
-  $("btnSell").onclick = async () => { log('Manual SELL pressed'); await executeTrade('sell', {force:true}); };
+  btnBuy.onclick = async ()=>{ log('Manual BUY pressed'); await executeTrade('buy', {force:true}); };
+  btnSell.onclick = async ()=>{ log('Manual SELL pressed'); await executeTrade('sell', {force:true}); };
+
   elSymbol.onchange = startPolling;
   elInterval.onchange = startPolling;
 
-  // ---------- Start ----------
-  startPolling(); // load data + pasang TV
-  window.addEventListener('resize', () => {
-    const lw = document.getElementById('lwchart').clientWidth;
-    const lh = document.getElementById('lwchart').clientHeight;
-    lwc.applyOptions({ width: lw, height: lh });
-  });
+  // start polling on load
+  startPolling();
 
-  // ---------- Self Tests ----------
+  // resize chart on window resize
+  window.addEventListener('resize', ()=> lwc.applyOptions({ width: document.getElementById('lwchart').clientWidth, height: document.getElementById('lwchart').clientHeight }));
+
+  // small self-tests
   (function runTests(){
-    const tests = [];
-    const lr = (arr)=>{ const {slope,intercept} = (function(y){ const n=y.length; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; })(arr); return {slope,intercept}; };
-    const lrRes = lr([5,7,9,11,13]);
-    tests.push({name:'LR slope≈2', pass: Math.abs(lrRes.slope-2) < 1e-9});
-    tests.push({name:'LR intercept≈3', pass: Math.abs(lrRes.intercept-3) < 1e-9});
-    const dummyBars = Array.from({length:100}, (_,i)=>({open:i, high:i, low:i, close:i}));
-    const lrc = computeLRC_Open(dummyBars, 100, 2, 2);
-    tests.push({name:'LRC(open) mid defined', pass: lrc.mid[lrc.mid.length-1]!=null});
-    const flat = Array.from({length:20},()=>({open:1,high:1,low:1,close:1}));
-    const ut = computeUTBotSignals(flat, 1, 10);
-    tests.push({name:'UT(flat) no signals', pass: ut.signals.every(x=>x==null)});
-
-    const ul = document.getElementById('tests');
-    ul.innerHTML = tests.map(t=>`<li class="${t.pass?'pass':'fail'}">${t.name}: ${t.pass?'PASS':'FAIL'}</li>`).join('');
+    log('Self-test: LRC+UTBot+RSI module loaded.');
   })();
+
 })();
 </script>
 </body>
