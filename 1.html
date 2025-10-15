@@ -323,7 +323,7 @@
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
     const tvFull = `BINANCE:${tvSymbol}`;
-    const iv = elInterval.value||'15m';
+    const iv = elInterval.value||'5m';
     const ivMap = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60'};
     const tvInterval = ivMap[iv]||iv;
     if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
