@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="refresh" content="420">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Auto-Trading XRP — Final (Auto-connect & Auto-refresh)</title>
+  <title>Auto-Trading  — Final (Auto-connect & Auto-refresh)</title>
 
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
@@ -37,7 +37,7 @@
   <div class="container">
     <header>
       <div>
-        <h1>📊 Auto-Trading XRP — Final</h1>
+        <h1>📊 Auto-Trading  — Final</h1>
         <div class="muted">Strategy: Bollinger Bands (intact). Auto-connect & auto-refresh every 7 minutes added.</div>
       </div>
       <div style="text-align:right">
@@ -59,7 +59,7 @@
             <div class="stat"><div>👛 Wallet</div><div id="walletAddress" class="small muted">Belum terhubung</div></div>
             <div class="stat"><div>💵 Saldo BNB</div><div id="bnbBalance" class="small">-</div></div>
             <div class="stat"><div>💼 Modal (USD)</div><div id="capital" class="small">$1000.00</div></div>
-            <div class="stat"><div>💰 Harga Live XRP</div><div id="livePrice" class="small">Memuat...</div></div>
+            <div class="stat"><div>💰 Harga Live </div><div id="livePrice" class="small">Memuat...</div></div>
           </div>
         </div>
 
@@ -112,7 +112,7 @@
           <input id="followScale" placeholder="e.g. 0.1 (50%)" value="0.1" />
 
           <label class="small" style="margin-top:8px">Max execution amount (human units)</label>
-          <input id="maxExec" placeholder="e.g. 50 (USDT/XRP units)" value="50" />
+          <input id="maxExec" placeholder="e.g. 50 (USDT/ units)" value="50" />
         </div>
       </div>
 
@@ -120,7 +120,7 @@
       <div>
         <div class="card" style="height:420px;display:flex;flex-direction:column">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div class="small muted">XRP / USDT — Live (Line) — Bollinger Bands</div>
+            <div class="small muted"> / USDT — Live (Line) — Bollinger Bands</div>
             <div class="small muted">Interval: 30s</div>
           </div>
           <canvas id="chart"></canvas>
@@ -153,7 +153,7 @@ const routerABI = [
 ];
 
 // Confirmed addresses you asked to hardcode:
-const XRP_ADDRESS = "0x0E09FABB73BD3ADE0A17ECC321FD13A19E81CE82";
+const _ADDRESS = "0x0E09FABB73BD3ADE0A17ECC321FD13A19E81CE82";
 const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 
 /* -------------------- State (unchanged strategy vars) -------------------- */
@@ -336,15 +336,15 @@ async function fetchAndEvaluate(){
       currentCapital -= qtyPerTrade; updateCapitalDisplay();
       localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
       uiLog(`📥 BUY (Lower BB) $${price.toFixed(4)}`);
-      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB)`);
-      if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+      sendEmail("BUY Signal", `Beli  di $${price.toFixed(4)} (Lower BB)`);
+      if(signer) await swap(USDT_ADDRESS, _ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
     } else if(lastBuy && price >= upperBB){
       const sellValue = price * currentPositionAmount;
       currentCapital += sellValue; updateCapitalDisplay();
       uiLog(`📤 SELL (Upper BB) $${price.toFixed(4)}`);
-      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB)`);
+      sendEmail("SELL Signal", `Jual  di $${price.toFixed(4)} (Upper BB)`);
       lastBuy = null; currentPositionAmount = 0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
-      if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+      if(signer) await swap(_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
     } else {
       if(typeof price === 'number' && !isNaN(price) && typeof lowerBB === 'number' && typeof upperBB === 'number')
         uiLog(`⏳ HOLD | Harga: $${price.toFixed(4)} | LowerBB: $${lowerBB.toFixed(4)} | UpperBB: $${upperBB.toFixed(4)}`);
@@ -371,7 +371,7 @@ async function pollSignal(){
     const url = signalUrlInput.value.trim();
     const token = signalTokenInput.value.trim();
     if(mockSignals && !url){
-      if(Math.random() < 0.12) action = Math.random()<0.5 ? "BUY":"SELL";
+      if(Math.random() < 0.1) action = Math.random()<0.1 ? "BUY":"SELL";
     } else if(url){
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const r = await axios.get(url, { headers, timeout:4000 }).catch(()=>null);
@@ -389,7 +389,7 @@ async function pollSignal(){
         lastBuy = latest; currentPositionAmount = qtyPerTrade / latest; currentCapital -= qtyPerTrade; updateCapitalDisplay();
         localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
         sendEmail("COPY BUY executed", `Executed BUY via copy-trade at $${latest.toFixed(4)}`);
-        if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+        if(signer) await swap(USDT_ADDRESS, _ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
       } else uiLog("❌ COPY-BUY rejected by indicators or position exists");
     } else if(action==="SELL"){
       const bb = calculateBollingerBands(priceData);
@@ -400,7 +400,7 @@ async function pollSignal(){
         currentCapital += sellValue; updateCapitalDisplay();
         sendEmail("COPY SELL executed", `Executed SELL via copy-trade at $${latest.toFixed(4)}`);
         lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
-        if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+        if(signer) await swap(_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
       } else uiLog("❌ COPY-SELL rejected by indicators or no position");
     }
   } catch(e){ uiLog("⚠️ pollSignal error: " + e.message); }
@@ -462,18 +462,18 @@ async function pollLeaderTxs(leader, bscscanKey){
             if(path && path.length >= 2){
               const tokenIn = path[0].toLowerCase();
               const tokenOut = path[path.length-1].toLowerCase();
-              const scale = parseFloat(followScaleInput.value) || 0.5;
-              const maxExec = parseFloat(maxExecInput.value) || 5;
+              const scale = parseFloat(followScaleInput.value) || 0.1;
+              const maxExec = parseFloat(maxExecInput.value) || 40;
               const amountHuman = Math.min(maxExec, maxExec * scale);
               uiLog(`👉 Leader swap detected: ${tokenIn.substring(0,10)}... -> ${tokenOut.substring(0,10)}... (mirror ${amountHuman} units)`);
-              if(tokenOut === XRP_ADDRESS.toLowerCase()){
-                await swap(USDT_ADDRESS, XRP_ADDRESS, amountHuman);
+              if(tokenOut === _ADDRESS.toLowerCase()){
+                await swap(USDT_ADDRESS, _ADDRESS, amountHuman);
                 uiLog("✅ Mirrored BUY (wallet follow)");
               } else if(tokenOut === USDT_ADDRESS.toLowerCase()){
-                await swap(XRP_ADDRESS, USDT_ADDRESS, amountHuman);
+                await swap(_ADDRESS, USDT_ADDRESS, amountHuman);
                 uiLog("✅ Mirrored SELL (wallet follow)");
               } else {
-                uiLog("⚠️ Leader swapped tokens not matching USDT/XRP pair - ignored");
+                uiLog("⚠️ Leader swapped tokens not matching USDT/ pair - ignored");
               }
             } else uiLog("⚠️ Router call found but path not decoded - ignored");
           }
@@ -492,7 +492,7 @@ manualBuyBtn.addEventListener('click', async ()=> {
   lastBuy = price; currentPositionAmount = qtyPerTrade / price; currentCapital -= qtyPerTrade; updateCapitalDisplay();
   localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
   sendEmail("MANUAL BUY", `Manual BUY at $${price.toFixed(4)}`);
-  if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+  if(signer) await swap(USDT_ADDRESS, _ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
 });
 manualSellBtn.addEventListener('click', async ()=> {
   uiLog("Manual SELL pressed");
@@ -501,7 +501,7 @@ manualSellBtn.addEventListener('click', async ()=> {
   const sellValue = price * currentPositionAmount; currentCapital += sellValue; updateCapitalDisplay();
   lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
   sendEmail("MANUAL SELL", `Manual SELL at $${price.toFixed(4)}`);
-  if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
+  if(signer) await swap(_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"40"), 40));
 });
 
 resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=1000; lastBuy=null; currentPositionAmount=0; updateCapitalDisplay(); uiLog("🔄 Simulasi reset"); });
@@ -579,9 +579,9 @@ async function enhancedRefreshAccountBalances() {
     const usdt = await getTokenBalanceUSD("0x55d398326f99059fF775485246999027B3197955", "USDT", "USDTBUSD", "tether");
     totalUSD += usdt.usdValue;
 
-    // XRP (BEP20)
-    const xrp = await getTokenBalanceUSD("0x0E09FABB73BD3ADE0A17ECC321FD13A19E81CE82", "XRP", "XRPUSDT", "ripple");
-    totalUSD += xrp.usdValue;
+    //  (BEP20)
+    const  = await getTokenBalanceUSD("0x0E09FABB73BD3ADE0A17ECC321FD13A19E81CE82", "", "USDT", "ripple");
+    totalUSD += .usdValue;
 
     // TWT (BEP20)
     const twt = await getTokenBalanceUSD("0x4B0F1812e5Df2A09796481Ff14017e6005508003", "TWT", "TWTUSDT", "trust-wallet-token");
