@@ -118,6 +118,19 @@
 
 <script>
 (async () => {
+  // ---------- CONFIG: Fill these with your EmailJS values ----------
+  const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
+  const EMAILJS_SERVICE_ID = "service_5hxo1hk";
+  const EMAILJS_TEMPLATE_ID = "template_iq87egh";
+  // -----------------------------------------------------------------
+
+  // init emailjs
+  if (window.emailjs && typeof window.emailjs.init === 'function') {
+    try { window.emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e){ console.warn('EmailJS init error', e); }
+  } else {
+    console.warn('EmailJS not available');
+    
+(async () => {
   // use ethers v6 from window.ethers (UMD)
   // include formatUnits / parseUnits to avoid `undefined` errors
   const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
@@ -178,6 +191,29 @@
   const safeAddr = v=>{
     try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
   };
+
+     // ---------- Email helper ----------
+  async function sendEmail(action, price, txHash = '-', amountHuman = '-') {
+    if (!window.emailjs || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
+      log(`(email) missing config or emailjs not loaded — skip send: ${action} @ ${price}`);
+      return;
+    }
+    try {
+      const templateParams = {
+        pair: elSymbol.value || 'CAKEUSDT',
+        action: action.toUpperCase(),
+        price: String(price),
+        txhash: txHash,
+        amount: String(amountHuman),
+        wallet: address || '-',
+        time: new Date().toLocaleString()
+      };
+      await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+      log(`📧 Email sent: ${action} @ ${price}`);
+    } catch (e) {
+      log('⚠️ Email failed: ' + (e.text || e.message || e));
+    }
+  }
 
   // --- TA helpers (same as your original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
