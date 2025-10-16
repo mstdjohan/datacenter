@@ -26,11 +26,13 @@
   <script src="https://s3.tradingview.com/tv.js"></script>
   <!-- Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec) plus Email</h2>
+      <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec)</h2>
       <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell.</small>
     </div>
 
@@ -117,23 +119,39 @@
   </div>
 
 <script>
-    
 (async () => {
   // use ethers v6 from window.ethers (UMD)
   // include formatUnits / parseUnits to avoid `undefined` errors
   const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
 
-  // ---------- CONFIG: Fill these with your EmailJS values ----------
-  const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
+  // === EMAILJS CONFIG (ganti placeholder dengan milikmu) ===
+   const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
   const EMAILJS_SERVICE_ID = "service_5hxo1hk";
-  const EMAILJS_TEMPLATE_ID = "template_iq87egh";
-  // -----------------------------------------------------------------
+  const EMAILJS_TEMPLATE_ID = "template_iq87egh";  
+  // template expects: action, pair, price, mode, time, profit (profit optional)
+  try { emailjs.init(EMAILJS_PUBLIC_KEY); log('EmailJS initialized'); } catch(e){ /* ignore init errors until replaced */ }
 
-  // init emailjs
-  if (window.emailjs && typeof window.emailjs.init === 'function') {
-    try { window.emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e){ console.warn('EmailJS init error', e); }
-  } else {
-    console.warn('EmailJS not available');
+  async function sendEmailNotification(action, pair, price, mode, profitText=''){
+    try{
+      const timeStr = new Date().toLocaleString();
+      const templateParams = {
+        action: `[AUTO-BOT] ${action} Executed`,
+        pair: pair,
+        price: String(price),
+        mode: mode,
+        time: timeStr,
+        profit: profitText
+      };
+      // only attempt send if EmailJS config replaced
+      if (!EMAILJS_SERVICE_ID.includes('xxx') && !EMAILJS_TEMPLATE_ID.includes('xxx') && !EMAILJS_PUBLIC_KEY.includes('xxx')){
+        const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+        log(`Email sent: ${res.status} ${res.text || ''}`);
+      } else {
+        log('EmailJS placeholders still present — replace with your service/template/public key to enable email sending.');
+        log(`(email preview) ${templateParams.action} | ${templateParams.pair} | ${templateParams.price} | ${templateParams.mode} | ${templateParams.time} ${profitText? '| Profit: '+profitText : ''}`);
+      }
+    }catch(err){ log('Email send error: '+(err.message||err)); }
+  }
 
   // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
@@ -184,7 +202,8 @@
 
   function log(msg){
     const time = new Date().toLocaleTimeString();
-    elLogs.textContent = `[${time}] ${msg}\n` + elLogs.textContent;
+    elLogs.textContent = `[${time}] ${msg}
+` + elLogs.textContent;
     console.log(`[LOG] ${msg}`);
   }
 
@@ -192,30 +211,6 @@
     try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
   };
 
-     // ---------- Email helper ----------
-  async function sendEmail(action, price, txHash = '-', amountHuman = '-') {
-    if (!window.emailjs || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
-      log(`(email) missing config or emailjs not loaded — skip send: ${action} @ ${price}`);
-      return;
-    }
-    try {
-      const templateParams = {
-        pair: elSymbol.value || 'CAKEUSDT',
-        action: action.toUpperCase(),
-        price: String(price),
-        txhash: txHash,
-        amount: String(amountHuman),
-        wallet: address || '-',
-        time: new Date().toLocaleString()
-      };
-      await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-      log(`📧 Email sent: ${action} @ ${price}`);
-    } catch (e) {
-      log('⚠️ Email failed: ' + (e.text || e.message || e));
-    }
-  }
-}
-  
   // --- TA helpers (same as your original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
   function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
@@ -459,13 +454,23 @@
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
+          // send email only for auto (not manual)
+          if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
           return;
         } else {
           const {decimals, bal} = await getDecimalsAndBalance(token);
           const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
+          // compute sell price and profit if entryPrice available
+          const sellPrice = bars[bars.length-1].close;
+          let profitText = '';
+          if (entryPrice) {
+            const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+            profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
+          }
           isHolding = false; entryPrice = null;
           log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
+          if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
           return;
         }
       }
@@ -491,7 +496,13 @@
         log(`Estimate out: ${bnToStringReadable(outRaw, outDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, outDecimals)} (${outMin})`);
 
         // ask confirmation (show human-readable approximate amounts using decimals)
-        const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig}\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const confirmMsg = `CONFIRM BUY?
+Base token: ${base}
+Token: ${token}
+AmountBase (raw): ${amountIn}
+EstimatedOut (raw): ${outBig}
+Slippage: ${elSlippage.value}
+Reply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
 
@@ -506,6 +517,8 @@
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
+        // send email only for auto trades (not manual forced)
+        if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
       } else {
         // SELL: TOKEN -> BASE
         const {decimals, bal} = await getDecimalsAndBalance(token);
@@ -520,7 +533,13 @@
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
         log(`Estimate out: ${bnToStringReadable(outRaw, baseDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, baseDecimals)} (${outMin})`);
 
-        const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig}\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const confirmMsg = `CONFIRM SELL?
+Token: ${token}
+Base: ${base}
+AmountToken (raw): ${amountIn}
+EstimatedBase (raw): ${outBig}
+Slippage: ${elSlippage.value}
+Reply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
 
@@ -531,8 +550,17 @@
         log('SELL tx sent: '+tx.hash);
         await tx.wait();
         log('SELL confirmed: '+tx.hash);
+        // compute profit if entryPrice present
+        const sellPrice = bars[bars.length-1].close;
+        let profitText = '';
+        if (entryPrice) {
+          const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+          profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
+        }
         isHolding = false;
         entryPrice = null;
+        // send email only for auto trades
+        if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
