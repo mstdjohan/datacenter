@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoBot CAKE/USDT — Fixed Exec + Email Alerts</title>
+  <title>AutoBot CAKE/USDT — Fixed Exec</title>
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:20px}
-    .wrap{max-width:2000px;margin:0 auto}
+    .wrap{max-width:1200px;margin:0 auto}
     .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
     .row{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
     .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
@@ -26,8 +26,8 @@
   <script src="https://s3.tradingview.com/tv.js"></script>
   <!-- Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
-  <!-- EmailJS -->
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -39,14 +39,14 @@
     <div class="row">
       <div>
         <div class="card">
-          <div id="tvwrap" style="height:300px;border-radius:12px;overflow:hidden;margin-bottom:16px">
+          <div id="tvwrap" style="height:300px;border-radius:8px;overflow:hidden;margin-bottom:10px">
             <div id="tv_chart" style="height:100%;width:100%"></div>
           </div>
 
           <div id="lwchart" class="card"></div>
 
           <div class="card">
-            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button id="btnConnect" class="btn-primary">Connect (MetaMask/Trust)</button>
               <span class="pill">Addr: <span id="addr">—</span></span>
               <button id="btnAuto" class="btn-primary">Start Auto</button>
@@ -55,7 +55,7 @@
               <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
             </div>
 
-            <div class="controls" style="margin-top:16px">
+            <div class="controls" style="margin-top:12px">
               <div>
                 <label>BASE (USDT)</label>
                 <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
@@ -70,7 +70,7 @@
               </div>
               <div>
                 <label>Interval</label>
-                <select id="interval"><option value="1m">1m</option><option value="15m" selected>15m</option><option value="5m">5m</option></select>
+                <select id="interval"><option value="15m" selected>15m</option><option value="5m">5m</option><option value="1m">1m</option></select>
               </div>
               <div>
                 <label>Bars keep</label>
@@ -120,21 +120,38 @@
 
 <script>
 (async () => {
-  // ---------- CONFIG: Fill these with your EmailJS values ----------
-  const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
-  const EMAILJS_SERVICE_ID = "service_5hxo1hk";
-  const EMAILJS_TEMPLATE_ID = "template_iq87egh";
-  // -----------------------------------------------------------------
-
-  // init emailjs
-  if (window.emailjs && typeof window.emailjs.init === 'function') {
-    try { window.emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e){ console.warn('EmailJS init error', e); }
-  } else {
-    console.warn('EmailJS not available');
-  }
-
   // use ethers v6 from window.ethers (UMD)
-  const { BrowserProvider, JsonRpcProvider, Contract, getAddress } = window.ethers;
+  // include formatUnits / parseUnits to avoid `undefined` errors
+  const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
+
+  // === EMAILJS CONFIG (ganti placeholder dengan milikmu) ===
+   const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
+  const EMAILJS_SERVICE_ID = "service_5hxo1hk";
+  const EMAILJS_TEMPLATE_ID = "template_iq87egh";  
+  // template expects: action, pair, price, mode, time, profit (profit optional)
+  try { emailjs.init(EMAILJS_PUBLIC_KEY); log('EmailJS initialized'); } catch(e){ /* ignore init errors until replaced */ }
+
+  async function sendEmailNotification(action, pair, price, mode, profitText=''){
+    try{
+      const timeStr = new Date().toLocaleString();
+      const templateParams = {
+        action: `[AUTO-BOT] ${action} Executed`,
+        pair: pair,
+        price: String(price),
+        mode: mode,
+        time: timeStr,
+        profit: profitText
+      };
+      // only attempt send if EmailJS config replaced
+      if (!EMAILJS_SERVICE_ID.includes('xxx') && !EMAILJS_TEMPLATE_ID.includes('xxx') && !EMAILJS_PUBLIC_KEY.includes('xxx')){
+        const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+        log(`Email sent: ${res.status} ${res.text || ''}`);
+      } else {
+        log('EmailJS placeholders still present — replace with your service/template/public key to enable email sending.');
+        log(`(email preview) ${templateParams.action} | ${templateParams.pair} | ${templateParams.price} | ${templateParams.mode} | ${templateParams.time} ${profitText? '| Profit: '+profitText : ''}`);
+      }
+    }catch(err){ log('Email send error: '+(err.message||err)); }
+  }
 
   // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
@@ -185,36 +202,14 @@
 
   function log(msg){
     const time = new Date().toLocaleTimeString();
-    elLogs.textContent = `[${time}] ${msg}\n` + elLogs.textContent;
+    elLogs.textContent = `[${time}] ${msg}
+` + elLogs.textContent;
     console.log(`[LOG] ${msg}`);
   }
 
   const safeAddr = v=>{
     try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
   };
-
-  // ---------- Email helper ----------
-  async function sendEmail(action, price, txHash = '-', amountHuman = '-') {
-    if (!window.emailjs || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
-      log(`(email) missing config or emailjs not loaded — skip send: ${action} @ ${price}`);
-      return;
-    }
-    try {
-      const templateParams = {
-        pair: elSymbol.value || 'CAKEUSDT',
-        action: action.toUpperCase(),
-        price: String(price),
-        txhash: txHash,
-        amount: String(amountHuman),
-        wallet: address || '-',
-        time: new Date().toLocaleString()
-      };
-      await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-      log(`📧 Email sent: ${action} @ ${price}`);
-    } catch (e) {
-      log('⚠️ Email failed: ' + (e.text || e.message || e));
-    }
-  }
 
   // --- TA helpers (same as your original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
@@ -286,6 +281,23 @@
     return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
   }
 
+  // ----- Safe BigNumber helpers -----
+  function bnToBigInt(bn){
+    if (bn === null || bn === undefined) return 0n;
+    try { return BigInt(bn.toString()); } catch(e){ return 0n; }
+  }
+  function bnToStringReadable(bn, decimals=18){
+    if (bn === null || bn === undefined) return "0";
+    try {
+      if (typeof formatUnits === 'function') return formatUnits(bn, decimals);
+      const asBigInt = BigInt(bn.toString());
+      const pow = 10n ** BigInt(decimals);
+      const whole = asBigInt / pow;
+      const frac = String(asBigInt % pow).padStart(decimals, '0').replace(/0+$/,'');
+      return frac ? `${whole}.${frac}` : `${whole}`;
+    } catch(e){ return bn.toString(); }
+  }
+
   // render
   function renderAll(){
     const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
@@ -304,7 +316,7 @@
 
   // fetch klines
   const BINANCE_BASE = "https://api.binance.com/api/v3";
-  const intervalMap = {"5m":"5m","15m":"15m","1m":"1m","30m":"30m","1h":"1h"};
+  const intervalMap = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h"};
   async function fetchInitial(symbol, interval, limit=600){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
@@ -320,7 +332,7 @@
   async function startPolling(){
     if (polling) clearInterval(polling);
     const sym = elSymbol.value || "CAKEUSDT";
-    const tf = elInterval.value || "1m";
+    const tf = elInterval.value || "15m";
     try {
       bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
       renderAll();
@@ -346,7 +358,7 @@
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
     const tvFull = `BINANCE:${tvSymbol}`;
-    const iv = elInterval.value||'1m';
+    const iv = elInterval.value||'5m';
     const ivMap = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60'};
     const tvInterval = ivMap[iv]||iv;
     if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
@@ -379,7 +391,7 @@
     return null;
   }
 
-  // ---- on-chain helpers: corrected for ethers v6 usage ----
+  // ---- on-chain helpers: corrected for ethers v6 usage + robust BigNumber handling ----
   function toBigInt(amount) {
     if (typeof amount === 'bigint') return amount;
     if (typeof amount === 'number') return BigInt(Math.floor(amount));
@@ -391,17 +403,21 @@
 
   async function getDecimalsAndBalance(tokenAddr) {
     const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
-    const decimals = Number(await erc.decimals().catch(()=>18));
-    const balRaw = await erc.balanceOf(address).catch(()=>0);
-    const bal = BigInt(balRaw.toString ? balRaw.toString() : balRaw);
-    return { decimals, bal };
+    let decimals = 18;
+    try { decimals = Number(await erc.decimals().catch(()=>18)); } catch(e){ log('decimals() failed, default 18'); }
+    let balRaw = 0;
+    try { balRaw = await erc.balanceOf(address).catch(()=>0); } catch(e){ log('balanceOf() failed, returning 0'); balRaw = 0; }
+    const bal = bnToBigInt(balRaw);
+    const readable = bnToStringReadable(balRaw, decimals);
+    return { decimals, bal, readable, raw: balRaw };
   }
 
   async function ensureApproval(tokenAddr, spender, amountBig) {
     if (!signer) throw new Error('Signer not ready');
     const erc = new Contract(tokenAddr, ERC20_ABI, signer);
-    const allowanceRaw = await erc.allowance(address, spender).catch(()=>0);
-    const allowance = BigInt(allowanceRaw.toString ? allowanceRaw.toString() : allowanceRaw);
+    let allowanceRaw = 0;
+    try { allowanceRaw = await erc.allowance(address, spender).catch(()=>0); } catch(e){ log('allowance() failed, assume 0'); allowanceRaw = 0; }
+    const allowance = bnToBigInt(allowanceRaw);
     log(`Allowance current: ${allowance}`);
     if (allowance < BigInt(amountBig)) {
       log('Approving router to spend token...');
@@ -438,16 +454,23 @@
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
-          // send email for paper simulation too
-          await sendEmail('PAPER BUY', entryPrice, '-', `${amt} (dec ${decimals})`);
+          // send email only for auto (not manual)
+          if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
           return;
         } else {
           const {decimals, bal} = await getDecimalsAndBalance(token);
           const amt = (bal * 100n) / 100n;
           if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
+          // compute sell price and profit if entryPrice available
+          const sellPrice = bars[bars.length-1].close;
+          let profitText = '';
+          if (entryPrice) {
+            const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+            profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
+          }
           isHolding = false; entryPrice = null;
           log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
-          await sendEmail('PAPER SELL', bars[bars.length-1].close, '-', `${amt} (dec ${decimals})`);
+          if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
           return;
         }
       }
@@ -459,25 +482,26 @@
 
       if (direction === 'buy') {
         // buy path: BASE -> TOKEN
-        const {decimals: baseDec, bal: baseBal} = await getDecimalsAndBalance(base);
-        const {decimals: tokenDec} = await getDecimalsAndBalance(token);
-        const amountIn = (baseBal * 100n) / 100n;
+        const {decimals, bal} = await getDecimalsAndBalance(base);
+        const amountIn = (bal * 100n) / 100n;
         if (amountIn === 0n) { log('BUY aborted — base balance zero'); return; }
 
         // estimate amounts out (read-only)
         log('Estimating amountsOut for buy...');
         const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
+        const outRaw = amountsOut[amountsOut.length-1];
+        const outBig = bnToBigInt(outRaw);
+        const outDecimals = (await (new Contract(token, ERC20_ABI, readProvider)).decimals().catch(()=>18));
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), tokenDec));
-        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+        log(`Estimate out: ${bnToStringReadable(outRaw, outDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, outDecimals)} (${outMin})`);
 
-        // kirim email dulu sebelum konfirmasi
+         // kirim email dulu sebelum konfirmasi
         await sendEmail('SIGNAL BUY', bars[bars.length-1].close, '-', `${outHuman} est`);
         const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
-
         
+        if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
+
         // ensure approval of base to router
         await ensureApproval(base, PCS_V2_ROUTER, amountIn);
 
@@ -485,25 +509,25 @@
         log('Sending swapExactTokensForTokens (BUY)...');
         const tx = await router.swapExactTokensForTokens(amountIn, outMin, [base, token], address, Math.floor(Date.now()/1000)+300);
         log('BUY tx sent: '+tx.hash);
-        const receipt = await tx.wait();
+        await tx.wait();
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
-        // send email with tx hash and human amount
-        await sendEmail('BUY', entryPrice, tx.hash, outHuman);
+        // send email only for auto trades (not manual forced)
+        if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
       } else {
         // SELL: TOKEN -> BASE
-        const {decimals: tokenDec, bal: tokenBal} = await getDecimalsAndBalance(token);
-        const {decimals: baseDec} = await getDecimalsAndBalance(base);
-        const amountIn = (tokenBal * 100n) / 100n;
+        const {decimals, bal} = await getDecimalsAndBalance(token);
+        const amountIn = bal;
         if (amountIn === 0n) { log('SELL aborted — token balance zero'); return; }
 
         log('Estimating amountsOut for sell...');
         const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
-        const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
+        const outRaw = amountsOut[amountsOut.length-1];
+        const outBig = bnToBigInt(outRaw);
+        const baseDecimals = (await (new Contract(base, ERC20_ABI, readProvider)).decimals().catch(()=>18));
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), baseDec));
-        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+        log(`Estimate out: ${bnToStringReadable(outRaw, baseDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, baseDecimals)} (${outMin})`);
 
         // kirim email dulu sebelum konfirmasi
         await sendEmail('SIGNAL SELL', bars[bars.length-1].close, '-', `${outHuman} est`);
@@ -519,9 +543,17 @@
         log('SELL tx sent: '+tx.hash);
         await tx.wait();
         log('SELL confirmed: '+tx.hash);
+        // compute profit if entryPrice present
+        const sellPrice = bars[bars.length-1].close;
+        let profitText = '';
+        if (entryPrice) {
+          const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+          profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
+        }
         isHolding = false;
         entryPrice = null;
-        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethers.utils.formatUnits(amountIn.toString(), tokenDec)));
+        // send email only for auto trades
+        if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
