@@ -1,45 +1,50 @@
 <!doctype html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>CAKE/USDT — UT Bot (KV=1, ATR=10) + MinGap % + EmailJS</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CAKE/USDT — UT Bot (KV=1, ATR=10) + Bands + EmailJS</title>
 
-<!-- Lightweight Charts -->
-<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
-<!-- EmailJS (browser) -->
-<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <!-- Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- EmailJS -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 
-<style>
-  :root{--bg:#07121a;--panel:#0b1820;--muted:#9fb4c9;--text:#e6f6ff;--ok:#22c55e;--bad:#ef4444}
-  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:var(--text);padding:12px}
-  .wrap{max-width:1100px;margin:0 auto}
-  .card{background:var(--panel);border-radius:12px;padding:12px;border:1px solid #0f2430}
-  header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
-  h1{font-size:16px;margin:0}
-  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
-  input,select,button{padding:8px;border-radius:8px;border:1px solid #123140;background:#08121a;color:var(--text)}
-  button{cursor:pointer}
-  button.primary{background:var(--ok);color:#04160a;border:0;font-weight:700}
-  .pill{padding:6px 10px;border-radius:999px;background:#081923;border:1px solid #153241;color:var(--muted);font-size:12px}
-  #chart{height:520px;border-radius:8px;overflow:hidden}
-  .log{height:180px;overflow:auto;background:#051016;border:1px solid #0f2833;border-radius:8px;padding:8px;font-family:ui-monospace,monospace;font-size:13px;margin-top:12px}
-  label.small{font-size:13px;color:var(--muted)}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
-  .note{font-size:13px;color:var(--muted);margin-top:6px}
-  @media(max-width:900px){#chart{height:360px}.grid{grid-template-columns:1fr 1fr}}
-</style>
+  <style>
+    :root{--bg:#07121a;--panel:#0b1820;--muted:#9fb4c9;--text:#e6f6ff;--ok:#22c55e;--bad:#ef4444}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:var(--text);padding:14px}
+    .wrap{max-width:1100px;margin:0 auto}
+    .card{background:var(--panel);border-radius:12px;padding:12px;border:1px solid #0f2430}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+    h1{font-size:16px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+    input,select,button{padding:8px;border-radius:8px;border:1px solid #123140;background:#08121a;color:var(--text)}
+    button{cursor:pointer}
+    button.primary{background:var(--ok);color:#04160a;border:0;font-weight:700}
+    #chart{height:520px;border-radius:8px;overflow:hidden}
+    .log{height:180px;overflow:auto;background:#051016;border:1px solid #0f2833;border-radius:8px;padding:8px;font-family:ui-monospace,monospace;font-size:13px;margin-top:12px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+    label.small{font-size:13px;color:var(--muted)}
+    .pill{padding:6px 10px;border-radius:999px;background:#081923;border:1px solid #153241;color:var(--muted);font-size:12px}
+    .note{font-size:13px;color:var(--muted);margin-top:6px}
+    @media(max-width:900px){#chart{height:360px}.grid{grid-template-columns:1fr 1fr}}
+  </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div>
-      <h1>CAKE/USDT — UT Bot (KV=1, ATR=10) + MinGap %</h1>
-      <div class="note">Sinyal BUY/SELL muncul di chart. Isi EmailJS di bawah lalu klik Save untuk mengaktifkan email.</div>
+      <h1>CAKE/USDT — UT Bot (KV=1, ATR=10) + Bands + EmailJS</h1>
+      <div class="note">Upper / Lower band (UT Bot) digambar. Marker BUY / SELL dan email alert (1 per sinyal terakhir).</div>
     </div>
     <div class="controls">
       <div class="pill">Pair: CAKE/USDT</div>
-      <div class="pill">TF: 5m</div>
+      <select id="tfSelect">
+        <option value="1m">1m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+      </select>
       <button id="btnLoad" class="primary">Load Now</button>
     </div>
   </header>
@@ -47,23 +52,24 @@
   <div class="card">
     <div id="chart"></div>
 
-    <div class="grid">
+    <div class="grid" style="margin-top:10px">
       <div>
-        <label class="small">Polling interval (sec)</label>
-        <input id="pollSec" type="number" value="30" min="5">
+        <label class="small">Polling interval override (sec)</label>
+        <input id="pollSec" type="number" value="0" min="0" placeholder="0 = auto">
+        <div class="note">Kosongkan/0 => default per timeframe (1m=10s,5m=30s,15m=60s,1h=180s)</div>
       </div>
       <div>
         <label class="small">Candles to fetch (limit)</label>
-        <input id="limit" type="number" value="500" min="100" max="1000">
+        <input id="limit" type="number" value="600" min="100" max="1000">
       </div>
       <div>
-        <label class="small">Minimal Gap % (minGap)</label>
-        <input id="minGap" type="number" value="1" step="0.1" min="0"> 
-        <div class="note">Jika entryPrice ada, sinyal diabaikan bila selisih &lt; minGap%</div>
+        <label class="small">Deduplicate emails per bar</label>
+        <input id="dedupe" type="checkbox" checked> (aktif)
       </div>
     </div>
 
     <div style="height:8px"></div>
+
     <div class="card" style="margin-top:8px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label class="small">EmailJS Service ID</label>
@@ -83,46 +89,23 @@
 </div>
 
 <script>
-/* Full single-file UT Bot with minGap %
-   - Default: CAKEUSDT 5m, UT Bot KV=1 ATR=10
-   - EmailJS requires user to fill service/template/user via UI then Save
-   - Dedupe: one email per bar (lastSentBar)
+/* Single-file app:
+ - UT Bot KV=1, ATR period = 10
+ - Upper/Lower band drawn on chart
+ - Markers and label for BUY / SELL
+ - Dropdown TF (1m,5m,15m,1h)
+ - EmailJS: fill Service/Template/User via UI and Save, then Test Email
+ - Sends only latest signal once (dedupe per bar)
 */
 
-const logEl = document.getElementById('log');
-function log(...a){ const t=(new Date()).toLocaleTimeString(); const s=a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' '); logEl.textContent = `[${t}] ${s}\n` + logEl.textContent; console.log(...a); }
+// ==== Helpers UI / Log ====
 const $ = id => document.getElementById(id);
+const logEl = $('log');
+function log(...a){ const t=new Date().toLocaleTimeString(); const s=a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' '); logEl.textContent=`[${t}] ${s}\n` + logEl.textContent; console.log(...a); }
 
-// load/save EmailJS config
-function loadEmailCfg(){
-  try{
-    const raw = localStorage.getItem('ut_email_cfg');
-    if(!raw) return;
-    const cfg = JSON.parse(raw);
-    $('emailService').value = cfg.service||'';
-    $('emailTemplate').value = cfg.template||'';
-    $('emailUser').value = cfg.user||'';
-    if(cfg.user && window.emailjs && emailjs.init) emailjs.init(cfg.user);
-    updateEmailReady();
-    log('EmailJS config loaded');
-  }catch(e){ log('loadEmailCfg err', e.message); }
-}
-function saveEmailCfg(){
-  const cfg = { service: $('emailService').value.trim(), template: $('emailTemplate').value.trim(), user: $('emailUser').value.trim() };
-  localStorage.setItem('ut_email_cfg', JSON.stringify(cfg));
-  if(cfg.user && window.emailjs && emailjs.init) try{ emailjs.init(cfg.user); }catch(e){}
-  updateEmailReady();
-  log('EmailJS config saved');
-}
-function updateEmailReady(){
-  const ok = $('emailService').value && $('emailTemplate').value && $('emailUser').value;
-  $('btnTestEmail').disabled = !ok;
-}
-
-// chart
-let chart = null, candleSeries = null;
+// ==== Chart init ====
+let chart = null, candleSeries = null, upperSeries = null, lowerSeries = null, midSeries = null;
 function createChart(){
-  if(chart && candleSeries) return;
   const el = document.getElementById('chart');
   el.innerHTML = '';
   chart = LightweightCharts.createChart(el, {
@@ -131,28 +114,30 @@ function createChart(){
     timeScale:{ borderColor:'#0f2430' }
   });
   candleSeries = chart.addCandlestickSeries({ upColor:'#16a34a', downColor:'#ef4444', wickUpColor:'#16a34a', wickDownColor:'#ef4444' });
+  upperSeries = chart.addLineSeries({ color:'#60A5FA', lineWidth:1 });
+  lowerSeries = chart.addLineSeries({ color:'#60A5FA', lineWidth:1 });
+  midSeries = chart.addLineSeries({ color:'#90cdf4', lineWidth:2 });
   window.addEventListener('resize', ()=> chart.applyOptions({ width: el.clientWidth }));
   log('Chart initialized');
 }
 createChart();
 
-// Binance fetch
-const PAIR = 'CAKEUSDT';
-const INTERVAL = '5m';
-function binanceIntervalToQuery(i){ return i; }
+// ==== Binance fetch ====
+const BINANCE_BASE = 'https://api.binance.com/api/v3';
+function tfToBinance(tf){ return tf; } // mapping trivial (we pass '1m','5m'...)
 async function fetchKlines(symbol, interval, limit=500){
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceIntervalToQuery(interval)}&limit=${limit}`;
+  const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${tfToBinance(interval)}&limit=${limit}`;
   const r = await fetch(url);
-  if(!r.ok) throw new Error('Binance fetch error: '+r.status);
+  if(!r.ok) throw new Error('Binance fetch failed: '+r.status);
   const j = await r.json();
-  return j.map(k => ({ time: Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4], volume:+k[5] }));
+  return j.map(k => ({ t: k[0], time: Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4], volume:+k[5] }));
 }
 
-// ATR / UT Bot (KV=1, ATR=10)
-function trueRange(candles){
-  const tr = new Array(candles.length).fill(NaN);
-  for(let i=1;i<candles.length;i++){
-    const a=candles[i], b=candles[i-1];
+// ==== Indicators: ATR + UT Bot (KV=1, ATR period 10) ====
+function trueRange(arr){
+  const tr = new Array(arr.length).fill(NaN);
+  for(let i=1;i<arr.length;i++){
+    const a=arr[i], b=arr[i-1];
     tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close));
   }
   return tr;
@@ -160,136 +145,197 @@ function trueRange(candles){
 function computeATR(candles, period=10){
   const tr = trueRange(candles);
   const atr = new Array(candles.length).fill(NaN);
-  if(tr.length<=period) return atr;
-  let sum=0;
+  if(tr.length <= period) return atr;
+  let sum = 0;
   for(let i=1;i<=period;i++) sum += tr[i] || 0;
   atr[period] = sum/period;
-  for(let i=period+1;i<tr.length;i++){ atr[i] = ( (atr[i-1]*(period-1)) + tr[i] ) / period; }
+  for(let i=period+1;i<tr.length;i++){
+    atr[i] = ((atr[i-1] * (period-1)) + tr[i]) / period;
+  }
   return atr;
 }
 function computeUT(candles){
   const atr = computeATR(candles, 10);
   const n = candles.length;
   const finalUpper = new Array(n).fill(NaN), finalLower = new Array(n).fill(NaN);
-  const trend = new Array(n).fill(0), signals = [];
+  const trend = new Array(n).fill(0), trail = new Array(n).fill(null);
+  const signals = [];
   for(let i=0;i<n;i++){
     if(!isFinite(atr[i])) continue;
-    const hl2 = (candles[i].high + candles[i].low)/2;
-    const up = hl2 + 1 * atr[i];   // KV = 1
+    const hl2 = (candles[i].high + candles[i].low) / 2;
+    const up = hl2 + 1 * atr[i];  // KV=1
     const low = hl2 - 1 * atr[i];
-    if(i===0){ finalUpper[i]=up; finalLower[i]=low; trend[i]=1; continue; }
+    if(i===0){ finalUpper[i]=up; finalLower[i]=low; trend[i]=1; trail[i]= (trend[i]===1)? low: up; continue; }
     finalUpper[i] = (up < finalUpper[i-1]) ? up : finalUpper[i-1];
     finalLower[i] = (low > finalLower[i-1]) ? low : finalLower[i-1];
     const prev = trend[i-1] || 1;
     if(candles[i].close > finalUpper[i-1]) trend[i] = 1;
     else if(candles[i].close < finalLower[i-1]) trend[i] = -1;
     else trend[i] = prev;
+    trail[i] = (trend[i] === 1) ? finalLower[i] : finalUpper[i];
     if(trend[i] !== trend[i-1]){
       const type = trend[i] === 1 ? 'buy' : 'sell';
-      signals.push({ index: i, type, time: candles[i].time, price: candles[i].close });
+      signals.push({ index:i, type, time: candles[i].time, price: candles[i].close });
     }
   }
-  return { atr, finalUpper, finalLower, trend, signals };
+  return { atr, finalUpper, finalLower, trail, trend, signals };
 }
 
-// render + signal handling
-let lastSentBar = null;
-let candlesCache = [];
-let entryPrice = null; // stores last executed buy price (or null)
-function render(candles){
+// ==== Render + marker handling ====
+let lastSignalBar = null; // dedupe per bar
+let candles = [];
+async function renderAll(){
   if(!candleSeries) createChart();
-  candleSeries.setData(candles);
+  const cand = candles.map(c => ({ time: Math.floor(c.time), open:c.open, high:c.high, low:c.low, close:c.close }));
+  try{ candleSeries.setData(cand); }catch(e){ console.warn('setData err', e); }
   const ut = computeUT(candles);
-  const markers = ut.signals.map(s => ({
-    time: candles[s.index].time,
-    position: s.type==='buy' ? 'belowBar' : 'aboveBar',
-    color: s.type==='buy' ? '#16a34a' : '#ef4444',
-    shape: s.type==='buy' ? 'arrowUp' : 'arrowDown',
-    text: s.type.toUpperCase()
-  }));
-  try{ candleSeries.setMarkers(markers); }catch(e){ console.warn('setMarkers err', e); }
+  // prepare band series
+  const upArr = [], lowArr = [], midArr = [];
+  for(let i=0;i<candles.length;i++){
+    const t = Math.floor(candles[i].time);
+    if(isFinite(ut.finalUpper[i])) upArr.push({ time:t, value: ut.finalUpper[i] });
+    if(isFinite(ut.finalLower[i])) lowArr.push({ time:t, value: ut.finalLower[i] });
+    if(isFinite(ut.trail[i])) midArr.push({ time:t, value: ut.trail[i] });
+  }
+  try{ upperSeries.setData(upArr); lowerSeries.setData(lowArr); midSeries.setData(midArr); }catch(e){}
+  // markers
+  const markers = ut.signals.map(s => {
+    const t = Math.floor(candles[s.index].time);
+    return {
+      time: t,
+      position: s.type==='buy' ? 'belowBar' : 'aboveBar',
+      color: s.type==='buy' ? '#16a34a' : '#ef4444',
+      shape: s.type==='buy' ? 'arrowUp' : 'arrowDown',
+      text: `${s.type.toUpperCase()} ${s.price}`
+    };
+  });
+  try{ candleSeries.setMarkers(markers); }catch(e){ console.warn('setMarkers', e); }
 
-  // evaluate newest signal & minGap filter
+  // handle newest signal only and send email once per bar
   if(ut.signals.length){
     const last = ut.signals[ut.signals.length-1];
-    const nowBar = last.time;
-    if(nowBar !== lastSentBar){
-      // minGap percent:
-      const minGapPct = Math.max(0, Number($('minGap').value) || 1) / 100;
-      let allow = true;
-      if(entryPrice !== null){
-        const diff = Math.abs((last.price - entryPrice) / entryPrice);
-        if(diff < minGapPct) { allow = false; log(`Signal ${last.type.toUpperCase()} ignored (gap ${ (diff*100).toFixed(3) }% < minGap ${ (minGapPct*100).toFixed(3) }%)`); }
-      }
-      if(allow){
-        log('Signal detected:', last.type.toUpperCase(), 'price', last.price);
-        sendSignalEmail(last.type.toUpperCase(), PAIR, last.price, INTERVAL).catch(e=>log('Email error', e));
-        lastSentBar = nowBar;
-      }
+    const barTime = last.time;
+    const dedupeEnabled = $('dedupe').checked;
+    if(!dedupeEnabled || lastSignalBar !== barTime){
+      lastSignalBar = barTime;
+      // log and send email
+      log(`Signal: ${last.type.toUpperCase()} @ ${last.price} (bar ${new Date(barTime*1000).toLocaleString()})`);
+      // send email if configured
+      sendSignalEmail(last.type.toUpperCase(), 'CAKE/USDT', last.price, $('tfSelect').value)
+        .then(()=> log('Email attempt done'))
+        .catch(e=> log('Email error: '+(e.message||e)));
     }
   }
 }
 
-// Email send (needs config saved via UI)
-function isEmailConfigured(){
-  return $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim();
+// ==== EmailJS handling ====
+function loadEmailCfg(){
+  try{
+    const raw = localStorage.getItem('ut_email_cfg_v2');
+    if(!raw) return;
+    const cfg = JSON.parse(raw);
+    $('emailService').value = cfg.service||'';
+    $('emailTemplate').value = cfg.template||'';
+    $('emailUser').value = cfg.user||'';
+    if(cfg.user && window.emailjs && emailjs.init) emailjs.init(cfg.user);
+    updateEmailUI();
+    log('EmailJS config loaded');
+  }catch(e){ log('load email cfg err', e.message); }
+}
+function saveEmailCfg(){
+  const cfg = { service: $('emailService').value.trim(), template: $('emailTemplate').value.trim(), user: $('emailUser').value.trim() };
+  localStorage.setItem('ut_email_cfg_v2', JSON.stringify(cfg));
+  if(cfg.user && window.emailjs && emailjs.init) try{ emailjs.init(cfg.user); }catch(e){}
+  updateEmailUI();
+  log('EmailJS config saved');
+}
+function updateEmailUI(){
+  const ok = $('emailService').value && $('emailTemplate').value && $('emailUser').value;
+  $('btnTestEmail').disabled = !ok;
 }
 async function sendSignalEmail(action, pair, price, interval){
   try{
-    const svc = $('emailService').value.trim();
-    const tmpl = $('emailTemplate').value.trim();
-    const user = $('emailUser').value.trim();
+    const svc = $('emailService').value.trim(), tmpl = $('emailTemplate').value.trim(), user = $('emailUser').value.trim();
     if(!svc || !tmpl || !user){
-      log('EmailJS not configured - skip email');
+      log('(email) not configured — skipping send');
       return;
     }
     emailjs.init(user);
-    const payload = { action:`[UT-BOT] ${action}`, pair, price:String(price), time:new Date().toLocaleString(), interval };
+    const payload = {
+      action: `[UT-BOT] ${action}`,
+      pair,
+      price: String(price),
+      time: new Date().toLocaleString(),
+      interval
+    };
     const res = await emailjs.send(svc, tmpl, payload);
-    log('Email sent', { status: res.status, text: res.text || '' });
-  }catch(e){ log('sendSignalEmail error: '+(e && (e.text||e.message) || e)); }
+    log('Email sent OK', res.status || '', res.text || '');
+    return res;
+  }catch(e){ log('sendSignalEmail error: ' + (e && (e.text||e.message) || e)); throw e; }
 }
 
-// polling
-async function loadAndRender(){
+// ==== Polling / lifecycle ====
+const PAIR = 'CAKEUSDT';
+async function loadCandles(tf, limit){
+  const data = await fetchKlines(PAIR, tf, limit);
+  // normalize time fields
+  data.forEach(d => d.time = Math.floor(d.t/1000));
+  return data;
+}
+let pollHandle = null;
+async function start(tf){
+  stop();
   try{
-    const limit = Math.max(100, Math.min(1000, Number($('limit').value) || 500));
-    const data = await fetchKlines(PAIR, INTERVAL, limit);
-    candlesCache = data;
-    render(candlesCache);
-    log('Rendered candles:', candlesCache.length);
-  }catch(e){ log('loadAndRender error: '+(e.message||e)); }
+    const limit = Number($('limit').value) || 600;
+    candles = await loadCandles(tf, limit);
+    await renderAll();
+    log(`Loaded ${candles.length} candles for ${PAIR} ${tf}`);
+  }catch(e){ log('Initial load error: '+(e.message||e)); }
+  // period mapping default
+  const override = Number($('pollSec').value) || 0;
+  const defaultMap = { '1m':10000, '5m':30000, '15m':60000, '1h':180000 };
+  const ms = override > 0 ? (override*1000) : (defaultMap[tf]||30000);
+  pollHandle = setInterval(async ()=>{
+    try{
+      const latestArr = await fetchKlines(PAIR, tf, 2);
+      const latest = latestArr[latestArr.length-1];
+      if(!latest) return;
+      const keep = Number($('limit').value) || 600;
+      // compare timestamps
+      if(candles.length && candles[candles.length-1].t === latest.t){
+        candles[candles.length-1] = latest;
+      } else {
+        candles = [...candles, latest].slice(-keep);
+      }
+      await renderAll();
+    }catch(e){ log('Poll error: '+(e.message||e)); }
+  }, ms);
+  log('Polling started every '+(ms/1000)+'s');
 }
+function stop(){ if(pollHandle){ clearInterval(pollHandle); pollHandle = null; log('Polling stopped'); } }
 
-let pollTimer = null;
-function startAuto(){
-  stopAuto();
-  const sec = Math.max(5, Number($('pollSec').value) || 30);
-  loadAndRender();
-  pollTimer = setInterval(loadAndRender, sec*1000);
-  log('Auto polling started every '+sec+'s');
-}
-function stopAuto(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; log('Auto polling stopped'); } }
-
-document.getElementById('btnLoad').onclick = loadAndRender;
-document.getElementById('btnSaveEmail').onclick = saveEmailCfg;
-document.getElementById('btnTestEmail').onclick = async ()=>{
+// ==== UI wiring ====
+$('btnLoad').addEventListener('click', ()=> start($('tfSelect').value));
+$('btnSaveEmail').addEventListener('click', saveEmailCfg);
+$('btnTestEmail').addEventListener('click', async ()=>{
   try{
-    if(!window.emailjs || !emailjs.send){ alert('EmailJS SDK not loaded'); return; }
     const svc = $('emailService').value.trim(), tmpl = $('emailTemplate').value.trim(), user = $('emailUser').value.trim();
-    if(!svc || !tmpl || !user){ alert('Fill service/template/user'); return; }
+    if(!svc||!tmpl||!user){ alert('Isi service & template & user'); return; }
     emailjs.init(user);
-    const payload = { action:'[TEST] UT-BOT', pair:PAIR, price:'0', time:new Date().toLocaleString(), interval:INTERVAL };
-    await emailjs.send(svc, tmpl, payload);
-    log('Test email sent');
-  }catch(e){ log('Test email failed: '+(e && (e.text||e.message) || e)); alert('Test failed - check log'); }
-};
+    await emailjs.send(svc, tmpl, { action:'[TEST] UT-BOT', pair:PAIR, price:'0', time:new Date().toLocaleString(), interval:$('tfSelect').value});
+    alert('Test email sent (cek inbox)');
+  }catch(e){ alert('Test failed: '+(e && (e.text||e.message) || e)); log('test email err', e); }
+});
+$('emailService').addEventListener('input', updateEmailUI);
+$('emailTemplate').addEventListener('input', updateEmailUI);
+$('emailUser').addEventListener('input', updateEmailUI);
 
+// initial load
 loadEmailCfg();
-startAuto();
+start($('tfSelect').value);
 
-// expose debug
-window._ut = { loadAndRender, render, computeUT, sendSignalEmail };
+// expose for debug
+window.__ut = { start, stop, renderAll, computeUT };
 
 </script>
 </body>
