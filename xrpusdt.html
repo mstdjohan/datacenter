@@ -143,7 +143,7 @@
         profit: profitText
       };
       // only attempt send if EmailJS config replaced
-      if (!EMAILJS_SERVICE_ID.includes('service_d48312b') && !EMAILJS_TEMPLATE_ID.includes('template_1ktk40q') && !EMAILJS_PUBLIC_KEY.includes('aPZx0R9oxUbIQkLEv')){
+      if (!EMAILJS_SERVICE_ID.includes('service_5hxo1hk') && !EMAILJS_TEMPLATE_ID.includes('template_iq87egh') && !EMAILJS_PUBLIC_KEY.includes('OGH12a8LlCboHPVz8')){
         const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
         log(`Email sent: ${res.status} ${res.text || ''}`);
       } else {
