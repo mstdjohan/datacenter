@@ -120,38 +120,51 @@
 
 <script>
 (async () => {
-  // use ethers v6 from window.ethers (UMD)
-  // include formatUnits / parseUnits to avoid `undefined` errors
   const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
 
-  // === EMAILJS CONFIG (ganti placeholder dengan milikmu) ===
-   const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
-  const EMAILJS_SERVICE_ID = "service_5hxo1hk";
-  const EMAILJS_TEMPLATE_ID = "template_iq87egh";  
-  // template expects: action, pair, price, mode, time, profit (profit optional)
-  try { emailjs.init(EMAILJS_PUBLIC_KEY); log('EmailJS initialized'); } catch(e){ /* ignore init errors until replaced */ }
+  // === EMAILJS CONFIG (pastikan sudah diganti dengan milikmu yang AKTIF) ===
+  const EMAILJS_PUBLIC_KEY   = "OGH12a8LlCboHPVz8";      // ⚠️ ganti dengan public key asli
+  const EMAILJS_SERVICE_ID   = "service_5hxo1hk";        // ⚠️ ganti dengan service id asli
+  const EMAILJS_TEMPLATE_ID  = "template_iq87egh";       // ⚠️ ganti dengan template id asli
 
-  async function sendEmailNotification(action, pair, price, mode, profitText=''){
-    try{
-      const timeStr = new Date().toLocaleString();
-      const templateParams = {
-        action: `[AUTO-BOT] ${action} Executed`,
-        pair: pair,
-        price: String(price),
-        mode: mode,
-        time: timeStr,
-        profit: profitText
-      };
-      // only attempt send if EmailJS config replaced
-      if (!EMAILJS_SERVICE_ID.includes('service_5hxo1hk') && !EMAILJS_TEMPLATE_ID.includes('template_iq87egh') && !EMAILJS_PUBLIC_KEY.includes('OGH12a8LlCboHPVz8')){
-        const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-        log(`Email sent: ${res.status} ${res.text || ''}`);
-      } else {
-        log('EmailJS placeholders still present — replace with your service/template/public key to enable email sending.');
-        log(`(email preview) ${templateParams.action} | ${templateParams.pair} | ${templateParams.price} | ${templateParams.mode} | ${templateParams.time} ${profitText? '| Profit: '+profitText : ''}`);
-      }
-    }catch(err){ log('Email send error: '+(err.message||err)); }
+  try {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    log('📨 EmailJS initialized successfully');
+  } catch (e) {
+    log('⚠️ EmailJS init failed: ' + e.message);
   }
+
+  // === FUNGSI EMAIL ===
+  async function sendEmailNotification(action, pair, price, mode, profitText = '') {
+    const timeStr = new Date().toLocaleString();
+    const templateParams = {
+      action: `[AUTO-BOT] ${action} Executed`,
+      pair: pair,
+      price: String(price),
+      mode: mode,
+      time: timeStr,
+      profit: profitText
+    };
+
+    try {
+      // 🚨 FIX: hapus pengecekan "placeholders" — just send directly
+      // karena logika lama membuat email tidak pernah dikirim
+      const res = await emailjs.send(
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        templateParams
+      );
+      log(`✅ Email sent successfully [${res.status}] ${res.text || ''}`);
+
+    } catch (err) {
+      log('❌ Email send failed: ' + (err.message || err));
+    }
+  }
+
+  // contoh penggunaan:
+  // await sendEmailNotification('SIGNAL BUY', 'CAKE/USDT', 2.543, 'AUTO', '+3%');
+})();
+
 
   // Pancake constants
   const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
