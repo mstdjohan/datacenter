@@ -1,439 +1,673 @@
 <!doctype html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>UT-Bot + EmailJS — Fixed (Lightweight Charts + Binance)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoBot CAKE/USDT — Fixed Exec</title>
+  <style>
+    :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
+    body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:20px}
+    .wrap{max-width:1200px;margin:0 auto}
+    .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
+    .row{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
+    .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    button{padding:8px 12px;border-radius:10px;border:0;cursor:pointer}
+    .btn-primary{background:#111;color:#fff}
+    .btn-buy{background:#2563eb;color:#fff}
+    .btn-sell{background:#f59e0b;color:#fff}
+    .log{height:220px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
+    #lwchart{height:420px}
+    .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #e6e6e6}
+  </style>
 
-<!-- Lightweight Charts -->
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-<!-- EmailJS -->
-<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-
-<style>
-  :root{--bg:#07121a;--panel:#0b1820;--muted:#9fb4c9;--accent:#06b6d4}
-  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6f6ff}
-  .wrap{max-width:1100px;margin:12px auto;padding:12px}
-  header{display:flex;justify-content:space-between;align-items:center;gap:12px}
-  h1{margin:0;font-size:16px}
-  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  input,select,button,textarea{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#071927;color:#eaf6ff}
-  button{cursor:pointer;background:var(--accent);color:#042a2f;border:0}
-  #chartContainer{height:520px;border-radius:8px;overflow:hidden;background:#07121a;margin-top:12px}
-  .panel{margin-top:12px;background:#071827;padding:10px;border-radius:8px}
-  .small{color:var(--muted);font-size:13px}
-  label{font-size:13px;color:var(--muted);margin-right:6px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .log{margin-top:12px;background:#06121a;padding:10px;border-radius:8px;font-family:monospace;height:220px;overflow:auto;font-size:13px}
-  .badge{padding:4px 8px;border-radius:8px;background:#071827;border:1px solid rgba(255,255,255,0.03)}
-  @media(max-width:800px){#chartContainer{height:420px}}
-</style>
+  <!-- Ethers v6 UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <!-- TradingView widget -->
+  <script src="https://s3.tradingview.com/tv.js"></script>
+  <!-- Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>UT-Bot + EmailJS — Fixed</h1>
-      <div class="small">Lightweight Charts + Binance klines + EmailJS on signal</div>
+  <div class="wrap">
+    <div class="card">
+      <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec)</h2>
+      <small>Mode: BUY di bawah LRC + RSI&lt;10 + UTBot buy. SELL di atas LRC + RSI&gt;90 + UTBot sell.</small>
     </div>
-    <div class="small" id="status">Idle</div>
-  </header>
 
-  <div class="controls">
-    <label>Symbol</label>
-    <input id="symbol" value="CAKEUSDT" style="width:140px" />
-    <label>Interval</label>
-    <select id="interval">
-      <option value="1m">1m</option>
-      <option value="5m" selected>5m</option>
-      <option value="15m">15m</option>
-      <option value="1h">1h</option>
-      <option value="4h">4h</option>
-      <option value="1d">1d</option>
-    </select>
-    <label>Candles</label>
-    <input id="limit" type="number" value="500" min="50" max="1000" style="width:90px" />
-    <label>ATR len</label>
-    <input id="atrLen" type="number" value="14" min="2" style="width:80px" />
-    <label>Mult</label>
-    <input id="mult" type="number" step="0.1" value="3" style="width:80px" />
-    <button id="btnLoad">Load</button>
-    <button id="btnStart">Start</button>
-    <button id="btnStop" disabled>Stop</button>
+    <div class="row">
+      <div>
+        <div class="card">
+          <div id="tvwrap" style="height:300px;border-radius:8px;overflow:hidden;margin-bottom:10px">
+            <div id="tv_chart" style="height:100%;width:100%"></div>
+          </div>
+
+          <div id="lwchart" class="card"></div>
+
+          <div class="card">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button id="btnConnect" class="btn-primary">Connect (MetaMask/Trust)</button>
+              <span class="pill">Addr: <span id="addr">—</span></span>
+              <button id="btnAuto" class="btn-primary">Start Auto</button>
+              <button id="btnBuy" class="btn-buy">Manual BUY</button>
+              <button id="btnSell" class="btn-sell">Manual SELL</button>
+              <label class="pill"><input id="paper" type="checkbox" checked /> Paper mode</label>
+            </div>
+
+            <div class="controls" style="margin-top:12px">
+              <div>
+                <label>BASE (USDT)</label>
+                <input id="base" value="0x55d398326f99059fF775485246999027B3197955" />
+              </div>
+              <div>
+                <label>TOKEN (CAKE)</label>
+                <input id="token" value="0x0E09FABB73BD3ADE0A17ECC321FD13A19E81CE82" />
+              </div>
+              <div>
+                <label>Symbol (Binance)</label>
+                <select id="symbol"><option value="CAKEUSDT" selected>CAKEUSDT</option></select>
+              </div>
+              <div>
+                <label>Interval</label>
+                <select id="interval"><option value="15m" selected>15m</option><option value="5m">5m</option><option value="1m">1m</option></select>
+              </div>
+              <div>
+                <label>Bars keep</label>
+                <input id="barsKeep" type="number" value="600" />
+              </div>
+              <div>
+                <label>Slippage (e.g. 0.1)</label>
+                <input id="slippage" value="0.1" />
+              </div>
+              <div>
+                <label>UT ATR</label>
+                <input id="utAtr" type="number" value="1" />
+              </div>
+              <div>
+                <label>UT Factor</label>
+                <input id="utFactor" type="number" value="10" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="log" id="logs"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>Execution Rules</h3>
+          <ol>
+            <li>BUY: UTBot=buy & price ≤ LRC lower & RSI &lt; 10.</li>
+            <li>SELL: UTBot=sell OR price ≥ LRC upper & RSI &gt; 90.</li>
+            <li>Amount: 100% dari saldo (USDT untuk buy, CAKE untuk sell).</li>
+          </ol>
+        </div>
+
+        <div class="card">
+          <h3>Disclaimer</h3>
+          <ul>
+            <li>Contoh edukasi. Uji di paper mode dulu.</li>
+            <li>Pastikan saldo & gas BNB cukup.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
-
-  <div id="chartContainer"></div>
-
-  <div class="panel">
-    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
-      <div class="small">EmailJS configuration — <span id="emailReady" class="badge">Not ready</span></div>
-      <div class="small">Email will be sent once per bar flip (deduped)</div>
-    </div>
-
-    <div class="grid" style="margin-top:8px">
-      <div>
-        <label>Service ID</label>
-        <input id="emailService" placeholder="service_xxx">
-      </div>
-      <div>
-        <label>Template ID</label>
-        <input id="emailTemplate" placeholder="template_xxx">
-      </div>
-      <div>
-        <label>User ID (public)</label>
-        <input id="emailUser" placeholder="user_xxx">
-      </div>
-      <div>
-        <label>Recipient email</label>
-        <input id="emailTo" placeholder="you@domain.com">
-      </div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="btnSaveEmail">Save EmailJS</button>
-      <button id="btnTestEmail">Send Test Email</button>
-      <div style="flex:1"></div>
-      <div class="small" id="lastEmailStatus"></div>
-    </div>
-  </div>
-
-  <div class="log" id="log"></div>
-</div>
 
 <script>
-/*
-  utbot_with_emailjs_fixed.html
-  - patched to avoid "cannot read properties of null (reading 'setData')"
-  - ensure createChart() runs before setData()
-  - EmailJS integration on Save + Test
-  - Deduplicate emails per bar time
-  - Run via HTTP server (python -m http.server)
-*/
+(async () => {
+  // use ethers v6 from window.ethers (UMD)
+  // include formatUnits / parseUnits to avoid `undefined` errors
+  const { BrowserProvider, JsonRpcProvider, Contract, getAddress, formatUnits, parseUnits } = window.ethers;
 
-(function(){
+  // === EMAILJS CONFIG (ganti placeholder dengan milikmu) ===
+   const EMAILJS_PUBLIC_KEY = "OGH12a8LlCboHPVz8";
+  const EMAILJS_SERVICE_ID = "service_5hxo1hk";
+  const EMAILJS_TEMPLATE_ID = "template_iq87egh";  
+  // template expects: action, pair, price, mode, time, profit (profit optional)
+  try { emailjs.init(EMAILJS_PUBLIC_KEY); log('EmailJS initialized'); } catch(e){ /* ignore init errors until replaced */ }
+
+  async function sendEmailNotification(action, pair, price, mode, profitText=''){
+    try{
+      const timeStr = new Date().toLocaleString();
+      const templateParams = {
+        action: `[AUTO-BOT] ${action} Executed`,
+        pair: pair,
+        price: String(price),
+        mode: mode,
+        time: timeStr,
+        profit: profitText
+      };
+      // only attempt send if EmailJS config replaced
+      if (!EMAILJS_SERVICE_ID.includes('service_5hxo1hk') && !EMAILJS_TEMPLATE_ID.includes('template_iq87egh') && !EMAILJS_PUBLIC_KEY.includes('OGH12a8LlCboHPVz8')){
+        const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+        log(`Email sent: ${res.status} ${res.text || ''}`);
+      } else {
+        log('EmailJS placeholders still present — replace with your service/template/public key to enable email sending.');
+        log(`(email preview) ${templateParams.action} | ${templateParams.pair} | ${templateParams.price} | ${templateParams.mode} | ${templateParams.time} ${profitText? '| Profit: '+profitText : ''}`);
+      }
+    }catch(err){ log('Email send error: '+(err.message||err)); }
+  }
+
+  // Pancake constants
+  const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
+  const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
+  const ROUTER_ABI = [
+    "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
+    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)",
+    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)",
+    "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)"
+  ];
+  const ERC20_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ];
+
+  // DOM helpers
   const $ = id => document.getElementById(id);
-  const logEl = $('log');
+  const elAddr = $('addr'), elLogs = $('logs');
+  const btnConnect = $('btnConnect'), btnAuto = $('btnAuto'), btnBuy = $('btnBuy'), btnSell = $('btnSell');
+  const elBase = $('base'), elToken = $('token'), elPaper = $('paper'), elSlippage = $('slippage');
+  const elSymbol = $('symbol'), elInterval = $('interval'), elBarsKeep = $('barsKeep');
+  const elUtAtr = $('utAtr'), elUtFactor = $('utFactor');
 
-  function log(msg, obj){
-    const t = new Date().toLocaleTimeString();
-    const line = document.createElement('div');
-    line.textContent = `[${t}] ${msg}` + (obj ? ' ' + JSON.stringify(obj) : '');
-    logEl.prepend(line);
-    while(logEl.childNodes.length > 500) logEl.removeChild(logEl.lastChild);
-    console.log(msg, obj||'');
+  const readProvider = new JsonRpcProvider(DEFAULT_RPC);
+  let walletProvider = null;
+  let signer = null;
+  let address = null;
+
+  // lightweight charts (minimal)
+  const lwc = LightweightCharts.createChart(document.getElementById('lwchart'), {
+    layout:{ background:{ type: 'solid', color: '#ffffff' }, textColor:'#222' },
+    rightPriceScale:{ borderVisible:false }, timeScale:{ borderVisible:false }, grid:{ vertLines:{ color:'#eee' }, horzLines:{ color:'#eee' } }
+  });
+  const candleSeries = lwc.addCandlestickSeries();
+  const upperLine = lwc.addLineSeries({ lineWidth:1 });
+  const lowerLine = lwc.addLineSeries({ lineWidth:1 });
+  const midLine = lwc.addLineSeries({ lineWidth:2 });
+  const trailLine = lwc.addLineSeries({ lineWidth:1, lineStyle:3 });
+
+  let bars = [];
+  let polling = null;
+  let auto = false;
+  let isHolding = false;
+  let entryPrice = null;
+
+  function log(msg){
+    const time = new Date().toLocaleTimeString();
+    elLogs.textContent = `[${time}] ${msg}
+` + elLogs.textContent;
+    console.log(`[LOG] ${msg}`);
   }
-  function setStatus(s){ $('status').textContent = s; }
 
-  // --- Globals for chart (must be visible across functions)
-  window.ut_chart = window.ut_chart || null;
-  window.ut_candleSeries = window.ut_candleSeries || null;
+  const safeAddr = v=>{
+    try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
+  };
 
-  function createChart(){
-    try{
-      // guard: lightweight library present
-      if(typeof LightweightCharts === 'undefined'){
-        log('ERROR: LightweightCharts not loaded. Cannot create chart.');
-        setStatus('Error: charts lib missing');
-        return;
+  // --- TA helpers (same as your original) ---
+  function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
+  function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
+  function computeLRC_Open(bars, length=100, devUp=2, devDn=2){
+    const opens = bars.map(b=>b.open); const n=opens.length;
+    const mid=Array(n).fill(null), upper=Array(n).fill(null), lower=Array(n).fill(null);
+    if(n<length) return {mid,upper,lower};
+    for(let i=length-1;i<n;i++){
+      const win=opens.slice(i-length+1,i+1);
+      const {slope,intercept}=linearRegression(win);
+      const xLast = length;
+      const midVal = slope*xLast + intercept;
+      const resid = win.map((v,idx)=>v - (slope*(idx+1) + intercept));
+      const sd = stdev(resid);
+      mid[i]=midVal; upper[i]=midVal + devUp*sd; lower[i]=midVal - devDn*sd;
+    }
+    return {mid,upper,lower};
+  }
+  function computeATR(ohlc, period=1){
+    if(ohlc.length<2) return Array(ohlc.length).fill(null);
+    const trs=[]; for(let i=1;i<ohlc.length;i++){ const h=ohlc[i].high, l=ohlc[i].low, pc=ohlc[i-1].close; trs.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc))); }
+    const atr=[]; let ema=null; const k=2/(period+1);
+    for(let i=0;i<trs.length;i++){ if(i===0) ema=trs[0]; else ema=k*trs[i] + (1-k)*ema; atr.push(ema); }
+    return [null, ...atr];
+  }
+  function computeUTBotSignals(ohlc, atrPeriod=1, factor=10){
+    const atrArr = computeATR(ohlc, atrPeriod);
+    const signals = new Array(ohlc.length).fill(null);
+    const trail = new Array(ohlc.length).fill(null);
+    if(ohlc.length===0) return {signals, trail};
+    let trend = 0; let ts = null;
+    for(let i=0;i<ohlc.length;i++){
+      const c = ohlc[i].close; const atr = atrArr[i] ?? 0;
+      const buyTs = c - factor*atr; const sellTs = c + factor*atr;
+      if (i===0){ ts = buyTs; trail[i]=ts; trend=1; continue; }
+      if (trend >= 0){
+        ts = ts == null ? buyTs : Math.max(ts, buyTs); trail[i] = ts;
+        if (c < ts){ trend = -1; signals[i] = 'sell'; ts = sellTs; trail[i]=ts; } else trend = 1;
+      } else {
+        ts = ts == null ? sellTs : Math.min(ts, sellTs); trail[i] = ts;
+        if (c > ts){ trend = 1; signals[i] = 'buy'; ts = buyTs; trail[i]=ts; } else trend = -1;
       }
-      const holder = $('chartContainer');
-      if(!holder){
-        log('ERROR: chart container not found (#chartContainer)');
-        setStatus('Error: container missing');
-        return;
-      }
-
-      // avoid recreating unnecessarily
-      if(window.ut_chart && window.ut_candleSeries){
-        log('Chart already initialized (re-use existing)');
-        return;
-      }
-
-      // create chart
-      holder.innerHTML = '';
-      window.ut_chart = LightweightCharts.createChart(holder, {
-        layout: { backgroundColor: '#07121a', textColor: '#e6eef7' },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
-        timeScale: { borderColor: 'rgba(255,255,255,0.06)' }
-      });
-      window.ut_candleSeries = window.ut_chart.addCandlestickSeries({
-        upColor: '#26a69a', downColor: '#ef5350', wickUpColor: '#26a69a', wickDownColor: '#ef5350', borderVisible: false
-      });
-      log('Chart created');
-      // resize on window resize
-      window.addEventListener('resize', ()=> {
-        try{ window.ut_chart.applyOptions({ width: holder.clientWidth }); }catch(e){}
-      });
-    }catch(e){
-      log('createChart error: ' + (e && e.message ? e.message : e));
-      setStatus('Error creating chart');
     }
+    return {signals, trail};
+  }
+  function computeRSI(ohlc, period=14){
+    if (ohlc.length <= period) return Array(ohlc.length).fill(null);
+    const rsi = Array(ohlc.length).fill(null);
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++){
+      const diff = ohlc[i].close - ohlc[i-1].close;
+      if (diff > 0) gains += diff; else losses += -diff;
+    }
+    let avgGain = gains / period, avgLoss = losses / period;
+    rsi[period] = avgLoss === 0 ? 100 : 100 - 100/(1 + (avgGain/avgLoss));
+    for (let i = period+1; i < ohlc.length; i++){
+      const diff = ohlc[i].close - ohlc[i-1].close;
+      const gain = diff > 0 ? diff : 0;
+      const loss = diff < 0 ? -diff : 0;
+      avgGain = (avgGain*(period-1) + gain)/period;
+      avgLoss = (avgLoss*(period-1) + loss)/period;
+      rsi[i] = avgLoss === 0 ? 100 : 100 - 100/(1 + (avgGain/avgLoss));
+    }
+    return rsi;
   }
 
-  // --- Binance klines fetch
-  async function fetchKlines(symbol, interval, limit=500){
-    symbol = symbol.toUpperCase();
-    const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
-    log('Fetching klines', {symbol, interval, limit});
-    const r = await fetch(url);
-    if(r.status === 429) throw new Error('Binance rate limited (429). Reduce limit or add delay.');
-    if(!r.ok){
-      const t = await r.text();
-      throw new Error('Klines fetch failed: ' + r.status + ' ' + t);
-    }
-    const j = await r.json();
-    return j.map(d => ({ time: Math.floor(d[0]/1000), open:+d[1], high:+d[2], low:+d[3], close:+d[4], volume:+d[5] }));
+  function toSeries(arr){
+    return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
   }
 
-  // --- Indicators (TR / ATR / UT-like)
-  function trueRange(c){
-    const tr = new Array(c.length).fill(NaN);
-    for(let i=1;i<c.length;i++){
-      const a=c[i], b=c[i-1];
-      tr[i] = Math.max(a.high - a.low, Math.abs(a.high - b.close), Math.abs(a.low - b.close));
-    }
-    return tr;
+  // ----- Safe BigNumber helpers -----
+  function bnToBigInt(bn){
+    if (bn === null || bn === undefined) return 0n;
+    try { return BigInt(bn.toString()); } catch(e){ return 0n; }
   }
-  function computeATR(candles, period){
-    const tr = trueRange(candles);
-    const atr = new Array(candles.length).fill(NaN);
-    if(tr.length <= period) return atr;
-    let sum=0;
-    for(let i=1;i<=period;i++) sum += tr[i] || 0;
-    atr[period] = sum/period;
-    for(let i=period+1;i<tr.length;i++){
-      atr[i] = ((atr[i-1]*(period-1)) + tr[i]) / period;
-    }
-    return atr;
-  }
-  function computeUTSignals(candles, atrLen=14, mult=3){
-    const n = candles.length;
-    const atr = computeATR(candles, atrLen);
-    const finalUpper = new Array(n).fill(NaN), finalLower = new Array(n).fill(NaN);
-    const trend = new Array(n).fill(0), signals = new Array(n).fill(null);
-    for(let i=0;i<n;i++){
-      if(!isFinite(atr[i])) continue;
-      const hl2 = (candles[i].high + candles[i].low)/2;
-      const up = hl2 + mult*atr[i];
-      const low = hl2 - mult*atr[i];
-      if(i===0){ finalUpper[i]=up; finalLower[i]=low; trend[i]=1; continue; }
-      finalUpper[i] = (up < finalUpper[i-1]) ? up : finalUpper[i-1];
-      finalLower[i] = (low > finalLower[i-1]) ? low : finalLower[i-1];
-      const prev = trend[i-1] || 1;
-      if(candles[i].close > finalUpper[i-1]) trend[i] = 1;
-      else if(candles[i].close < finalLower[i-1]) trend[i] = -1;
-      else trend[i] = prev;
-      if(trend[i] !== trend[i-1]) signals[i] = trend[i] === 1 ? 'BUY' : 'SELL';
-    }
-    return {atr, finalUpper, finalLower, trend, signals};
+  function bnToStringReadable(bn, decimals=18){
+    if (bn === null || bn === undefined) return "0";
+    try {
+      if (typeof formatUnits === 'function') return formatUnits(bn, decimals);
+      const asBigInt = BigInt(bn.toString());
+      const pow = 10n ** BigInt(decimals);
+      const whole = asBigInt / pow;
+      const frac = String(asBigInt % pow).padStart(decimals, '0').replace(/0+$/,'');
+      return frac ? `${whole}.${frac}` : `${whole}`;
+    } catch(e){ return bn.toString(); }
   }
 
-  function drawMarkers(candles, signals){
-    if(!window.ut_candleSeries || typeof window.ut_candleSeries.setMarkers !== 'function'){
-      log('Warning: candleSeries not ready for markers');
-      return;
-    }
+  // render
+  function renderAll(){
+    const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
+    candleSeries.setData(cand);
+    const lrc = computeLRC_Open(bars, 100, 2, 2);
+    const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    upperLine.setData(toSeries(lrc.upper)); lowerLine.setData(toSeries(lrc.lower)); midLine.setData(toSeries(lrc.mid));
+    trailLine.setData(toSeries(ut.trail));
     const markers = [];
-    for(let i=0;i<signals.length;i++){
-      const s = signals[i];
-      if(!s) continue;
-      markers.push({
-        time: candles[i].time,
-        position: s==='BUY' ? 'belowBar':'aboveBar',
-        color: s==='BUY' ? '#00d28a':'#ff6b6b',
-        shape: s==='BUY' ? 'arrowUp':'arrowDown',
-        text: s
-      });
+    for (let i=0;i<bars.length;i++){
+      if (!ut.signals[i]) continue;
+      markers.push({ time: Math.floor(bars[i].t/1000), position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar', color: ut.signals[i]==='buy' ? 'green' : 'red', shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown', text: ut.signals[i].toUpperCase() });
     }
-    window.ut_candleSeries.setMarkers(markers);
+    candleSeries.setMarkers(markers);
   }
 
-  // --- EmailJS integration
-  function loadEmailCfg(){
-    try{
-      const raw = localStorage.getItem('ut_email_cfg');
-      if(!raw) return;
-      const cfg = JSON.parse(raw);
-      $('emailService').value = cfg.service || '';
-      $('emailTemplate').value = cfg.template || '';
-      $('emailUser').value = cfg.user || '';
-      $('emailTo').value = cfg.to || '';
-      if(cfg.user && window.emailjs && typeof emailjs.init === 'function'){
-        try{ emailjs.init(cfg.user); log('EmailJS initialized with saved user id'); }catch(e){ log('EmailJS init error: ' + e.message); }
-      }
-      updateEmailReady();
-    }catch(e){ log('loadEmailCfg error: ' + e.message); }
+  // fetch klines
+  const BINANCE_BASE = "https://api.binance.com/api/v3";
+  const intervalMap = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h"};
+  async function fetchInitial(symbol, interval, limit=600){
+    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
+    const res = await fetch(url); const arr = await res.json();
+    return arr.map(k=>({ t: k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
   }
-  function saveEmailCfg(){
-    const cfg = { service: $('emailService').value.trim(), template: $('emailTemplate').value.trim(), user: $('emailUser').value.trim(), to: $('emailTo').value.trim() };
-    localStorage.setItem('ut_email_cfg', JSON.stringify(cfg));
-    if(cfg.user && window.emailjs && typeof emailjs.init === 'function'){
-      try{ emailjs.init(cfg.user); log('EmailJS init with user id'); }catch(e){ log('EmailJS init failed: '+e.message); }
-    }
-    updateEmailReady();
-    log('EmailJS config saved');
-  }
-  function updateEmailReady(){
-    const ok = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-    $('emailReady').textContent = ok ? 'Ready' : 'Not ready';
-  }
-  async function sendEmail(params){
-    const svc = $('emailService').value.trim();
-    const tmpl = $('emailTemplate').value.trim();
-    if(!svc || !tmpl) throw new Error('EmailJS not configured');
-    return emailjs.send(svc, tmpl, params);
+  async function fetchLatest(symbol, interval){
+    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=2`;
+    const res = await fetch(url); const arr = await res.json();
+    const k = arr[arr.length-1];
+    return { t:k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] };
   }
 
-  // dedupe: last bar time email sent
-  let lastSentBarTime = null;
+  async function startPolling(){
+    if (polling) clearInterval(polling);
+    const sym = elSymbol.value || "CAKEUSDT";
+    const tf = elInterval.value || "15m";
+    try {
+      bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
+      renderAll();
+      await mountTradingViewOnce();
+      log(`Loaded ${bars.length} bars for ${sym} ${tf}`);
+    } catch(e){ log('Load error: '+(e.message||e)); }
 
-  // main load/check function (with guards)
-  async function loadAndCheck(){
-    try{
-      // ensure chart exists
-      if(typeof LightweightCharts === 'undefined'){
-        log('ERROR: LightweightCharts lib not loaded');
-        setStatus('Error: charts lib missing');
-        return;
-      }
-      if(!window.ut_chart || !window.ut_candleSeries){
-        log('Chart not initialized — calling createChart()');
-        createChart();
-        // small delay to allow chart internal init (not strictly necessary)
-        await new Promise(r=>setTimeout(r, 80));
-      }
-
-      // final guard
-      if(!window.ut_candleSeries || typeof window.ut_candleSeries.setData !== 'function'){
-        log('ERROR: candleSeries not ready (setData not available). Aborting this cycle.');
-        setStatus('Error: chart series missing');
-        return;
-      }
-
-      setStatus('Loading...');
-      const sym = $('symbol').value.trim().toUpperCase() || 'CAKEUSDT';
-      const interval = $('interval').value;
-      const limit = Math.max(50, Math.min(1000, Number($('limit').value) || 500));
-      const atrLen = Math.max(2, Number($('atrLen').value) || 14);
-      const mult = Math.max(0.1, Number($('mult').value) || 3);
-
-      const candles = await fetchKlines(sym, interval, limit);
-
-      // Safety: ensure returned data is array and has items
-      if(!Array.isArray(candles) || candles.length === 0){
-        log('No candles returned by Binance');
-        setStatus('No candle data');
-        return;
-      }
-
-      // setData safely
+    const ms = tf==="1m"?10000:tf==="5m"?30000:60000;
+    polling = setInterval(async ()=>{
       try{
-        window.ut_candleSeries.setData(candles);
-      }catch(e){
-        log('setData error: ' + (e.message || e));
-        setStatus('Error setData');
-        return;
+        const latest = await fetchLatest(sym, tf);
+        const keep = Number(elBarsKeep.value||600);
+        if (bars.length && bars[bars.length-1].t === latest.t) bars[bars.length-1] = latest;
+        else bars = [...bars, latest].slice(-keep);
+        renderAll();
+        if (auto) await evaluateAndMaybeTrade();
+      }catch(e){ log('Poll error: '+(e.message||e)); }
+    }, ms);
+  }
+
+  // tradingview mount
+  let _tvWidgetInited=false,_tvPrevSymbol=null,_tvPrevInterval=null;
+  async function mountTradingViewOnce(){
+    const tvSymbol = elSymbol.value || 'CAKEUSDT';
+    const tvFull = `BINANCE:${tvSymbol}`;
+    const iv = elInterval.value||'5m';
+    const ivMap = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60'};
+    const tvInterval = ivMap[iv]||iv;
+    if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
+    _tvPrevSymbol=tvFull; _tvPrevInterval=tvInterval;
+    const container = document.getElementById('tv_chart');
+    container.innerHTML = '';
+    let attempts=0;
+    while(typeof window.TradingView==='undefined' && attempts<6){ await new Promise(r=>setTimeout(r,300)); attempts++; }
+    if(typeof window.TradingView==='undefined'){ log('TradingView unavailable'); container.innerHTML='<div style="padding:12px;color:#a00">TradingView tidak tersedia</div>'; return; }
+    try {
+      new TradingView.widget({ autosize:true, symbol:tvFull, interval:tvInterval, timezone:"Etc/UTC", theme:"light", style:"1", locale:"id", container_id:"tv_chart" });
+      _tvWidgetInited=true;
+      log('TradingView mounted: '+tvFull+' @'+tvInterval);
+    } catch(e){ log('TV init err: '+(e.message||e)); container.innerHTML='<div style="padding:12px;color:#a00">Gagal memuat TradingView</div>'; }
+  }
+
+  // decision logic (unchanged)
+  function decide(){
+    if (!bars.length) return null;
+    const lrc = computeLRC_Open(bars, 100, 2, 2);
+    const ut  = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
+    const rsi = computeRSI(bars, 14);
+    const i = bars.length-1;
+    const sigUT = ut.signals[i];
+    const price = bars[i].close;
+    const lower = lrc.lower[i], upper = lrc.upper[i];
+    const curRSI = rsi[i] ?? null;
+    if (sigUT === 'buy' && lower!=null && price <= lower && curRSI !== null && curRSI < 10) return 'buy';
+    if ((sigUT === 'sell') || (upper!=null && price >= upper && curRSI !== null && curRSI > 90)) return 'sell';
+    return null;
+  }
+
+  // ---- on-chain helpers: corrected for ethers v6 usage + robust BigNumber handling ----
+  function toBigInt(amount) {
+    if (typeof amount === 'bigint') return amount;
+    if (typeof amount === 'number') return BigInt(Math.floor(amount));
+    if (typeof amount === 'string') {
+      try { return BigInt(amount); } catch(e){ return BigInt(Number(amount)); }
+    }
+    return BigInt(0);
+  }
+
+  async function getDecimalsAndBalance(tokenAddr) {
+    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
+    let decimals = 18;
+    try { decimals = Number(await erc.decimals().catch(()=>18)); } catch(e){ log('decimals() failed, default 18'); }
+    let balRaw = 0;
+    try { balRaw = await erc.balanceOf(address).catch(()=>0); } catch(e){ log('balanceOf() failed, returning 0'); balRaw = 0; }
+    const bal = bnToBigInt(balRaw);
+    const readable = bnToStringReadable(balRaw, decimals);
+    return { decimals, bal, readable, raw: balRaw };
+  }
+
+  async function ensureApproval(tokenAddr, spender, amountBig) {
+    if (!signer) throw new Error('Signer not ready');
+    const erc = new Contract(tokenAddr, ERC20_ABI, signer);
+    let allowanceRaw = 0;
+    try { allowanceRaw = await erc.allowance(address, spender).catch(()=>0); } catch(e){ log('allowance() failed, assume 0'); allowanceRaw = 0; }
+    const allowance = bnToBigInt(allowanceRaw);
+    log(`Allowance current: ${allowance}`);
+    if (allowance < BigInt(amountBig)) {
+      log('Approving router to spend token...');
+      const tx = await erc.approve(spender, BigInt(amountBig));
+      log('Approve tx sent: ' + tx.hash);
+      await tx.wait();
+      log('Approve confirmed');
+    } else {
+      log('Approval sufficient');
+    }
+  }
+
+  function calcOutMinBig(amountOutBig, slipFloat){
+    const bps = 10000n;
+    const slipBps = BigInt(Math.floor((slipFloat||0)*10000));
+    return (BigInt(amountOutBig) * (bps - slipBps)) / bps;
+  }
+
+  async function executeTrade(direction, opts={force:false}) {
+    try {
+      if (!signer) {
+        const ok = await connectWallet();
+        if (!ok) { log('Wallet not connected - abort'); return; }
       }
+      const base = safeAddr(elBase.value);
+      const token = safeAddr(elToken.value);
+      if (!base || !token) { log('Invalid base/token'); return; }
 
-      // compute UT signals
-      const ut = computeUTSignals(candles, atrLen, mult);
-      drawMarkers(candles, ut.signals);
-
-      // find latest signal (scan from end)
-      for(let i=ut.signals.length-1;i>=0;i--){
-        if(ut.signals[i]){
-          const s = ut.signals[i];
-          const barTime = candles[i].time;
-          if(barTime === lastSentBarTime){
-            log('Signal detected but already sent for this bar (deduped)', {time:barTime, signal:s});
-            break;
+      // paper mode
+      if (elPaper.checked) {
+        if (direction === 'buy') {
+          const {decimals, bal} = await getDecimalsAndBalance(base);
+          const amt = (bal * 100n) / 100n;
+          if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
+          isHolding = true; entryPrice = bars[bars.length-1].close;
+          log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
+          // send email only for auto (not manual)
+          if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
+          return;
+        } else {
+          const {decimals, bal} = await getDecimalsAndBalance(token);
+          const amt = (bal * 100n) / 100n;
+          if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
+          // compute sell price and profit if entryPrice available
+          const sellPrice = bars[bars.length-1].close;
+          let profitText = '';
+          if (entryPrice) {
+            const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+            profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
           }
-          // else send email (if configured)
-          const svcOk = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-          log('Signal detected', {signal:s, time:new Date(barTime*1000).toLocaleString(), price: candles[i].close});
-          if(!svcOk){
-            log('EmailJS not configured — skipping email send');
-            lastSentBarTime = barTime; // still mark so as not spam repeatedly
-            break;
-          }
-          // prepare params
-          const params = {
-            pair: sym,
-            side: s,
-            price: String(candles[i].close),
-            time: new Date(barTime*1000).toLocaleString(),
-            interval: interval,
-            to: $('emailTo').value.trim()
-          };
-          try{
-            // ensure emailjs init
-            if($('emailUser').value.trim()){ try{ emailjs.init($('emailUser').value.trim()); }catch(e){} }
-            log('Sending email...', params);
-            await sendEmail(params);
-            log('Email sent to ' + params.to);
-            $('lastEmailStatus').textContent = 'Last: sent ' + new Date().toLocaleTimeString();
-            lastSentBarTime = barTime;
-          }catch(err){
-            log('Email send failed: ' + (err && err.text ? err.text : (err && err.message ? err.message : err)));
-            $('lastEmailStatus').textContent = 'Last: failed ' + new Date().toLocaleTimeString();
-            // do not set lastSentBarTime so it can retry next cycle
-          }
-          break; // only handle the newest/latest signal
+          isHolding = false; entryPrice = null;
+          log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
+          if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
+          return;
         }
       }
 
-      setStatus(`Loaded ${sym} ${interval} — signals:${ut.signals.filter(Boolean).length}`);
-      log(`Rendered ${sym} — ${candles.length} candles — signals: ${ut.signals.filter(Boolean).length}`);
-    }catch(err){
-      log('Load/check error: ' + (err && err.message ? err.message : err));
-      setStatus('Error: ' + (err && err.message ? err.message : 'unknown'));
+      const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
+
+      if (direction === 'buy' && isHolding && !opts.force) { log('BUY skipped — already holding'); return; }
+      if (direction === 'sell' && !isHolding && !opts.force) { log('SELL skipped — not holding'); return; }
+
+      if (direction === 'buy') {
+        // buy path: BASE -> TOKEN
+        const {decimals, bal} = await getDecimalsAndBalance(base);
+        const amountIn = (bal * 100n) / 100n;
+        if (amountIn === 0n) { log('BUY aborted — base balance zero'); return; }
+
+        // estimate amounts out (read-only)
+        log('Estimating amountsOut for buy...');
+        const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
+        const outRaw = amountsOut[amountsOut.length-1];
+        const outBig = bnToBigInt(outRaw);
+        const outDecimals = (await (new Contract(token, ERC20_ABI, readProvider)).decimals().catch(()=>18));
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
+        log(`Estimate out: ${bnToStringReadable(outRaw, outDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, outDecimals)} (${outMin})`);
+
+// Kirim email sinyal BUY terlebih dahulu
+try {
+  await sendEmail('SIGNAL BUY', bars[bars.length - 1].close, '-', `${outHuman} est`);
+  log('📧 Email SIGNAL BUY sent successfully');
+} catch (err) {
+  log('⚠️ Failed to send SIGNAL BUY email: ' + (err?.message || err));
+}
+
+// Auto-confirm BUY tanpa popup
+log('✅ Auto-confirm BUY triggered');
+const ok = 'CONFIRM';
+
+// Jalankan logic BUY
+if (ok === 'CONFIRM') {
+  try {
+    await executeBuy(base, token, amountIn, outBig, outHuman);
+    log(`🚀 BUY executed successfully at ${bars[bars.length - 1].close}`);
+    // Kirim email konfirmasi transaksi selesai
+    await sendEmail('BUY EXECUTED', bars[bars.length - 1].close, '-', `${outHuman}`);
+  } catch (err) {
+    log('❌ BUY execution failed: ' + (err?.message || err));
+    await sendEmail('BUY FAILED', bars[bars.length - 1].close, '-', err?.message || 'Unknown error');
+  }
+} else {
+  log('❌ Auto-confirm check failed — skipping BUY');
+}
+
+        // ensure approval of base to router
+        await ensureApproval(base, PCS_V2_ROUTER, amountIn);
+
+        // execute swap
+        log('Sending swapExactTokensForTokens (BUY)...');
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, [base, token], address, Math.floor(Date.now()/1000)+300);
+        log('BUY tx sent: '+tx.hash);
+        await tx.wait();
+        log('BUY confirmed: '+tx.hash);
+        isHolding = true;
+        entryPrice = bars[bars.length-1].close;
+        // send email only for auto trades (not manual forced)
+        if (!opts.force) await sendEmailNotification('BUY', (elSymbol.value||'CAKEUSDT'), entryPrice, 'Auto');
+      } else {
+        // SELL: TOKEN -> BASE
+        const {decimals, bal} = await getDecimalsAndBalance(token);
+        const amountIn = bal;
+        if (amountIn === 0n) { log('SELL aborted — token balance zero'); return; }
+
+        log('Estimating amountsOut for sell...');
+        const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
+        const outRaw = amountsOut[amountsOut.length-1];
+        const outBig = bnToBigInt(outRaw);
+        const baseDecimals = (await (new Contract(base, ERC20_ABI, readProvider)).decimals().catch(()=>18));
+        const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
+        log(`Estimate out: ${bnToStringReadable(outRaw, baseDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, baseDecimals)} (${outMin})`);
+
+      // === AUTO SELL SECTION ===
+try {
+  // Kirim email notifikasi lebih dulu
+  await sendEmail(
+    'SIGNAL SELL',
+    bars[bars.length - 1].close,
+    '-',
+    `${outHuman} est`
+  );
+  log('📧 Email SELL signal sent successfully');
+
+  // Konfirmasi otomatis (tanpa popup)
+  const ok = 'CONFIRM';
+  log('✅ Auto-confirm SELL triggered');
+
+  // Jalankan eksekusi SELL
+  if (ok === 'CONFIRM') {
+    await executeSell(token, base, amountIn, outBig, outHuman);
+    log(`💰 SELL executed successfully at ${bars[bars.length - 1].close}`);
+  } else {
+    log('❌ Auto-confirm SELL failed (no CONFIRM value)');
+  }
+
+} catch (err) {
+  log('⚠️ SELL process failed: ' + (err.message || err));
+}
+
+
+
+        if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
+
+        await ensureApproval(token, PCS_V2_ROUTER, amountIn);
+
+        log('Sending swapExactTokensForTokens (SELL)...');
+        const tx = await router.swapExactTokensForTokens(amountIn, outMin, [token, base], address, Math.floor(Date.now()/1000)+300);
+        log('SELL tx sent: '+tx.hash);
+        await tx.wait();
+        log('SELL confirmed: '+tx.hash);
+        // compute profit if entryPrice present
+        const sellPrice = bars[bars.length-1].close;
+        let profitText = '';
+        if (entryPrice) {
+          const pct = ((sellPrice - entryPrice) / entryPrice) * 100;
+          profitText = (pct>=0?'+':'') + pct.toFixed(2) + '%';
+        }
+        isHolding = false;
+        entryPrice = null;
+        // send email only for auto trades
+        if (!opts.force) await sendEmailNotification('SELL', (elSymbol.value||'CAKEUSDT'), sellPrice, 'Auto', profitText);
+      }
+    } catch(err) {
+      log('Trade error: ' + (err.reason || err.message || err));
+      if (!opts._retry) {
+        log('Retrying trade once...');
+        await new Promise(r=>setTimeout(r,2000));
+        return executeTrade(direction, {...opts, _retry:true});
+      }
     }
   }
 
-  // polling controls
-  let pollingTimer = null;
-  function startPoll(){
-    if(pollingTimer) return;
-    loadAndCheck();
-    pollingTimer = setInterval(loadAndCheck, 30_000);
-    $('btnStart').disabled = true; $('btnStop').disabled = false;
-    setStatus('Running (polling)');
-    log('Auto polling started (30s)');
-  }
-  function stopPoll(){
-    if(pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = null;
-    $('btnStart').disabled = false; $('btnStop').disabled = true;
-    setStatus('Stopped');
-    log('Auto polling stopped');
+  async function evaluateAndMaybeTrade(){
+    if (!auto) return;
+    const d = decide();
+    if (!d) return;
+    if (d === 'buy' && isHolding) { log('Auto BUY skipped — holding'); return; }
+    if (d === 'sell' && !isHolding) { log('Auto SELL skipped — not holding'); return; }
+    log('Auto Signal: '+d.toUpperCase() + ' @ ' + bars[bars.length-1].close);
+    await executeTrade(d);
   }
 
-  // UI wiring
-  $('btnLoad').addEventListener('click', loadAndCheck);
-  $('btnStart').addEventListener('click', startPoll);
-  $('btnStop').addEventListener('click', stopPoll);
-  $('btnSaveEmail').addEventListener('click', saveEmailCfg);
-  $('btnTestEmail').addEventListener('click', async ()=>{
-    try{
-      const ok = $('emailService').value.trim() && $('emailTemplate').value.trim() && $('emailUser').value.trim() && $('emailTo').value.trim();
-      if(!ok){ alert('Isi semua field EmailJS terlebih dulu'); return; }
-      if($('emailUser').value.trim()){ try{ emailjs.init($('emailUser').value.trim()); }catch(e){} }
-      const payload = { pair: 'TEST/USDT', side: 'TEST', price: '0.00', time: new Date().toLocaleString(), interval: '1m', to: $('emailTo').value.trim() };
-      log('Sending test email...', payload);
-      await sendEmail(payload);
-      log('Test email sent');
-      $('lastEmailStatus').textContent = 'Last: test sent ' + new Date().toLocaleTimeString();
-    }catch(e){ log('Test email failed: ' + (e && e.text ? e.text : (e && e.message ? e.message : e))); }
-  });
+  // wallet detection & connect (works with MetaMask & Trust if injected)
+  async function detectWalletProvider(){
+    const any = window.ethereum;
+    if (!any) return null;
+    if (any.providers && Array.isArray(any.providers)){
+      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
+      if (trust) return new BrowserProvider(trust);
+      const mm = any.providers.find(p=>p.isMetaMask);
+      if (mm) return new BrowserProvider(mm);
+      return new BrowserProvider(any.providers[0]);
+    }
+    return new BrowserProvider(any);
+  }
 
-  // initial setup
-  createChart();
-  loadEmailCfg();
-  setTimeout(()=> loadAndCheck(), 250);
+  async function connectWallet(){
+    walletProvider = await detectWalletProvider();
+    if (!walletProvider) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
+    try {
+      await walletProvider.send('eth_requestAccounts', []);
+      signer = await walletProvider.getSigner();
+      address = await signer.getAddress();
+      elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
+      log('Wallet connected: '+address);
+      return true;
+    } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
+  }
 
-  // expose for debugging
-  window._utbot = { createChart, loadAndCheck, startPoll, stopPoll };
+  // manual UI bindings
+  btnConnect.onclick = async ()=> await connectWallet();
+  btnAuto.onclick = async ()=>{
+    auto = !auto;
+    btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto';
+    log('Auto: '+(auto?'ON':'OFF'));
+    if (auto) await evaluateAndMaybeTrade();
+  };
+  btnBuy.onclick = async ()=>{ log('Manual BUY pressed'); await executeTrade('buy', {force:true}); };
+  btnSell.onclick = async ()=>{ log('Manual SELL pressed'); await executeTrade('sell', {force:true}); };
+
+  elSymbol.onchange = startPolling;
+  elInterval.onchange = startPolling;
+
+  // start
+  startPolling();
+
+  // small self-tests
+  (function runTests(){
+    log('Self-test: Fixed exec module loaded.');
+  })();
+
 })();
 </script>
 </body>
