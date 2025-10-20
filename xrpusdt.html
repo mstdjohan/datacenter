@@ -495,22 +495,32 @@
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
         log(`Estimate out: ${bnToStringReadable(outRaw, outDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, outDecimals)} (${outMin})`);
 
-         // kirim email dulu sebelum konfirmasi
-          await sendEmail('SIGNAL BUY', bars[bars.length-1].close, '-', `${outHuman} est`);
+// Kirim email sinyal BUY terlebih dahulu
+try {
+  await sendEmail('SIGNAL BUY', bars[bars.length - 1].close, '-', `${outHuman} est`);
+  log('📧 Email SIGNAL BUY sent successfully');
+} catch (err) {
+  log('⚠️ Failed to send SIGNAL BUY email: ' + (err?.message || err));
+}
 
-        // auto confirm BUY tanpa popup
-        log('✅ Auto-confirm BUY triggered');
-        const ok = 'CONFIRM';
+// Auto-confirm BUY tanpa popup
+log('✅ Auto-confirm BUY triggered');
+const ok = 'CONFIRM';
 
-        // lanjut eksekusi proses BUY
-        try {
-       // di sini tetap jalankan logic swap-nya
-        await executeBuy(base, token, amountIn, outBig, outHuman);
-        log(`🚀 BUY executed successfully at ${bars[bars.length-1].close}`);
-        } catch (err) {
-        log('❌ BUY execution failed: ' + err.message);
-        }
-
+// Jalankan logic BUY
+if (ok === 'CONFIRM') {
+  try {
+    await executeBuy(base, token, amountIn, outBig, outHuman);
+    log(`🚀 BUY executed successfully at ${bars[bars.length - 1].close}`);
+    // Kirim email konfirmasi transaksi selesai
+    await sendEmail('BUY EXECUTED', bars[bars.length - 1].close, '-', `${outHuman}`);
+  } catch (err) {
+    log('❌ BUY execution failed: ' + (err?.message || err));
+    await sendEmail('BUY FAILED', bars[bars.length - 1].close, '-', err?.message || 'Unknown error');
+  }
+} else {
+  log('❌ Auto-confirm check failed — skipping BUY');
+}
 
         // ensure approval of base to router
         await ensureApproval(base, PCS_V2_ROUTER, amountIn);
@@ -539,20 +549,33 @@
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
         log(`Estimate out: ${bnToStringReadable(outRaw, baseDecimals)} (${outBig}) | min after slip: ${bnToStringReadable(outMin, baseDecimals)} (${outMin})`);
 
-       // kirim email dulu sebelum konfirmasi
-await sendEmail('SIGNAL SELL', bars[bars.length-1].close, '-', `${outHuman} est`);
-
-// auto confirm SELL tanpa popup
-log('✅ Auto-confirm SELL triggered');
-const ok = 'CONFIRM'; // langsung konfirmasi otomatis
-
-// lanjutkan proses SELL
+      // === AUTO SELL SECTION ===
 try {
-  await executeSell(token, base, amountIn, outBig, outHuman);
-  log(`💰 SELL executed successfully at ${bars[bars.length-1].close}`);
+  // Kirim email notifikasi lebih dulu
+  await sendEmail(
+    'SIGNAL SELL',
+    bars[bars.length - 1].close,
+    '-',
+    `${outHuman} est`
+  );
+  log('📧 Email SELL signal sent successfully');
+
+  // Konfirmasi otomatis (tanpa popup)
+  const ok = 'CONFIRM';
+  log('✅ Auto-confirm SELL triggered');
+
+  // Jalankan eksekusi SELL
+  if (ok === 'CONFIRM') {
+    await executeSell(token, base, amountIn, outBig, outHuman);
+    log(`💰 SELL executed successfully at ${bars[bars.length - 1].close}`);
+  } else {
+    log('❌ Auto-confirm SELL failed (no CONFIRM value)');
+  }
+
 } catch (err) {
-  log('❌ SELL execution failed: ' + err.message);
+  log('⚠️ SELL process failed: ' + (err.message || err));
 }
+
 
 
         if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
