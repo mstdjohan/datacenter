@@ -1,32 +1,67 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multi Chart View</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XRP/USDT – UT Bot</title>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 50vh 50vh;
-      height: 100vh;
-      gap: 4px;
-      background: #0f172a;
-    }
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      border-radius: 8px;
-    }
+    body { margin:0; background:#0b0b0b; color:#fff; font-family:sans-serif; }
+    #chart { width:100%; height:90vh; }
+    select { margin:8px; padding:4px; border-radius:4px; }
   </style>
 </head>
 <body>
-  <iframe src="https://mstdjohan.github.io/datacenter/Auto.html"></iframe>
-  <iframe src="https://mstdjohan.github.io/datacenter/Simulasi.html"></iframe>
-  <iframe src="https://www.tradingview.com/chart/?symbol=BINANCE:CAKEUSDT"></iframe>
-  <iframe src="https://www.tradingview.com/chart/?symbol=BINANCE:CAKEUSDT"></iframe>
+  <h4 style="text-align:center;">XRP/USDT — UT Bot Alerts</h4>
+  <div style="text-align:center;">
+    Timeframe: 
+    <select id="tf">
+      <option value="1m">1m</option>
+      <option value="5m">5m</option>
+      <option value="15m">15m</option>
+      <option value="1h">1h</option>
+    </select>
+  </div>
+  <div id="chart"></div>
+
+  <script>
+    const chart = LightweightCharts.createChart(document.getElementById("chart"), {
+      layout:{ background:{ color:'#0b0b0b' }, textColor:'#DDD' },
+      grid:{ vertLines:{ color:'#222' }, horzLines:{ color:'#222' } },
+    });
+    const candleSeries = chart.addCandlestickSeries();
+    const markerSeries = [];
+
+    async function loadData(tf="1m") {
+      const url=`https://api.binance.com/api/v3/klines?symbol=XRPUSDT&interval=${tf}&limit=200`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const candles = data.map(d => ({
+        time: d[0]/1000, open:+d[1], high:+d[2], low:+d[3], close:+d[4]
+      }));
+      candleSeries.setData(candles);
+      applyUTBot(candles);
+    }
+
+    function applyUTBot(data){
+      const kv=1, atrPeriod=10;
+      const signals=[];
+      for(let i=atrPeriod;i<data.length;i++){
+        const slice=data.slice(i-atrPeriod,i);
+        const atr = Math.max(...slice.map(c=>c.high)) - Math.min(...slice.map(c=>c.low));
+        const prev=data[i-1];
+        const curr=data[i];
+        if(curr.close>prev.close+kv*atr/2){
+          signals.push({ time:curr.time, position:'belowBar', color:'green', shape:'arrowUp', text:'BUY' });
+        }else if(curr.close<prev.close-kv*atr/2){
+          signals.push({ time:curr.time, position:'aboveBar', color:'red', shape:'arrowDown', text:'SELL' });
+        }
+      }
+      candleSeries.setMarkers(signals);
+    }
+
+    document.getElementById("tf").onchange = e => loadData(e.target.value);
+    loadData();
+  </script>
 </body>
 </html>
