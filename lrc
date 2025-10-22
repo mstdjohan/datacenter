@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linear Regression Channel</title>
+  <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_a1b2c&symbol=BINANCE:CAKEUSDT&interval=15&theme=dark&style=1&locale=en&utm_source=tv" width="100%" height="100%" frameborder="0"></iframe>
+</head>
+</html>
