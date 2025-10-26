@@ -3,428 +3,134 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CAKE/USDT — UT Bot + LR + Trailing + EmailJS (final)</title>
+  <title>CAKE/USDT — UT Bot + LR + Trailing + Email</title>
+
+  <!-- Chart.js dan plugin candlestick -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@4.1.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
+
   <style>
-    :root{
-      --bg: #ffffff;
-      --card: #f3f6fb;
-      --text: #0b1220;
-      --muted: #666;
-      --accent: #0f62fe;
-    }
-    body{background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1200px;margin:18px auto;padding:12px}
-    h1{font-size:18px;margin:0 0 8px}
-    .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-    .card{background:var(--card);padding:12px;border-radius:8px;box-shadow:0 1px 6px rgba(15,22,40,0.04);flex:1;min-width:260px}
-    label{display:block;font-size:13px;margin-bottom:6px}
-    input,select,button,textarea{padding:8px;border-radius:6px;border:1px solid #d2d7de;width:100%;box-sizing:border-box;font-size:13px}
-    textarea{height:84px;resize:vertical}
-    #chartWrap{height:520px}
-    pre{background:#0b1220;color:#dbe9ff;padding:10px;border-radius:6px;overflow:auto;height:64px}
-    .small{font-size:12px;color:#444}
-    .muted{color:var(--muted);font-size:12px}
-    .btn-row{display:flex;gap:8px}
-    button{cursor:pointer;background:var(--accent);color:#fff;border:none}
-    button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent)}
-    .controls-row{display:flex;gap:8px;align-items:center}
-    .flex{display:flex;gap:8px}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:#fff;color:#111;max-width:1100px;margin:20px auto;padding:12px}
+    h1{font-size:18px;margin-bottom:10px}
+    .row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px}
+    .card{background:#f5f7fa;border-radius:8px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);flex:1}
+    label{display:block;font-size:13px;margin-bottom:4px}
+    input,select,button{padding:8px;border-radius:6px;border:1px solid #ccc;width:100%;font-size:13px}
+    button{cursor:pointer;background:#0084ff;color:#fff;border:none}
+    button:hover{opacity:.9}
+    pre{background:#eee;padding:8px;border-radius:6px;font-size:12px}
+    #chartWrap{height:460px}
   </style>
 </head>
 <body>
-  <h1>CAKE/USDT — UT Bot (ATR) + Linear Regression + Trailing + EmailJS</h1>
+  <h1>CAKE/USDT — UT Bot (1,10) + Linear Regression (100,2) + Trailing (1.5%)</h1>
 
   <div class="row">
-    <div class="card">
-      <label>Interval candle (Binance)</label>
-      <select id="interval">
-        <option value="15m" selected>15m (default)</option>
-        <option value="1h">1h</option>
-        <option value="4h">4h</option>
-      </select>
-
-      <label style="margin-top:8px">Polling frequency (detik)</label>
-      <input id="pollSeconds" type="number" value="30" />
-
-      <label style="margin-top:8px">Trailing stop (%)</label>
-      <input id="trailingPct" type="number" step="0.01" value="1.5" />
-
-      <label style="margin-top:8px">UT Bot — factor</label>
-      <input id="utFactor" type="number" step="0.1" value="1" />
-      <label style="margin-top:6px">UT Bot — ATR period</label>
-      <input id="utAtrPeriod" type="number" value="10" />
-
-      <label style="margin-top:8px">Linear Regression — period</label>
-      <input id="lrPeriod" type="number" value="100" />
-      <label style="margin-top:6px">Linear Regression — multiplier (std)</label>
-      <input id="lrMult" type="number" step="0.1" value="2" />
+    <div class="card" style="flex-basis:300px">
+      <label>Interval Binance</label>
+      <select id="interval"><option value="15m" selected>15m</option><option value="1h">1h</option></select>
+      <label style="margin-top:6px">Trailing stop (%)</label>
+      <input id="trailingPct" type="number" value="1.5" step="0.01">
+      <label style="margin-top:6px">UT Bot — factor / ATR period</label>
+      <input id="utFactor" value="1" type="number">
+      <input id="utAtrPeriod" value="10" type="number" style="margin-top:4px">
+      <label style="margin-top:6px">Linear Regression — period / multiplier</label>
+      <input id="lrPeriod" value="100" type="number">
+      <input id="lrMult" value="2" type="number" style="margin-top:4px">
     </div>
 
-    <div class="card">
-      <label>EmailJS configuration</label>
-      <input id="emailUser" placeholder="Public key (user_xxx) — optional" />
-      <input id="emailService" placeholder="service_id (service_xxx)" style="margin-top:6px" />
-      <input id="emailTemplate" placeholder="template_id (template_xxx)" style="margin-top:6px" />
-      <label style="margin-top:8px">To (penerima)</label>
-      <input id="emailTo" placeholder="you@example.com" />
-      <label style="margin-top:8px">Email Subject (boleh pakai {{signal}}, {{pair}}, {{price}}, {{time}})</label>
-      <input id="emailSubject" value="Signal Alert - {{pair}} - {{signal}}" />
-      <label style="margin-top:6px">Email Body (boleh pakai {{signal}}, {{pair}}, {{price}}, {{time}})</label>
-      <textarea id="emailBody">Detected {{signal}} on {{pair}} at {{price}} ({{time}})</textarea>
-      <div style="margin-top:8px" class="btn-row">
-        <button id="sendTestEmail" class="secondary">Send test email</button>
-        <button id="clearEmailConfig" class="secondary">Clear</button>
-      </div>
-      <div class="muted" style="margin-top:8px">Catatan: di EmailJS dashboard, buat template yang menerima parameter: <code>to_email</code>, <code>subject</code>, <code>body</code>.</div>
+    <div class="card" style="flex-basis:360px">
+      <label>EmailJS (opsional)</label>
+      <input id="emailUser" placeholder="user_xxx (default)" value="default_user">
+      <input id="emailService" placeholder="service_xxx (default)" value="default_service" style="margin-top:4px">
+      <input id="emailTemplate" placeholder="template_xxx (default)" value="default_template" style="margin-top:4px">
+      <label style="margin-top:8px">Penerima Email</label>
+      <input id="emailTo" placeholder="you@example.com">
+      <label style="margin-top:8px">Pesan Email</label>
+      <input id="emailMsgBuy" value="BUY {{pair}} at {{price}}" placeholder="Buy message">
+      <input id="emailMsgSell" value="SELL {{pair}} at {{price}}" style="margin-top:4px" placeholder="Sell message">
     </div>
 
-    <div class="card">
+    <div class="card" style="flex-basis:240px">
       <label>Aksi</label>
-      <div class="btn-row" style="margin-bottom:8px">
-        <button id="startBtn">Start</button>
-        <button id="stopBtn" class="secondary">Stop</button>
-      </div>
-      <label style="margin-top:6px">Status</label>
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" style="margin-top:6px;background:#555">Stop</button>
+      <label style="margin-top:10px">Status</label>
       <pre id="status">idle</pre>
-      <label style="margin-top:8px">Last signal</label>
+      <label>Last signal</label>
       <pre id="lastSignal">-</pre>
-      <div style="margin-top:8px" class="small">Log juga akan tampil di Console (F12). Jika email tak terkirim, cek Console untuk error.</div>
     </div>
   </div>
 
   <div id="chartWrap" class="card"><canvas id="chart"></canvas></div>
 
-  <!-- dependencies (Chart.js, chartjs-chart-financial@3.3.0, date adapter, EmailJS) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
- <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
-
   <script>
-    /**************************************************************************
-     * REGISTER financial plugin (v3.3.0) for Chart.js v4
-     * This avoids the "candlestick is not a registered controller" error.
-     **************************************************************************/
-    (function registerFinancial(){
-      try{
-        if(window['chartjs-chart-financial'] && Chart){
-          const fin = window['chartjs-chart-financial'];
-          // v3.3.0 exports named controllers/elements; register them explicitly
-          const FinancialController = fin.FinancialController || fin.FinancialController;
-          const FinancialElement = fin.FinancialElement || fin.FinancialElement;
-          const CandlestickController = fin.CandlestickController || fin.CandlestickController;
-          const CandlestickElement = fin.CandlestickElement || fin.CandlestickElement;
-          // register safe-guard: check existence
-          const { FinancialController, FinancialElement, CandlestickController, CandlestickElement } = window['chartjs-chart-financial'];
-Chart.register(FinancialController, FinancialElement, CandlestickController, CandlestickElement);
+    // Register plugin
+    Chart.register(window['chartjs-chart-financial']);
 
-        } else {
-          console.error('chartjs-chart-financial not loaded');
-        }
-      }catch(err){
-        console.error('registerFinancial error', err);
-      }
-    })();
+    function sma(values, period){
+      const out=[]; for(let i=0;i<values.length;i++){ if(i+1<period){out.push(null);continue} let sum=0;for(let j=0;j<period;j++)sum+=values[i-j];out.push(sum/period)} return out;
+    }
+    function atr(high,low,close,period){
+      const tr=[];for(let i=0;i<close.length;i++){if(i===0)tr.push(high[i]-low[i]);else tr.push(Math.max(high[i]-low[i],Math.abs(high[i]-close[i-1]),Math.abs(low[i]-close[i-1])));}
+      const out=[];let sum=0;for(let i=0;i<tr.length;i++){if(i<period){sum+=tr[i];if(i===period-1)out.push(sum/period);else out.push(null)}else{sum=sum-tr[i-period]+tr[i];out.push(sum/period)}}return out;
+    }
+    function linearRegression(values){const n=values.length;let sx=0,sy=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=i;sy+=values[i];sxy+=i*values[i];sxx+=i*i}const slope=(n*sxy-sx*sy)/(n*sxx-sx*sx);const intercept=(sy-slope*sx)/n;return{slope,intercept}}
+    function lrChannel(close,period,mult){const mid=[],up=[],low=[];for(let i=0;i<close.length;i++){if(i+1<period){mid.push(null);up.push(null);low.push(null);continue}const w=close.slice(i+1-period,i+1);const lr=linearRegression(w);const n=w.length;let s=0;for(let j=0;j<n;j++){const p=lr.intercept+lr.slope*j;s+=(w[j]-p)**2}const std=Math.sqrt(s/n);const mv=lr.intercept+lr.slope*(n-1);mid.push(mv);up.push(mv+mult*std);low.push(mv-mult*std)}return{mid,up,low}}
+    function utBot(close,high,low,atrP,factor){const a=atr(high,low,close,atrP);const lS=new Array(close.length).fill(null);const sS=new Array(close.length).fill(null);const t=new Array(close.length).fill(null);for(let i=0;i<close.length;i++){if(a[i]==null){t[i]=null;continue}const bL=(high[i]+low[i])/2-factor*a[i];const bS=(high[i]+low[i])/2+factor*a[i];if(i===0){lS[i]=bL;sS[i]=bS;t[i]=1;continue}lS[i]=Math.max(bL,lS[i-1]||bL);sS[i]=Math.min(bS,sS[i-1]||bS);if(close[i]>sS[i-1])t[i]=1;else if(close[i]<lS[i-1])t[i]=-1;else t[i]=t[i-1]||1;}return{atr:a,longStop:lS,shortStop:sS,trend:t}}
 
-    /*************************
-     * Indicator utilities
-     *************************/
-    function atr(high, low, close, period){
-      const tr = [];
-      for(let i=0;i<close.length;i++){
-        if(i===0) tr.push(high[i]-low[i]);
-        else tr.push(Math.max(high[i]-low[i], Math.abs(high[i]-close[i-1]), Math.abs(low[i]-close[i-1])));
-      }
-      const out=[]; let sum=0;
-      for(let i=0;i<tr.length;i++){
-        if(i<period){ sum+=tr[i]; if(i===period-1) out.push(sum/period); else out.push(null); }
-        else { sum = sum - tr[i-period] + tr[i]; out.push(sum/period); }
-      }
-      return out;
+    async function fetchKlines(symbol,interval,limit=200){
+      const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      const r=await fetch(url);const j=await r.json();return j.map(k=>({t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}));
     }
 
-    function linearRegression(values){
-      const n = values.length;
-      let sumx=0,sumy=0,sumxy=0,sumxx=0;
-      for(let i=0;i<n;i++){ sumx+=i; sumy+=values[i]; sumxy+=i*values[i]; sumxx+=i*i; }
-      const denom = (n*sumxx - sumx*sumx) || 1;
-      const slope = (n*sumxy - sumx*sumy)/denom;
-      const intercept = (sumy - slope*sumx)/n;
-      return {slope, intercept};
+    function configureEmailJS(user){if(user && user!=='default_user') emailjs.init(user);}
+    async function sendEmail(svc,tmp,to,msg){
+      if(svc==='default_service'||tmp==='default_template')return;
+      try{await emailjs.send(svc,tmp,{to_email:to,message:msg});}catch(e){console.error(e);}
     }
 
-    function lrChannel(close, period, mult){
-      const mid=[], upper=[], lower=[];
-      for(let i=0;i<close.length;i++){
-        if(i+1<period){ mid.push(null); upper.push(null); lower.push(null); continue; }
-        const window = close.slice(i+1-period, i+1);
-        const lr = linearRegression(window);
-        let sqsum=0;
-        for(let j=0;j<window.length;j++){
-          const pred = lr.intercept + lr.slope*j; sqsum += Math.pow(window[j]-pred,2);
-        }
-        const std = Math.sqrt(sqsum/window.length);
-        const midVal = lr.intercept + lr.slope*(window.length-1);
-        mid.push(midVal); upper.push(midVal + mult*std); lower.push(midVal - mult*std);
-      }
-      return {mid, upper, lower};
-    }
+    const ctx=document.getElementById('chart');
+    let chart=new Chart(ctx,{type:'candlestick',data:{datasets:[{label:'CAKE/USDT',data:[]}]}});
+    let intervalId=null;let lastSig=null;
 
-    // UT Bot (simplified): ATR-based stop bands & trend flips
-    function utBot(close, high, low, atrPeriod, factor){
-      const atrArr = atr(high, low, close, atrPeriod);
-      const longStop = new Array(close.length).fill(null);
-      const shortStop = new Array(close.length).fill(null);
-      const trend = new Array(close.length).fill(null);
-      for(let i=0;i<close.length;i++){
-        if(atrArr[i]===null){ trend[i]=null; continue; }
-        const basicLong = (high[i] + low[i]) / 2 - factor * atrArr[i];
-        const basicShort = (high[i] + low[i]) / 2 + factor * atrArr[i];
-        if(i===0){ longStop[i]=basicLong; shortStop[i]=basicShort; trend[i]=1; continue; }
-        longStop[i] = Math.max(basicLong, longStop[i-1] || basicLong);
-        shortStop[i] = Math.min(basicShort, shortStop[i-1] || basicShort);
-        if(close[i] > shortStop[i-1]) trend[i]=1;
-        else if(close[i] < longStop[i-1]) trend[i]=-1;
-        else trend[i]=trend[i-1] || 1;
-      }
-      return {atr:atrArr,longStop,shortStop,trend};
-    }
+    async function updateChart(){
+      const interval=document.getElementById('interval').value;
+      const kl=await fetchKlines('CAKEUSDT',interval,300);
+      const times=kl.map(k=>k.t),c=kl.map(k=>k.c),h=kl.map(k=>k.h),l=kl.map(k=>k.l);
+      const ut=utBot(c,h,l,+utAtrPeriod.value,+utFactor.value);
+      const lr=lrChannel(c,+lrPeriod.value,+lrMult.value);
 
-    /*************************
-     * Binance fetch helper
-     *************************/
-    async function fetchKlines(symbol, interval, limit=500){
-      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-      const r = await fetch(url);
-      if(!r.ok) throw new Error('Binance fetch failed: '+r.status);
-      const data = await r.json();
-      // map to OHLC object for financial plugin
-      return data.map(k => ({ x: new Date(k[0]), o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
-    }
+      chart.data.datasets=[{
+        label:'CAKE/USDT',data:kl.map(k=>({x:k.t,o:k.o,h:k.h,l:k.l,c:k.c})),borderColor:'#000'
+      },{
+        label:'LR Mid',data:lr.mid.map((v,i)=>v?{x:times[i],y:v}:null),type:'line',borderColor:'#007bff',borderWidth:1,pointRadius:0
+      }];
+      chart.update();
 
-    /*************************
-     * Chart setup (candlestick + lines)
-     *************************/
-    const ctx = document.getElementById('chart').getContext('2d');
-    let chart = new Chart(ctx, {
-      type: 'candlestick',
-      data: { datasets: [ { label: 'CAKE/USDT (OHLC)', data: [] } ] },
-      options: {
-        plugins: { legend: { display: true } },
-        scales: {
-          x: { type: 'time', time: { tooltipFormat: 'dd MMM yyyy HH:mm' } },
-          y: { beginAtZero: false }
-        },
-        interaction: { mode: 'index', intersect: false },
-        maintainAspectRatio: false
-      }
-    });
-
-    /*************************
-     * EmailJS helpers
-     *************************/
-    function configureEmailJS(userId){
-      if(userId){
-        try{ emailjs.init(userId); } catch(e){ console.warn('emailjs.init error', e); }
-      }
-    }
-    async function sendEmailUsingEmailJS(serviceId, templateId, toEmail, subject, body){
-      if(!serviceId || !templateId) throw new Error('EmailJS service/template not configured');
-      const templateParams = { to_email: toEmail, subject: subject, body: body };
-      return emailjs.send(serviceId, templateId, templateParams);
-    }
-
-    /*************************
-     * Trading logic & trailing
-     *************************/
-    let intervalId = null;
-    const positions = { active:false, side:null, entryPrice:null, trailingPct:0, peakOrValley:null };
-
-    async function updateOnce(){
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = 'updating...';
-      try{
-        const symbol = 'CAKEUSDT';
-        const interval = document.getElementById('interval').value;
-        const klines = await fetchKlines(symbol, interval, 500);
-        const close = klines.map(k=>k.c);
-        const high = klines.map(k=>k.h);
-        const low = klines.map(k=>k.l);
-        const times = klines.map(k=>k.x);
-
-        // params
-        const atrP = parseInt(document.getElementById('utAtrPeriod').value) || 10;
-        const factor = parseFloat(document.getElementById('utFactor').value) || 1;
-        const lrP = parseInt(document.getElementById('lrPeriod').value) || 100;
-        const lrM = parseFloat(document.getElementById('lrMult').value) || 2;
-
-        // compute indicators
-        const ut = utBot(close, high, low, atrP, factor);
-        const lr = lrChannel(close, lrP, lrM);
-
-        // build datasets
-        const ohlcData = klines;
-        const mapLine = arr => arr.map((v,i)=> v===null? null : ({ x: times[i], y: v })).filter(Boolean);
-        const midData = mapLine(lr.mid);
-        const upData = mapLine(lr.upper);
-        const lowData = mapLine(lr.lower);
-        const longStopData = ut.longStop.map((v,i)=> v===null? null : ({ x: times[i], y: v })).filter(Boolean);
-        const shortStopData = ut.shortStop.map((v,i)=> v===null? null : ({ x: times[i], y: v })).filter(Boolean);
-
-        // apply to chart: candlestick + lines
-        chart.data.datasets = [
-          { label: 'CAKE/USDT (OHLC)', data: ohlcData, type: 'candlestick' },
-          { label: 'LR Mid', data: midData, type: 'line', borderDash:[6,4], pointRadius:0, borderWidth:1 },
-          { label: 'LR Upper', data: upData, type: 'line', pointRadius:0, borderWidth:1 },
-          { label: 'LR Lower', data: lowData, type: 'line', pointRadius:0, borderWidth:1 },
-          { label: 'UT LongStop', data: longStopData, type: 'line', pointRadius:0, borderWidth:1 },
-          { label: 'UT ShortStop', data: shortStopData, type: 'line', pointRadius:0, borderWidth:1 }
-        ];
-        chart.update();
-
-        // signal detection: trend flips in ut.trend
-        const trendArr = ut.trend;
-        const latestIdx = trendArr.length-1;
-        const prevIdx = latestIdx-1;
-        if(prevIdx>=0 && trendArr[prevIdx] !== null && trendArr[latestIdx] !== null){
-          if(trendArr[prevIdx] <= 0 && trendArr[latestIdx] > 0){
-            await handleSignal('BUY', close[latestIdx], times[latestIdx]);
-          } else if(trendArr[prevIdx] >= 0 && trendArr[latestIdx] < 0){
-            await handleSignal('SELL', close[latestIdx], times[latestIdx]);
-          } else {
-            await updateTrailing(close[latestIdx]);
-          }
-        } else {
-          await updateTrailing(close[close.length-1]);
-        }
-
-        statusEl.textContent = 'updated: ' + (new Date()).toLocaleTimeString();
-      }catch(err){
-        console.error(err);
-        document.getElementById('status').textContent = 'error: ' + (err && err.message ? err.message : err);
+      const t=ut.trend;const i=t.length-1;
+      if(i>1&&t[i]!=null&&t[i-1]!=null){
+        if(t[i-1]<=0&&t[i]>0) handleSignal('BUY',c[i]);
+        if(t[i-1]>=0&&t[i]<0) handleSignal('SELL',c[i]);
       }
     }
 
-    async function handleSignal(signal, price, ts){
-      const trailingPctInput = parseFloat(document.getElementById('trailingPct').value) || 0;
-      const trailingPct = trailingPctInput / 100;
-      const statusEl = document.getElementById('status');
-      const lastSignalEl = document.getElementById('lastSignal');
-
-      // open new if none
-      if(!positions.active){
-        positions.active = true; positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct; positions.peakOrValley = price;
-        lastSignalEl.textContent = `${signal} @ ${price} (${new Date(ts).toLocaleString()})`;
-        statusEl.textContent = `Opened ${signal} @ ${price} (trailing ${trailingPctInput}%)`;
-        await maybeSendEmail(signal, price, ts);
-        return;
-      }
-
-      // opposite -> close and open
-      if((positions.side === 'BUY' && signal === 'SELL') || (positions.side === 'SELL' && signal === 'BUY')){
-        statusEl.textContent = `Closed ${positions.side} @ ${price} — opened ${signal}`;
-        positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct; positions.peakOrValley = price;
-        lastSignalEl.textContent = `${signal} @ ${price} (${new Date(ts).toLocaleString()})`;
-        await maybeSendEmail(signal, price, ts);
-        return;
-      }
-
-      // same direction -> update trailing
-      await updateTrailing(price);
+    const pos={active:false,side:null,price:0,trail:0};
+    function handleSignal(sig,price){
+      const trail=parseFloat(trailingPct.value)/100;
+      const st=document.getElementById('status'),ls=document.getElementById('lastSignal');
+      if(!pos.active){pos.active=true;pos.side=sig;pos.price=price;pos.trail=trail;}
+      else{if((pos.side==='BUY'&&sig==='SELL')||(pos.side==='SELL'&&sig==='BUY')){pos.side=sig;pos.price=price;pos.trail=trail;}}
+      ls.textContent=`${sig} @ ${price}`;st.textContent=`Signal ${sig}`;
+      const u=emailUser.value,s=emailService.value,t=emailTemplate.value,to=emailTo.value;
+      configureEmailJS(u);const msg=(sig==='BUY'?emailMsgBuy.value:emailMsgSell.value).replace('{{pair}}','CAKE/USDT').replace('{{price}}',price);sendEmail(s,t,to,msg);
     }
 
-    async function updateTrailing(price){
-      if(!positions.active) return;
-      const trail = positions.trailingPct;
-      if(positions.side === 'BUY'){
-        positions.peakOrValley = Math.max(positions.peakOrValley || positions.entryPrice, price);
-        const stopPrice = positions.peakOrValley * (1 - trail);
-        if(price <= stopPrice){
-          document.getElementById('status').textContent = `Trailing stop hit. Closed BUY @ ${price}`;
-          await maybeSendEmail('CLOSE_BUY', price, new Date());
-          positions.active = false;
-        }
-      } else if(positions.side === 'SELL'){
-        positions.peakOrValley = Math.min(positions.peakOrValley || positions.entryPrice, price);
-        const stopPrice = positions.peakOrValley * (1 + trail);
-        if(price >= stopPrice){
-          document.getElementById('status').textContent = `Trailing stop hit. Closed SELL @ ${price}`;
-          await maybeSendEmail('CLOSE_SELL', price, new Date());
-          positions.active = false;
-        }
-      }
-    }
-
-    // send email if configured
-    async function maybeSendEmail(signal, price, ts){
-      try{
-        const user = document.getElementById('emailUser').value.trim();
-        const svc = document.getElementById('emailService').value.trim();
-        const tmpl = document.getElementById('emailTemplate').value.trim();
-        const to = document.getElementById('emailTo').value.trim();
-        const subjTpl = document.getElementById('emailSubject').value || '';
-        const bodyTpl = document.getElementById('emailBody').value || '';
-        if(!svc || !tmpl || !to) return; // not configured fully
-        configureEmailJS(user || null);
-        const subj = subjTpl.replace('{{signal}}',signal).replace('{{price}}',price).replace('{{pair}}','CAKE/USDT').replace('{{time}}', new Date(ts).toLocaleString());
-        const body = bodyTpl.replace('{{signal}}',signal).replace('{{price}}',price).replace('{{pair}}','CAKE/USDT').replace('{{time}}', new Date(ts).toLocaleString());
-        await sendEmailUsingEmailJS(svc, tmpl, to, subj, body);
-        console.log('email sent:', signal, price);
-      }catch(e){
-        console.error('email send failed', e);
-      }
-    }
-
-    /*************************
-     * Controls (start/stop/test email)
-     *************************/
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    startBtn.addEventListener('click', async ()=>{
-      if(intervalId) return;
-      startBtn.disabled = true; stopBtn.disabled = false;
-      const sec = Math.max(5, parseInt(document.getElementById('pollSeconds').value) || 30);
-      try{ await updateOnce(); }catch(e){ console.warn(e); }
-      intervalId = setInterval(()=> updateOnce().catch(e=>console.error(e)), sec*1000);
-      document.getElementById('status').textContent = 'running (poll ' + sec + 's)';
-    });
-
-    stopBtn.addEventListener('click', ()=>{
-      if(intervalId) clearInterval(intervalId);
-      intervalId = null;
-      startBtn.disabled = false; stopBtn.disabled = true;
-      document.getElementById('status').textContent = 'stopped';
-    });
-
-    // init buttons
-    stopBtn.disabled = true;
-
-    // test email
-    document.getElementById('sendTestEmail').addEventListener('click', async ()=>{
-      const user = document.getElementById('emailUser').value.trim();
-      const svc = document.getElementById('emailService').value.trim();
-      const tmpl = document.getElementById('emailTemplate').value.trim();
-      const to = document.getElementById('emailTo').value.trim();
-      const subjTpl = document.getElementById('emailSubject').value || '';
-      const bodyTpl = document.getElementById('emailBody').value || '';
-      configureEmailJS(user || null);
-      if(!svc || !tmpl || !to){ alert('Isi service_id, template_id, dan to_email terlebih dahulu.'); return; }
-      const subj = subjTpl.replace('{{signal}}','TEST').replace('{{price}}','0').replace('{{pair}}','CAKE/USDT').replace('{{time}}',new Date().toLocaleString());
-      const body = bodyTpl.replace('{{signal}}','TEST').replace('{{price}}','0').replace('{{pair}}','CAKE/USDT').replace('{{time}}',new Date().toLocaleString());
-      try{
-        await sendEmailUsingEmailJS(svc, tmpl, to, subj, body);
-        alert('Test email terkirim (cek inbox).');
-      }catch(e){ console.error(e); alert('Gagal mengirim test email — lihat console untuk detail.'); }
-    });
-
-    document.getElementById('clearEmailConfig').addEventListener('click', ()=>{
-      document.getElementById('emailUser').value=''; document.getElementById('emailService').value=''; document.getElementById('emailTemplate').value=''; document.getElementById('emailTo').value=''; document.getElementById('emailSubject').value='Signal Alert - {{pair}} - {{signal}}'; document.getElementById('emailBody').value='Detected {{signal}} on {{pair}} at {{price}} ({{time}})';
-    });
-
-    // resize chart when window changes
-    window.addEventListener('resize', ()=> chart.resize());
-
-    // initial small update so user sees something (optional)
-    (async ()=>{ try{ await updateOnce(); }catch(e){ /* ignore */ } })();
+    document.getElementById('startBtn').onclick=()=>{if(intervalId)return;updateChart();intervalId=setInterval(updateChart,30*1000);status.textContent='running';}
+    document.getElementById('stopBtn').onclick=()=>{if(intervalId)clearInterval(intervalId);intervalId=null;status.textContent='stopped';}
   </script>
 </body>
 </html>
