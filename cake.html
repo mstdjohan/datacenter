@@ -95,7 +95,7 @@
 
   <!-- dependencies (Chart.js, chartjs-chart-financial@3.3.0, date adapter, EmailJS) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
+ <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
 
@@ -114,8 +114,9 @@
           const CandlestickController = fin.CandlestickController || fin.CandlestickController;
           const CandlestickElement = fin.CandlestickElement || fin.CandlestickElement;
           // register safe-guard: check existence
-          if(FinancialController && FinancialElement) Chart.register(FinancialController, FinancialElement);
-          if(CandlestickController && CandlestickElement) Chart.register(CandlestickController, CandlestickElement);
+          const { FinancialController, FinancialElement, CandlestickController, CandlestickElement } = window['chartjs-chart-financial'];
+Chart.register(FinancialController, FinancialElement, CandlestickController, CandlestickElement);
+
         } else {
           console.error('chartjs-chart-financial not loaded');
         }
