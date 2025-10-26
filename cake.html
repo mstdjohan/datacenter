@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CAKE/USDT — UT Bot + Linear Regression + Trailing + Email</title>
+  <title>CAKE/USDT — UT Bot + Linear Regression + Trailing + Email (fixed)</title>
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1100px;margin:18px auto;padding:12px}
     h1{font-size:18px;margin:0 0 8px}
@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <h1>CAKE/USDT — UT Bot (1,10) + Linear Regression Channel (100,2) + Trailing + Email</h1>
+  <h1>CAKE/USDT — UT Bot (1,10) + Linear Regression Channel (100,2) + Trailing + Email (fixed)</h1>
 
   <div class="row">
     <div class="card" style="flex-basis:320px;min-width:280px">
@@ -34,11 +34,11 @@
 
     <div class="card" style="flex-basis:360px;min-width:300px">
       <label>EmailJS — (opsional) konfigurasi untuk kirim email otomatis</label>
-      <input id="emailUser" placeholder="aPZx0R9oxUbIQkLEv" />
-      <input id="emailService" placeholder="service_d48312b" style="margin-top:6px" />
-      <input id="emailTemplate" placeholder="template_1ktk40q" style="margin-top:6px" />
+      <input id="emailUser" placeholder="EmailJS user id (user_xxx)" />
+      <input id="emailService" placeholder="service_id (ex: service_xxx)" style="margin-top:6px" />
+      <input id="emailTemplate" placeholder="template_id (ex: template_xxx)" style="margin-top:6px" />
       <label style="margin-top:8px">To email (penerima)</label>
-      <input id="emailTo" placeholder="miningduta5@gmail.com" />
+      <input id="emailTo" placeholder="you@example.com" />
       <label style="margin-top:8px">Pesan email (gunakan {{signal}}, {{price}}, {{pair}})</label>
       <input id="emailMsgBuy" placeholder="Buy message" value="BUY signal for {{pair}} at {{price}} (signal={{signal}})" />
       <input id="emailMsgSell" placeholder="Sell message" value="SELL signal for {{pair}} at {{price}} (signal={{signal}})" style="margin-top:6px" />
@@ -57,7 +57,10 @@
 
   <div id="chartWrap" class="card"><canvas id="chart"></canvas></div>
 
+  <!-- Chart.js + date adapter + financial (candlestick) plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.0.0/dist/chartjs-chart-financial.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
 
   <script>
@@ -70,7 +73,7 @@
       const out=[]; let sum=0; for(let i=0;i<tr.length;i++){ if(i<period){ sum+=tr[i]; if(i===period-1) out.push(sum/period); else out.push(null) } else { sum = sum - tr[i-period] + tr[i]; out.push(sum/period) } } return out }
 
     function linearRegression(values){ // returns {slope, intercept}
-      const n=values.length; let sumx=0,sumy=0,sumxy=0,sumxx=0; for(let i=0;i<n;i++){ sumx+=i; sumy+=values[i]; sumxy+=i*values[i]; sumxx+=i*i } const slope = (n*sumxy - sumx*sumy) / (n*sumxx - sumx*sumx); const intercept = (sumy - slope*sumx)/n; return {slope, intercept} }
+      const n=values.length; let sumx=0,sumy=0,sumxy=0,sumxx=0; for(let i=0;i<n;i++){ sumx+=i; sumy+=values[i]; sumxy+=i*values[i]; sumxx+=i*i } const denom = (n*sumxx - sumx*sumx) || 1; const slope = (n*sumxy - sumx*sumy) / denom; const intercept = (sumy - slope*sumx)/n; return {slope, intercept} }
 
     function lrChannel(close, period, mult){
       const mid=[]; const upper=[]; const lower=[];
@@ -128,17 +131,25 @@
       }catch(e){ console.error('email error', e) }
     }
 
-    // --- Chart setup ---
+    // --- Chart setup (candlestick) ---
     const ctx = document.getElementById('chart').getContext('2d');
-    let chart = new Chart(ctx, { type:'line', data:{datasets:[]}, options:{scales:{x:{type:'time',time:{unit:'hour'}},y:{ticks:{maxTicksLimit:10}}},interaction:{mode:'index',intersect:false},plugins:{legend:{display:true}}}});
+    let chart = new Chart(ctx, {
+      type: 'candlestick',
+      data: { datasets: [ { label: 'Price (OHLC)', data: [] } ] },
+      options: {
+        plugins: { legend: { display: true } },
+        scales: { x: { type: 'time', time: { unit: 'hour' } }, y: { beginAtZero: false } },
+        interaction: { mode: 'index', intersect: false }
+      }
+    });
 
     // --- Main loop ---
     let intervalId = null;
-    let lastProcessedTime = 0;
     let lastSignal = null;
 
     async function updateOnce(){
       try{
+        document.getElementById('status').textContent = 'updating...';
         const symbol = 'CAKEUSDT';
         const interval = document.getElementById('interval').value;
         const klines = await fetchKlines(symbol, interval, 500);
@@ -146,6 +157,7 @@
         const close = klines.map(k=>k.close);
         const high = klines.map(k=>k.high);
         const low = klines.map(k=>k.low);
+        const open = klines.map(k=>k.open);
 
         // params
         const atrP = parseInt(document.getElementById('utAtrPeriod').value)||10;
@@ -156,21 +168,24 @@
         const ut = utBot(close,high,low,atrP,factor);
         const lr = lrChannel(close, lrP, lrM);
 
-        // Build chart datasets
-        const priceData = times.map((t,i)=>({x:new Date(t), y:close[i]}));
-        const midData = lr.mid.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v});
-        const upperData = lr.upper.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v});
-        const lowerData = lr.lower.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v});
-        const shortStopData = ut.shortStop.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v});
-        const longStopData = ut.longStop.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v});
+        // Build OHLC data for candlestick dataset
+        const ohlcData = klines.map(k=>({ x: new Date(k.t), o: k.open, h: k.high, l: k.low, c: k.close }));
+
+        // LR lines (map to points where value exists)
+        const mapLine = (arr) => arr.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v}).filter(Boolean);
+        const midData = mapLine(lr.mid);
+        const upperData = mapLine(lr.upper);
+        const lowerData = mapLine(lr.lower);
+        const shortStopData = ut.shortStop.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v}).filter(Boolean);
+        const longStopData = ut.longStop.map((v,i)=> v===null? null : {x:new Date(times[i]), y:v}).filter(Boolean);
 
         chart.data.datasets = [
-          {label:'Close',data:priceData, borderWidth:1.5},
-          {label:'LR Mid',data:midData,borderDash:[6,4],borderWidth:1,pointRadius:0},
-          {label:'LR Upper',data:upperData,borderWidth:1,pointRadius:0},
-          {label:'LR Lower',data:lowerData,borderWidth:1,pointRadius:0},
-          {label:'UT LongStop',data:longStopData,borderWidth:1,pointRadius:0},
-          {label:'UT ShortStop',data:shortStopData,borderWidth:1,pointRadius:0}
+          { label: 'Price (OHLC)', data: ohlcData, type: 'candlestick' },
+          { label: 'LR Mid', data: midData, type: 'line', borderDash:[6,4], pointRadius:0, borderWidth:1 },
+          { label: 'LR Upper', data: upperData, type: 'line', pointRadius:0, borderWidth:1 },
+          { label: 'LR Lower', data: lowerData, type: 'line', pointRadius:0, borderWidth:1 },
+          { label: 'UT LongStop', data: longStopData, type:'line', pointRadius:0, borderWidth:1 },
+          { label: 'UT ShortStop', data: shortStopData, type:'line', pointRadius:0, borderWidth:1 }
         ];
         chart.update();
 
@@ -186,11 +201,12 @@
           }
         }
 
+        document.getElementById('status').textContent = 'idle';
       }catch(e){ console.error(e); document.getElementById('status').textContent = 'error: '+e.message }
     }
 
     // Trailing stop management and signaling
-    const positions = { active:false, side:null, entryPrice:null, trailingPct:0 };
+    const positions = { active:false, side:null, entryPrice:null, trailingPct:0, peakOrValley:null };
     function handleSignal(signal, price, ts){
       const trailingPct = parseFloat(document.getElementById('trailingPct').value)||0;
       const statusEl = document.getElementById('status');
@@ -198,7 +214,7 @@
 
       // If no active position, open on BUY or SELL
       if(!positions.active){
-        positions.active = true; positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct/100;
+        positions.active = true; positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct/100; positions.peakOrValley = price;
         lastSignal = {type:signal,price,ts};
         lastSignalEl.textContent = `${signal} @ ${price} (${new Date(ts).toLocaleString()})`;
         statusEl.textContent = `Opened ${signal} @ ${price} with trailing ${trailingPct}%`;
@@ -215,7 +231,7 @@
         // If active and opposite signal, close and open new
         if((positions.side==='BUY' && signal==='SELL') || (positions.side==='SELL' && signal==='BUY')){
           statusEl.textContent = `Closed ${positions.side} @ ${price} — opened ${signal}`;
-          positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct/100;
+          positions.side = signal; positions.entryPrice = price; positions.trailingPct = trailingPct/100; positions.peakOrValley = price;
           lastSignal = {type:signal,price,ts};
           lastSignalEl.textContent = `${signal} @ ${price} (${new Date(ts).toLocaleString()})`;
           // send email
@@ -228,26 +244,42 @@
           const finalMsg = msg.replace('{{signal}}',signal).replace('{{price}}',price).replace('{{pair}}','CAKE/USDT');
           if(svc && tmpl && to) sendEmail(svc, tmpl, to, finalMsg);
         } else {
-          // same direction — update trailing stop: we check if price moved favorably, otherwise check if trailing stop hit
-          const side = positions.side; const entry = positions.entryPrice; const trail = positions.trailingPct;
+          // same direction — update trailing stop: update peak/valley then check stop
+          const side = positions.side; const trail = positions.trailingPct;
           if(side==='BUY'){
-            const peak = Math.max(entry, price);
-            const stopPrice = peak * (1 - trail);
+            positions.peakOrValley = Math.max(positions.peakOrValley || positions.entryPrice, price);
+            const stopPrice = positions.peakOrValley * (1 - trail);
             if(price <= stopPrice){ positions.active=false; document.getElementById('status').textContent = `Trailing stop hit. Closed BUY @ ${price}`; }
           } else if(side==='SELL'){
-            const valley = Math.min(entry, price);
-            const stopPrice = valley * (1 + trail);
+            positions.peakOrValley = Math.min(positions.peakOrValley || positions.entryPrice, price);
+            const stopPrice = positions.peakOrValley * (1 + trail);
             if(price >= stopPrice){ positions.active=false; document.getElementById('status').textContent = `Trailing stop hit. Closed SELL @ ${price}`; }
           }
         }
       }
     }
 
-    // Controls
-    document.getElementById('startBtn').addEventListener('click', ()=>{
-      if(intervalId) return; updateOnce(); intervalId = setInterval(updateOnce, 60*1000); document.getElementById('status').textContent='running';
+    // Controls (improved: disable/enable buttons, clear interval safely)
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    startBtn.addEventListener('click', async ()=>{
+      if(intervalId) return; // already running
+      startBtn.disabled = true; stopBtn.disabled = false; document.getElementById('status').textContent='starting...';
+      try{
+        await updateOnce();
+      }catch(e){ console.error(e) }
+      // poll every 60s
+      intervalId = setInterval(() => { updateOnce().catch(err => console.error(err)); }, 60*1000);
+      document.getElementById('status').textContent='running';
     });
-    document.getElementById('stopBtn').addEventListener('click', ()=>{ if(intervalId) clearInterval(intervalId); intervalId=null; document.getElementById('status').textContent='stopped'; });
+
+    stopBtn.addEventListener('click', ()=>{
+      if(intervalId) clearInterval(intervalId);
+      intervalId=null; startBtn.disabled = false; stopBtn.disabled = true; document.getElementById('status').textContent='stopped';
+    });
+    // initialize buttons state
+    stopBtn.disabled = true;
 
     // Auto-size canvas
     window.addEventListener('resize', ()=> chart.resize());
