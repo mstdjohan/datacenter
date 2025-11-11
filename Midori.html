@@ -7,7 +7,7 @@
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:40px}
-    .wrap{max-width:3600px;margin:0 auto}
+    .wrap{max-width:1500px;margin:0 auto}
     .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
     .row{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
     .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -15,8 +15,8 @@
     .btn-primary{background:#111;color:#fff}
     .btn-buy{background:#2563eb;color:#fff}
     .btn-sell{background:#f59e0b;color:#fff}
-    .log{height:520px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
-    #lwchart{height:1420px}
+    .log{height:250px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
+    #lwchart{height:420px}
     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #e6e6e6}
   </style>
 
@@ -33,7 +33,7 @@
   <div class="wrap">
     <div class="card">
       <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec)</h2>
-      <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell.</small>
+      <small>Mode: BUY di bawah LRC + RSI&lt;10 + UTBot buy. SELL di atas LRC + RSI&gt;90 + UTBot sell.</small>
     </div>
 
     <div class="row">
@@ -161,30 +161,6 @@
     try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
   };
 
-
-  // ---------- Email helper ----------
-  async function sendEmail(action, price, txHash = '-', amountHuman = '-') {
-    if (!window.emailjs || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
-      log(`(email) missing config or emailjs not loaded — skip send: ${action} @ ${price}`);
-      return;
-    }
-    try {
-      const templateParams = {
-        pair: elSymbol.value || 'CAKEUSDT',
-        action: action.toUpperCase(),
-        price: String(price),
-        txhash: txHash,
-        amount: String(amountHuman),
-        wallet: address || '-',
-        time: new Date().toLocaleString()
-      };
-      await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-      log(`📧 Email sent: ${action} @ ${price}`);
-    } catch (e) {
-      log('⚠️ Email failed: ' + (e.text || e.message || e));
-    }
-  }
-
   // --- TA helpers (same as your original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
   function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
@@ -273,7 +249,7 @@
 
   // fetch klines
   const BINANCE_BASE = "https://api.binance.com/api/v3";
-  const intervalMap = {"5m":"5m","15m":"15m","1m":"1m","30m":"30m","1h":"1h"};
+  const intervalMap = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h"};
   async function fetchInitial(symbol, interval, limit=600){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
@@ -289,7 +265,7 @@
   async function startPolling(){
     if (polling) clearInterval(polling);
     const sym = elSymbol.value || "CAKEUSDT";
-    const tf = elInterval.value || "1m";
+    const tf = elInterval.value || "15m";
     try {
       bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
       renderAll();
@@ -315,7 +291,7 @@
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
     const tvFull = `BINANCE:${tvSymbol}`;
-    const iv = elInterval.value||'1m';
+    const iv = elInterval.value||'5m';
     const ivMap = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60'};
     const tvInterval = ivMap[iv]||iv;
     if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
@@ -350,9 +326,11 @@
 
   // ---- on-chain helpers: corrected for ethers v6 usage ----
   function toBigInt(amount) {
+    // accept BigInt or string/number -> return BigInt
     if (typeof amount === 'bigint') return amount;
     if (typeof amount === 'number') return BigInt(Math.floor(amount));
     if (typeof amount === 'string') {
+      // if decimal-like (e.g. "1.5" with token decimals) user should pass raw smallest unit externally
       try { return BigInt(amount); } catch(e){ return BigInt(Number(amount)); }
     }
     return BigInt(0);
@@ -407,7 +385,6 @@
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
-          await sendEmail('PAPER BUY', entryPrice, '-', `${amt} (dec ${decimals})`);
           return;
         } else {
           const {decimals, bal} = await getDecimalsAndBalance(token);
@@ -415,7 +392,6 @@
           if (amt === 0n) { log('[PAPER] SELL skipped — CAKE 0'); return; }
           isHolding = false; entryPrice = null;
           log(`[PAPER] SELL simulated — amt=${amt} (dec ${decimals})`);
-          await sendEmail('PAPER SELL', bars[bars.length-1].close, '-', `${amt} (dec ${decimals})`);
           return;
         }
       }
@@ -427,9 +403,8 @@
 
       if (direction === 'buy') {
         // buy path: BASE -> TOKEN
-        const {decimals: baseDec, bal: baseBal} = await getDecimalsAndBalance(base);
-        const {decimals: tokenDec} = await getDecimalsAndBalance(token);
-        const amountIn = (baseBal * 100n) / 100n;
+        const {decimals, bal} = await getDecimalsAndBalance(base);
+        const amountIn = (bal * 100n) / 100n;
         if (amountIn === 0n) { log('BUY aborted — base balance zero'); return; }
 
         // estimate amounts out (read-only)
@@ -437,15 +412,14 @@
         const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), tokenDec));
-        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+        log(`Estimate out: ${outBig} | min after slip: ${outMin}`);
 
+        // ask confirmation (show human-readable approximate amounts using decimals)
         const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('Auto-confirming BUY...');
         const ok = 'CONFIRM';
         if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
-
 
         // ensure approval of base to router
         await ensureApproval(base, PCS_V2_ROUTER, amountIn);
@@ -454,31 +428,27 @@
         log('Sending swapExactTokensForTokens (BUY)...');
         const tx = await router.swapExactTokensForTokens(amountIn, outMin, [base, token], address, Math.floor(Date.now()/1000)+300);
         log('BUY tx sent: '+tx.hash);
-        const receipt = await tx.wait();
+        await tx.wait();
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
-        await sendEmail('BUY', entryPrice, tx.hash, outHuman);
       } else {
         // SELL: TOKEN -> BASE
-        const {decimals: tokenDec, bal: tokenBal} = await getDecimalsAndBalance(token);
-        const {decimals: baseDec} = await getDecimalsAndBalance(base);
-        const amountIn = (tokenBal * 100n) / 100n;
+        const {decimals, bal} = await getDecimalsAndBalance(token);
+        const amountIn = (bal * 100n) / 100n;
         if (amountIn === 0n) { log('SELL aborted — token balance zero'); return; }
 
         log('Estimating amountsOut for sell...');
         const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
-        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), baseDec));
-        log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
+        log(`Estimate out: ${outBig} | min after slip: ${outMin}`);
 
         const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('Auto-confirming SELL...');
         const ok = 'CONFIRM';
         if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
-
 
         await ensureApproval(token, PCS_V2_ROUTER, amountIn);
 
@@ -489,7 +459,6 @@
         log('SELL confirmed: '+tx.hash);
         isHolding = false;
         entryPrice = null;
-        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethersUtils.formatUnits(amountIn.toString(), tokenDec)));
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
