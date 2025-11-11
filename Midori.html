@@ -514,34 +514,61 @@
     await executeTrade(d);
   }
 
-  // wallet detection & connect (robust)
-  function detectWalletProvider(){
-    const any = window.ethereum;
-    if (!any) return null;
-    if (any.providers && Array.isArray(any.providers)){
-      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
-      if (trust) return trust;
-      const mm = any.providers.find(p=>p.isMetaMask);
-      if (mm) return mm;
-      return any.providers[0];
+    // --- FIXED WALLET DETECTION & CONNECTION (works for MetaMask + Trust) ---
+  function detectWalletProvider() {
+    if (typeof window === 'undefined') return null;
+    const eth = window.ethereum;
+    if (!eth) return null;
+
+    // jika multiple provider
+    if (eth.providers && Array.isArray(eth.providers)) {
+      const trust = eth.providers.find(p => p.isTrust || p.isTrustWallet);
+      const mm = eth.providers.find(p => p.isMetaMask);
+      return trust || mm || eth.providers[0];
     }
-    return any;
+
+    // fallback ke ethereum tunggal
+    return eth;
   }
 
-  async function connectWallet(){
+  async function connectWallet() {
     try {
       const prov = detectWalletProvider();
-      if (!prov) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
-      // request accounts from selected provider
-      await prov.request({ method: 'eth_requestAccounts' });
+      if (!prov) {
+        alert('❌ Wallet EIP-1193 (MetaMask/Trust) tidak ditemukan.');
+        log('Tidak ada wallet provider di window.ethereum');
+        return false;
+      }
+
+      // minta izin koneksi wallet
+      const accounts = await prov.request({ method: 'eth_requestAccounts' });
+      if (!accounts || !accounts.length) {
+        log('User tidak memberikan izin koneksi');
+        return false;
+      }
+
+      // buat BrowserProvider dan signer dari ethers v6
       walletProvider = new BrowserProvider(prov);
-      signer = walletProvider.getSigner();
+      signer = await walletProvider.getSigner();
       address = await signer.getAddress();
-      elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
-      log('Wallet connected: '+address);
+
+      // update UI
+      elAddr.textContent = address.slice(0, 6) + '…' + address.slice(-4);
+      log(`✅ Wallet connected: ${address}`);
       return true;
-    } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
+    } catch (e) {
+      log('⚠️ Gagal connect wallet: ' + (e.message || e));
+      alert('Gagal koneksi wallet:\n' + (e.message || e));
+      return false;
+    }
   }
+
+  // --- Button event binding ---
+  btnConnect.onclick = async () => {
+    log('Tombol Connect ditekan');
+    const ok = await connectWallet();
+    if (ok) btnConnect.textContent = 'Connected ✅';
+  };
 
   // manual UI bindings
   btnConnect.onclick = async ()=> await connectWallet();
