@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoBot CAKE/USDT — Fixed Exec + Email Alerts</title>
+  <title>AutoBot CAKE/USDT — Fixed Exec + Email Alerts (Fixed)</title>
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:40px}
@@ -44,7 +44,6 @@
           </div>
 
           <div id="lwchart" class="card"></div>
-
 
           <div class="card">
             <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
@@ -98,8 +97,6 @@
         </div>
       </div>
 
-      
-
 <script>
 (async () => {
   // ---------- CONFIG: Fill these with your EmailJS values ----------
@@ -116,10 +113,11 @@
   }
 
   // use ethers v6 from window.ethers (UMD)
-  const { BrowserProvider, JsonRpcProvider, Contract, getAddress } = window.ethers;
+  const { BrowserProvider, JsonRpcProvider, Contract, utils } = window.ethers;
+  const ethersUtils = utils;
 
   // Pancake constants
-  const PCS_V2_ROUTER = getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
+  const PCS_V2_ROUTER = ethersUtils.getAddress("0x10ED43C718714eb63d5aA57B78B54704E256024E");
   const DEFAULT_RPC = "https://bsc-dataseed.binance.org";
   const ROUTER_ABI = [
     "function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)",
@@ -172,7 +170,7 @@
   }
 
   const safeAddr = v=>{
-    try{ return getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
+    try{ return ethersUtils.getAddress(String(v).trim()); }catch(e){ log('Invalid address: '+v); return null; }
   };
 
   // ---------- Email helper ----------
@@ -198,7 +196,7 @@
     }
   }
 
-  // --- TA helpers (same as your original) ---
+  // --- TA helpers (kept as original) ---
   function linearRegression(y){ const n=y.length; if(!n) return {slope:0,intercept:0}; let sx=0,sy=0,sxy=0,sxx=0; for(let i=0;i<n;i++){ const x=i+1; const v=y[i]; sx+=x; sy+=v; sxy+=x*v; sxx+=x*x;} const d=(n*sxx - sx*sx)||1e-12; const slope=(n*sxy - sx*sy)/d; const intercept=(sy - slope*sx)/n; return {slope,intercept}; }
   function stdev(vals){ const n=vals.length; if(!n) return 0; const m=vals.reduce((a,b)=>a+b,0)/n; const v=vals.reduce((acc,x)=>acc+(x-m)*(x-m),0)/n; return Math.sqrt(v); }
   function computeLRC_Open(bars, length=100, devUp=2, devDn=2){
@@ -323,7 +321,7 @@
     }, ms);
   }
 
-  // tradingview mount
+  // tradingview mount (unchanged)
   let _tvWidgetInited=false,_tvPrevSymbol=null,_tvPrevInterval=null;
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
@@ -362,21 +360,19 @@
   }
 
   // ---- on-chain helpers: corrected for ethers v6 usage ----
-  function toBigInt(amount) {
-    if (typeof amount === 'bigint') return amount;
-    if (typeof amount === 'number') return BigInt(Math.floor(amount));
-    if (typeof amount === 'string') {
-      try { return BigInt(amount); } catch(e){ return BigInt(Number(amount)); }
-    }
-    return BigInt(0);
-  }
-
   async function getDecimalsAndBalance(tokenAddr) {
-    const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
-    const decimals = Number(await erc.decimals().catch(()=>18));
-    const balRaw = await erc.balanceOf(address).catch(()=>0);
-    const bal = BigInt(balRaw.toString ? balRaw.toString() : balRaw);
-    return { decimals, bal };
+    try {
+      const erc = new Contract(tokenAddr, ERC20_ABI, readProvider);
+      const decimalsRaw = await erc.decimals().catch(()=>18);
+      const decimals = Number(decimalsRaw);
+      if (!address) return { decimals, bal: 0n };
+      const balRaw = await erc.balanceOf(address).catch(()=>0);
+      const bal = BigInt(balRaw.toString ? balRaw.toString() : balRaw);
+      return { decimals, bal };
+    } catch(e) {
+      log('getDecimalsAndBalance error: '+(e.message||e));
+      return { decimals:18, bal:0n };
+    }
   }
 
   async function ensureApproval(tokenAddr, spender, amountBig) {
@@ -420,7 +416,6 @@
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
-          // send email for paper simulation too
           await sendEmail('PAPER BUY', entryPrice, '-', `${amt} (dec ${decimals})`);
           return;
         } else {
@@ -451,10 +446,9 @@
         const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), tokenDec));
+        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), tokenDec));
         log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
 
-        // ask confirmation
         const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
@@ -470,7 +464,6 @@
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
-        // send email with tx hash and human amount
         await sendEmail('BUY', entryPrice, tx.hash, outHuman);
       } else {
         // SELL: TOKEN -> BASE
@@ -483,7 +476,7 @@
         const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), baseDec));
+        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), baseDec));
         log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
 
         const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
@@ -499,7 +492,7 @@
         log('SELL confirmed: '+tx.hash);
         isHolding = false;
         entryPrice = null;
-        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethers.utils.formatUnits(amountIn.toString(), tokenDec)));
+        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethersUtils.formatUnits(amountIn.toString(), tokenDec)));
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
@@ -521,26 +514,28 @@
     await executeTrade(d);
   }
 
-  // wallet detection & connect (works with MetaMask & Trust if injected)
-  async function detectWalletProvider(){
+  // wallet detection & connect (robust)
+  function detectWalletProvider(){
     const any = window.ethereum;
     if (!any) return null;
     if (any.providers && Array.isArray(any.providers)){
       const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
-      if (trust) return new BrowserProvider(trust);
+      if (trust) return trust;
       const mm = any.providers.find(p=>p.isMetaMask);
-      if (mm) return new BrowserProvider(mm);
-      return new BrowserProvider(any.providers[0]);
+      if (mm) return mm;
+      return any.providers[0];
     }
-    return new BrowserProvider(any);
+    return any;
   }
 
   async function connectWallet(){
-    walletProvider = await detectWalletProvider();
-    if (!walletProvider) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
     try {
-      await walletProvider.send('eth_requestAccounts', []);
-      signer = await walletProvider.getSigner();
+      const prov = detectWalletProvider();
+      if (!prov) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
+      // request accounts from selected provider
+      await prov.request({ method: 'eth_requestAccounts' });
+      walletProvider = new BrowserProvider(prov);
+      signer = walletProvider.getSigner();
       address = await signer.getAddress();
       elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
       log('Wallet connected: '+address);
@@ -550,12 +545,7 @@
 
   // manual UI bindings
   btnConnect.onclick = async ()=> await connectWallet();
-  btnAuto.onclick = async ()=>{
-    auto = !auto;
-    btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto';
-    log('Auto: '+(auto?'ON':'OFF'));
-    if (auto) await evaluateAndMaybeTrade();
-  };
+  btnAuto.onclick = async ()=>{ auto = !auto; btnAuto.textContent = auto? 'Stop Auto' : 'Start Auto'; log('Auto: '+(auto?'ON':'OFF')); if (auto) await evaluateAndMaybeTrade(); };
   btnBuy.onclick = async ()=>{ log('Manual BUY pressed'); await executeTrade('buy', {force:true}); };
   btnSell.onclick = async ()=>{ log('Manual SELL pressed'); await executeTrade('sell', {force:true}); };
 
