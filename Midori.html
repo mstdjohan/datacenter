@@ -7,7 +7,7 @@
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:40px}
-    .wrap{max-width:1500px;margin:0 auto}
+    .wrap{max-width:3600px;margin:0 auto}
     .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
     .row{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
     .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -15,8 +15,8 @@
     .btn-primary{background:#111;color:#fff}
     .btn-buy{background:#2563eb;color:#fff}
     .btn-sell{background:#f59e0b;color:#fff}
-    .log{height:250px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
-    #lwchart{height:420px}
+    .log{height:520px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
+    #lwchart{height:1420px}
     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #e6e6e6}
   </style>
 
@@ -415,10 +415,8 @@
         log(`Estimate out: ${outBig} | min after slip: ${outMin}`);
 
         // ask confirmation (show human-readable approximate amounts using decimals)
-        const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const confirmMsg = `CONFIRM BUY?\\nBase token: ${base}\\nToken: ${token}\\nAmountBase (raw): ${amountIn}\\nEstimatedOut (raw): ${outBig}\\nSlippage: ${elSlippage.value}\\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
-        if (ok !== 'CONFIRM') { log('Auto-confirming BUY...');
-        const ok = 'CONFIRM';
         if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
 
         // ensure approval of base to router
@@ -444,10 +442,8 @@
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
         log(`Estimate out: ${outBig} | min after slip: ${outMin}`);
 
-        const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
+        const confirmMsg = `CONFIRM SELL?\\nToken: ${token}\\nBase: ${base}\\nAmountToken (raw): ${amountIn}\\nEstimatedBase (raw): ${outBig}\\nSlippage: ${elSlippage.value}\\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
-        if (ok !== 'CONFIRM') { log('Auto-confirming SELL...');
-        const ok = 'CONFIRM';
         if (ok !== 'CONFIRM') { log('User cancelled SELL'); return; }
 
         await ensureApproval(token, PCS_V2_ROUTER, amountIn);
