@@ -420,7 +420,6 @@
           if (amt === 0n) { log('[PAPER] BUY skipped — USDT 0'); return; }
           isHolding = true; entryPrice = bars[bars.length-1].close;
           log(`[PAPER] BUY simulated — amt=${amt} (dec ${decimals}) entry=${entryPrice}`);
-          // send email for paper simulation too
           await sendEmail('PAPER BUY', entryPrice, '-', `${amt} (dec ${decimals})`);
           return;
         } else {
@@ -451,10 +450,9 @@
         const amountsOut = await router.getAmountsOut(amountIn, [base, token]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.01));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), tokenDec));
+        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), tokenDec));
         log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
 
-        // ask confirmation
         const confirmMsg = `CONFIRM BUY?\nBase token: ${base}\nToken: ${token}\nAmountBase (raw): ${amountIn}\nEstimatedOut (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
         const ok = prompt(confirmMsg,'');
         if (ok !== 'CONFIRM') { log('User cancelled BUY'); return; }
@@ -470,7 +468,6 @@
         log('BUY confirmed: '+tx.hash);
         isHolding = true;
         entryPrice = bars[bars.length-1].close;
-        // send email with tx hash and human amount
         await sendEmail('BUY', entryPrice, tx.hash, outHuman);
       } else {
         // SELL: TOKEN -> BASE
@@ -483,7 +480,7 @@
         const amountsOut = await router.getAmountsOut(amountIn, [token, base]).catch(e=>{ throw new Error('getAmountsOut failed: '+(e.message||e)); });
         const outBig = BigInt(amountsOut[amountsOut.length-1].toString ? amountsOut[amountsOut.length-1].toString() : amountsOut[amountsOut.length-1]);
         const outMin = calcOutMinBig(outBig, Number(elSlippage.value||0.1));
-        const outHuman = Number(ethers.utils.formatUnits(outBig.toString(), baseDec));
+        const outHuman = Number(ethersUtils.formatUnits(outBig.toString(), baseDec));
         log(`Estimate out: ${outBig} (≈ ${outHuman}) | min after slip: ${outMin}`);
 
         const confirmMsg = `CONFIRM SELL?\nToken: ${token}\nBase: ${base}\nAmountToken (raw): ${amountIn}\nEstimatedBase (raw): ${outBig} (~${outHuman})\nSlippage: ${elSlippage.value}\nReply CONFIRM to proceed.`;
@@ -499,7 +496,7 @@
         log('SELL confirmed: '+tx.hash);
         isHolding = false;
         entryPrice = null;
-        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethers.utils.formatUnits(amountIn.toString(), tokenDec)));
+        await sendEmail('SELL', bars[bars.length-1].close, tx.hash, Number(ethersUtils.formatUnits(amountIn.toString(), tokenDec)));
       }
     } catch(err) {
       log('Trade error: ' + (err.reason || err.message || err));
