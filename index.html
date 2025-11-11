@@ -33,7 +33,7 @@
   <div class="wrap">
     <div class="card">
       <h2>AutoBot — CAKE/USDT · Precision Reversal (fixed exec)</h2>
-      <small>Mode: BUY di bawah LRC + RSI&lt;30 + UTBot buy. SELL di atas LRC + RSI&gt;70 + UTBot sell.</small>
+      <small>Mode: BUY di bawah LRC + RSI&lt;10 + UTBot buy. SELL di atas LRC + RSI&gt;90 + UTBot sell.</small>
     </div>
 
     <div class="row">
@@ -319,8 +319,8 @@
     const price = bars[i].close;
     const lower = lrc.lower[i], upper = lrc.upper[i];
     const curRSI = rsi[i] ?? null;
-    if (sigUT === 'buy' && lower!=null && price <= lower && curRSI !== null && curRSI < 30) return 'buy';
-    if ((sigUT === 'sell') || (upper!=null && price >= upper && curRSI !== null && curRSI > 70)) return 'sell';
+    if (sigUT === 'buy' && lower!=null && price <= lower && curRSI !== null && curRSI < 10) return 'buy';
+    if ((sigUT === 'sell') || (upper!=null && price >= upper && curRSI !== null && curRSI > 90)) return 'sell';
     return null;
   }
 
