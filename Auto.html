@@ -7,7 +7,7 @@
   <style>
     :root{--card:#fff;--bg:#fffaf2;--text:#1e1b16}
     body{font-family:Inter,ui-sans-serif,system-ui;background:linear-gradient(#fff7e6,#fff);color:var(--text);margin:0;padding:40px}
-    .wrap{max-width:3600px;margin:0 auto}
+    .wrap{max-width:2600px;margin:0 auto}
     .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #eee}
     .row{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
     .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -15,7 +15,7 @@
     .btn-primary{background:#111;color:#fff}
     .btn-buy{background:#2563eb;color:#fff}
     .btn-sell{background:#f59e0b;color:#fff}
-    .log{height:520px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
+    .log{height:320px;overflow:auto;font-family:monospace;font-size:12px;background:#fafafa;padding:8px;border-radius:8px}
     #lwchart{height:1420px}
     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #e6e6e6}
   </style>
@@ -564,32 +564,47 @@ Reply CONFIRM to proceed.`;
     await executeTrade(d);
   }
 
-  // wallet detection & connect (works with MetaMask & Trust if injected)
-  async function detectWalletProvider(){
-    const any = window.ethereum;
-    if (!any) return null;
-    if (any.providers && Array.isArray(any.providers)){
-      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
-      if (trust) return new BrowserProvider(trust);
-      const mm = any.providers.find(p=>p.isMetaMask);
-      if (mm) return new BrowserProvider(mm);
-      return new BrowserProvider(any.providers[0]);
-    }
+  // 🔧 Hanya koneksi ke Trust Wallet
+async function detectWalletProvider(){
+  const any = window.ethereum;
+  if (!any) return null;
+
+  // Jika TrustWallet menyediakan multiple provider
+  if (any.providers && Array.isArray(any.providers)){
+    const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
+    if (trust) return new BrowserProvider(trust);
+  }
+
+  // Jika hanya satu provider tapi berasal dari Trust Wallet
+  if (any.isTrust || any.isTrustWallet) {
     return new BrowserProvider(any);
   }
 
-  async function connectWallet(){
-    walletProvider = await detectWalletProvider();
-    if (!walletProvider) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
-    try {
-      await walletProvider.send('eth_requestAccounts', []);
-      signer = await walletProvider.getSigner();
-      address = await signer.getAddress();
-      elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
-      log('Wallet connected: '+address);
-      return true;
-    } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
+  // Jika bukan TrustWallet, tolak
+  alert("❌ Trust Wallet tidak terdeteksi. Silakan buka di dalam Trust Wallet browser.");
+  return null;
+}
+
+async function connectWallet(){
+  walletProvider = await detectWalletProvider();
+  if (!walletProvider) { 
+    log('Trust Wallet tidak ditemukan.');
+    alert('Trust Wallet tidak terdeteksi di browser ini.');
+    return false; 
   }
+  try {
+    await walletProvider.send('eth_requestAccounts', []);
+    signer = await walletProvider.getSigner();
+    address = await signer.getAddress();
+    elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
+    log('✅ Trust Wallet connected: '+address);
+    return true;
+  } catch(e){ 
+    log('Connect TrustWallet gagal: '+(e.message||e)); 
+    return false; 
+  }
+}
+
 
   // manual UI bindings
   btnConnect.onclick = async ()=> await connectWallet();
