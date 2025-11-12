@@ -476,32 +476,47 @@
     await executeTrade(d);
   }
 
-  // wallet detection & connect (works with MetaMask & Trust if injected)
-  async function detectWalletProvider(){
-    const any = window.ethereum;
-    if (!any) return null;
-    if (any.providers && Array.isArray(any.providers)){
-      const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
-      if (trust) return new BrowserProvider(trust);
-      const mm = any.providers.find(p=>p.isMetaMask);
-      if (mm) return new BrowserProvider(mm);
-      return new BrowserProvider(any.providers[0]);
-    }
+ // 🔧 Hanya koneksi ke Trust Wallet
+async function detectWalletProvider(){
+  const any = window.ethereum;
+  if (!any) return null;
+
+  // Jika TrustWallet menyediakan multiple provider
+  if (any.providers && Array.isArray(any.providers)){
+    const trust = any.providers.find(p=>p.isTrust || p.isTrustWallet);
+    if (trust) return new BrowserProvider(trust);
+  }
+
+  // Jika hanya satu provider tapi berasal dari Trust Wallet
+  if (any.isTrust || any.isTrustWallet) {
     return new BrowserProvider(any);
   }
 
-  async function connectWallet(){
-    walletProvider = await detectWalletProvider();
-    if (!walletProvider) { alert('Wallet EIP-1193 tidak ditemukan'); return false; }
-    try {
-      await walletProvider.send('eth_requestAccounts', []);
-      signer = await walletProvider.getSigner();
-      address = await signer.getAddress();
-      elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
-      log('Wallet connected: '+address);
-      return true;
-    } catch(e){ log('Connect failed: '+(e.message||e)); return false; }
+  // Jika bukan TrustWallet, tolak
+  alert("❌ Trust Wallet tidak terdeteksi. Silakan buka di dalam Trust Wallet browser.");
+  return null;
+}
+
+async function connectWallet(){
+  walletProvider = await detectWalletProvider();
+  if (!walletProvider) { 
+    log('Trust Wallet tidak ditemukan.');
+    alert('Trust Wallet tidak terdeteksi di browser ini.');
+    return false; 
   }
+  try {
+    await walletProvider.send('eth_requestAccounts', []);
+    signer = await walletProvider.getSigner();
+    address = await signer.getAddress();
+    elAddr.textContent = address.slice(0,6)+'…'+address.slice(-4);
+    log('✅ Trust Wallet connected: '+address);
+    return true;
+  } catch(e){ 
+    log('Connect TrustWallet gagal: '+(e.message||e)); 
+    return false; 
+  }
+}
+
 
   // manual UI bindings
   btnConnect.onclick = async ()=> await connectWallet();
