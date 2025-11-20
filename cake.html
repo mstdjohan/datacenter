@@ -1,136 +1,404 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CAKE/USDT — UT Bot + LR + Trailing + Email</title>
-
-  <!-- Chart.js dan plugin candlestick -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@4.1.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@2.6.4/dist/email.min.js"></script>
-
-  <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:#fff;color:#111;max-width:1100px;margin:20px auto;padding:12px}
-    h1{font-size:18px;margin-bottom:10px}
-    .row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px}
-    .card{background:#f5f7fa;border-radius:8px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);flex:1}
-    label{display:block;font-size:13px;margin-bottom:4px}
-    input,select,button{padding:8px;border-radius:6px;border:1px solid #ccc;width:100%;font-size:13px}
-    button{cursor:pointer;background:#0084ff;color:#fff;border:none}
-    button:hover{opacity:.9}
-    pre{background:#eee;padding:8px;border-radius:6px;font-size:12px}
-    #chartWrap{height:460px}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UT Bot + LRC — Filtered Signals (Android)</title>
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{--bg:#0d1117;--card:#0f1720;--muted:#9aa4b2;--accent:#00e396}
+  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial}
+  #app{display:flex;flex-direction:column;height:100vh}
+  header{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;gap:12px}
+  header h1{font-size:16px;margin:0}
+  main{flex:1;display:flex;flex-direction:column}
+  #chart{flex:1;min-height:320px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:linear-gradient(0deg,rgba(255,255,255,0.02),transparent)}
+  .control{background:var(--card);padding:8px;border-radius:8px;font-size:13px}
+  .control label{display:block;font-size:11px;color:var(--muted)}
+  .small{font-size:12px}
+  footer{padding:8px;font-size:12px;color:var(--muted);text-align:center}
+  button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:6px 8px;border-radius:8px}
+  @media(max-width:420px){header h1{font-size:14px}}
+</style>
 </head>
 <body>
-  <h1>CAKE/USDT — UT Bot (1,10) + Linear Regression (100,2) + Trailing (1.5%)</h1>
+<div id="app">
+  <header>
+    <h1>UT Bot + LRC — Filtered Signals (Android)</h1>
+    <div style="margin-left:auto;font-size:12px;color:var(--muted)">TF: 1m — Mobile friendly</div>
+  </header>
 
-  <div class="row">
-    <div class="card" style="flex-basis:300px">
-      <label>Interval Binance</label>
-      <select id="interval"><option value="15m" selected>15m</option><option value="1h">1h</option></select>
-      <label style="margin-top:6px">Trailing stop (%)</label>
-      <input id="trailingPct" type="number" value="1.5" step="0.01">
-      <label style="margin-top:6px">UT Bot — factor / ATR period</label>
-      <input id="utFactor" value="1" type="number">
-      <input id="utAtrPeriod" value="10" type="number" style="margin-top:4px">
-      <label style="margin-top:6px">Linear Regression — period / multiplier</label>
-      <input id="lrPeriod" value="100" type="number">
-      <input id="lrMult" value="2" type="number" style="margin-top:4px">
+  <div class="controls">
+    <div class="control small">
+      <label>Filter: Min candle body (%)</label>
+      <input id="minBody" type="number" min="0" step="0.01" value="0.15"> 
     </div>
 
-    <div class="card" style="flex-basis:360px">
-      <label>EmailJS (opsional)</label>
-      <input id="emailUser" placeholder="user_xxx (default)" value="default_user">
-      <input id="emailService" placeholder="service_xxx (default)" value="default_service" style="margin-top:4px">
-      <input id="emailTemplate" placeholder="template_xxx (default)" value="default_template" style="margin-top:4px">
-      <label style="margin-top:8px">Penerima Email</label>
-      <input id="emailTo" placeholder="you@example.com">
-      <label style="margin-top:8px">Pesan Email</label>
-      <input id="emailMsgBuy" value="BUY {{pair}} at {{price}}" placeholder="Buy message">
-      <input id="emailMsgSell" value="SELL {{pair}} at {{price}}" style="margin-top:4px" placeholder="Sell message">
+    <div class="control small">
+      <label>Filter: Volume multiplier vs MA</label>
+      <input id="volMulti" type="number" min="0" step="0.1" value="1.2">
     </div>
 
-    <div class="card" style="flex-basis:240px">
-      <label>Aksi</label>
-      <button id="startBtn">Start</button>
-      <button id="stopBtn" style="margin-top:6px;background:#555">Stop</button>
-      <label style="margin-top:10px">Status</label>
-      <pre id="status">idle</pre>
-      <label>Last signal</label>
-      <pre id="lastSignal">-</pre>
+    <div class="control small">
+      <label>Min delay between signals (s)</label>
+      <input id="minDelay" type="number" min="1" step="1" value="20">
+    </div>
+
+    <div class="control small">
+      <label>ATR period (UT Bot)</label>
+      <input id="atrPeriod" type="number" min="1" step="1" value="14">
+    </div>
+
+    <div class="control small">
+      <label>ATR multiplier (UT Bot)</label>
+      <input id="atrMultiplier" type="number" min="0.1" step="0.1" value="3.0">
+    </div>
+
+    <div class="control small">
+      <label>LRC length</label>
+      <input id="lrcLen" type="number" min="2" step="1" value="50">
+    </div>
+
+    <div class="control small">
+      <label>LRC width (stddev×)</label>
+      <input id="lrcWidth" type="number" min="0.1" step="0.1" value="2.0">
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="toggleStream">Start (Sim)</button>
+      <button id="applyBtn">Apply</button>
     </div>
   </div>
 
-  <div id="chartWrap" class="card"><canvas id="chart"></canvas></div>
+  <main>
+    <div id="chart"></div>
+  </main>
 
-  <script>
-    // Register plugin
-    Chart.register(window['chartjs-chart-financial']);
+  <footer>
+    Klik "Start" untuk simulasi realtime. Untuk WebSocket: buka bagian koneksi di kode dan masukkan URL Binance/Indodax.
+  </footer>
+</div>
 
-    function sma(values, period){
-      const out=[]; for(let i=0;i<values.length;i++){ if(i+1<period){out.push(null);continue} let sum=0;for(let j=0;j<period;j++)sum+=values[i-j];out.push(sum/period)} return out;
+<script>
+// -----------------------
+// Helper: time helpers
+// -----------------------
+function nowSec(){return Math.floor(Date.now()/1000)}
+
+// -----------------------
+// Chart Setup
+// -----------------------
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout:{background:{color:'#0d1117'},textColor:'#cbd5e1'},
+  rightPriceScale:{borderVisible:false},
+  timeScale:{borderVisible:false}
+});
+const candleSeries = chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#ef4444',borderVisible:false});
+const utSignalSeriesLong = chart.addLineSeries({color:'#00e396',lineWidth:1.5});
+const utSignalSeriesShort = chart.addLineSeries({color:'#ff6b6b',lineWidth:1.5});
+const lrcCenterSeries = chart.addLineSeries({color:'#f59e0b',lineWidth:1});
+const lrcUpperSeries = chart.addLineSeries({color:'#7c3aed',lineWidth:1, lineStyle: 2});
+const lrcLowerSeries = chart.addLineSeries({color:'#7c3aed',lineWidth:1, lineStyle: 2});
+
+// For plotting discrete buy/sell markers we'll store annotations and draw as price markers using series.update with value
+const markerSeries = chart.addCandlestickSeries({priceLineVisible:false, lastValueVisible:false});
+
+// -----------------------
+// State & parameters
+// -----------------------
+let state = {
+  candles: [],
+  volumes: [],
+  volumeMA: 0,
+  lastSignalTS: 0,
+  running: false,
+  useWebsocket: false
+};
+
+function readUI(){
+  return {
+    MIN_BODY_PERCENT: parseFloat(document.getElementById('minBody').value) || 0.15,
+    MIN_VOLUME_MULTI: parseFloat(document.getElementById('volMulti').value) || 1.2,
+    MIN_SIGNAL_DELAY: parseInt(document.getElementById('minDelay').value) || 20,
+    ATR_PERIOD: parseInt(document.getElementById('atrPeriod').value) || 14,
+    ATR_MULTIPLIER: parseFloat(document.getElementById('atrMultiplier').value) || 3.0,
+    LRC_LEN: parseInt(document.getElementById('lrcLen').value) || 50,
+    LRC_WIDTH: parseFloat(document.getElementById('lrcWidth').value) || 2.0
+  }
+}
+
+// -----------------------
+// Utils: ATR, MA, Linear Regression
+// -----------------------
+function sma(arr){ if(!arr.length) return 0; return arr.reduce((a,b)=>a+b,0)/arr.length }
+
+function computeATR(candles, period){
+  if(candles.length<2) return 0;
+  const TRs = [];
+  for(let i=1;i<candles.length;i++){
+    const cur=candles[i], prev=candles[i-1];
+    const tr = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close));
+    TRs.push(tr);
+  }
+  if(TRs.length < period) return sma(TRs);
+  const slice = TRs.slice(TRs.length - period);
+  return sma(slice);
+}
+
+function linearRegression(values){
+  // values: array of numbers (closing prices), x = 0..n-1
+  const n = values.length;
+  if(n===0) return null;
+  const sumX = (n-1)*n/2;
+  const sumX2 = (n-1)*n*(2*n-1)/6; // sum of squares
+  const sumY = values.reduce((a,b)=>a+b,0);
+  const sumXY = values.reduce((acc,val,idx)=>acc + idx*val,0);
+  const denom = n*sumX2 - sumX*sumX;
+  if(denom===0) return {slope:0,intercept:values[values.length-1]};
+  const slope = (n*sumXY - sumX*sumY)/denom;
+  const intercept = (sumY - slope*sumX)/n;
+  // compute fitted values & residual stddev
+  const fitted = values.map((v,i)=>slope*i + intercept);
+  const residuals = values.map((v,i)=>v - fitted[i]);
+  const meanRes = residuals.reduce((a,b)=>a+b,0)/n;
+  const variance = residuals.reduce((a,b)=>a + Math.pow(b-meanRes,2),0)/n;
+  const std = Math.sqrt(variance);
+  return {slope, intercept, std, fitted};
+}
+
+// -----------------------
+// UT Bot (SuperTrend-like) implementation
+// - We'll compute 'supertrend' band using ATR
+// - Buy when price crosses above band and trend flips to up
+// - Sell when price crosses below band and trend flips to down
+// This is a simplified yet robust approach for TF 1m
+// -----------------------
+function computeUT(candles, atrPeriod, atrMultiplier){
+  if(candles.length < atrPeriod+1) return null;
+  const atr = computeATR(candles, atrPeriod);
+  const last = candles[candles.length-1];
+  const prev = candles[candles.length-2];
+  // basic mid = (high+low)/2 but we'll use average of high+low
+  const basicUpper = (last.high + last.low)/2 + atr * atrMultiplier;
+  const basicLower = (last.high + last.low)/2 - atr * atrMultiplier;
+  // choose final upper/lower by comparing to previous
+  // For simplicity keep per-bar approach: track finalUpper/finalLower arrays
+  // We'll compute trend direction by comparing close to final values
+  return {atr, basicUpper, basicLower};
+}
+
+// -----------------------
+// Signal decision & filtering
+// -----------------------
+function isStrongCandle(candle, MIN_BODY_PERCENT){
+  const body = Math.abs(candle.close - candle.open);
+  const percent = (body/candle.open) * 100;
+  return percent >= MIN_BODY_PERCENT;
+}
+
+function canSendSignal(state, MIN_SIGNAL_DELAY){
+  return (Date.now()/1000 - state.lastSignalTS) > MIN_SIGNAL_DELAY;
+}
+
+function updateVolumeMA(state, vol){
+  state.volumes.push(vol);
+  if(state.volumes.length > 20) state.volumes.shift();
+  state.volumeMA = sma(state.volumes);
+}
+
+// -----------------------
+// Rendering helpers
+// -----------------------
+function plotCandles(candles){
+  // map to lwc format
+  const data = candles.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close}));
+  candleSeries.setData(data);
+}
+
+function plotLRC(candles, len, width){
+  if(candles.length < len) return;
+  const slice = candles.slice(candles.length - len).map(c=>c.close);
+  const lr = linearRegression(slice);
+  if(!lr) return;
+  const points = [];
+  for(let i=0;i<len;i++){
+    const t = candles[candles.length - len + i].time;
+    const center = lr.slope * i + lr.intercept;
+    points.push({time:t,value:center});
+  }
+  lrcCenterSeries.setData(points);
+  const upper = points.map(p=>({time:p.time, value: p.value + lr.std * width}));
+  const lower = points.map(p=>({time:p.time, value: p.value - lr.std * width}));
+  lrcUpperSeries.setData(upper);
+  lrcLowerSeries.setData(lower);
+}
+
+// -----------------------
+// Main: processing incoming candle
+// -----------------------
+function onNewCandle(candle){
+  // candle: {time,open,high,low,close,volume}
+  state.candles.push(candle);
+  if(state.candles.length > 500) state.candles.shift();
+  updateVolumeMA(state, candle.volume);
+  plotCandles(state.candles);
+
+  const cfg = readUI();
+  // compute LRC
+  plotLRC(state.candles, cfg.LRC_LEN, cfg.LRC_WIDTH);
+
+  // UT compute
+  const ut = computeUT(state.candles, cfg.ATR_PERIOD, cfg.ATR_MULTIPLIER);
+  if(!ut) return;
+
+  // Simple trend detection: if close > basicUpper => bullish, if close < basicLower => bearish
+  const close = candle.close;
+  const bullish = close > ut.basicUpper;
+  const bearish = close < ut.basicLower;
+
+  // Cross conditions (simple): compare latest close vs previous close relative to bands
+  const prev = state.candles[state.candles.length-2] || candle;
+  const crossBuy = (prev.close <= ut.basicUpper) && (close > ut.basicUpper);
+  const crossSell = (prev.close >= ut.basicLower) && (close < ut.basicLower);
+
+  // Apply filters
+  const strong = isStrongCandle(candle, cfg.MIN_BODY_PERCENT);
+  const volOk = candle.volume > state.volumeMA * cfg.MIN_VOLUME_MULTI;
+  const delayOk = canSendSignal(state, cfg.MIN_SIGNAL_DELAY);
+
+  if((crossBuy || crossSell) && strong && volOk && delayOk){
+    // register signal
+    state.lastSignalTS = Date.now()/1000;
+    const sigType = crossBuy ? 'BUY' : 'SELL';
+    console.log('SIGNAL', sigType, candle);
+    // draw marker by plotting a tiny line series point
+    const series = (crossBuy ? utSignalSeriesLong : utSignalSeriesShort);
+    series.update({time:candle.time, value:candle.close});
+
+    // optional visual marker: use price marker via overlay small candle on markerSeries
+    markerSeries.update({time:candle.time, open:candle.close*0.999, high:candle.close*1.001, low:candle.close*0.999, close:candle.close});
+  }
+}
+
+// -----------------------
+// Simulation engine (for testing on mobile)
+// -----------------------
+let simInterval = null;
+function startSimulation(){
+  // create some seed candles if empty
+  if(state.candles.length < 60){
+    let t = nowSec() - 60*60;
+    let price = 100;
+    for(let i=0;i<120;i++){
+      const open = price;
+      const close = +(price + (Math.random()-0.48)*0.8).toFixed(2);
+      const high = Math.max(open,close) + Math.random()*0.6;
+      const low = Math.min(open,close) - Math.random()*0.6;
+      const vol = Math.floor(50 + Math.random()*300);
+      const c = {time:t + i*60, open, high:+high.toFixed(2), low:+low.toFixed(2), close, volume:vol};
+      state.candles.push(c);
+      state.volumes.push(vol);
     }
-    function atr(high,low,close,period){
-      const tr=[];for(let i=0;i<close.length;i++){if(i===0)tr.push(high[i]-low[i]);else tr.push(Math.max(high[i]-low[i],Math.abs(high[i]-close[i-1]),Math.abs(low[i]-close[i-1])));}
-      const out=[];let sum=0;for(let i=0;i<tr.length;i++){if(i<period){sum+=tr[i];if(i===period-1)out.push(sum/period);else out.push(null)}else{sum=sum-tr[i-period]+tr[i];out.push(sum/period)}}return out;
-    }
-    function linearRegression(values){const n=values.length;let sx=0,sy=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=i;sy+=values[i];sxy+=i*values[i];sxx+=i*i}const slope=(n*sxy-sx*sy)/(n*sxx-sx*sx);const intercept=(sy-slope*sx)/n;return{slope,intercept}}
-    function lrChannel(close,period,mult){const mid=[],up=[],low=[];for(let i=0;i<close.length;i++){if(i+1<period){mid.push(null);up.push(null);low.push(null);continue}const w=close.slice(i+1-period,i+1);const lr=linearRegression(w);const n=w.length;let s=0;for(let j=0;j<n;j++){const p=lr.intercept+lr.slope*j;s+=(w[j]-p)**2}const std=Math.sqrt(s/n);const mv=lr.intercept+lr.slope*(n-1);mid.push(mv);up.push(mv+mult*std);low.push(mv-mult*std)}return{mid,up,low}}
-    function utBot(close,high,low,atrP,factor){const a=atr(high,low,close,atrP);const lS=new Array(close.length).fill(null);const sS=new Array(close.length).fill(null);const t=new Array(close.length).fill(null);for(let i=0;i<close.length;i++){if(a[i]==null){t[i]=null;continue}const bL=(high[i]+low[i])/2-factor*a[i];const bS=(high[i]+low[i])/2+factor*a[i];if(i===0){lS[i]=bL;sS[i]=bS;t[i]=1;continue}lS[i]=Math.max(bL,lS[i-1]||bL);sS[i]=Math.min(bS,sS[i-1]||bS);if(close[i]>sS[i-1])t[i]=1;else if(close[i]<lS[i-1])t[i]=-1;else t[i]=t[i-1]||1;}return{atr:a,longStop:lS,shortStop:sS,trend:t}}
+    plotCandles(state.candles);
+  }
 
-    async function fetchKlines(symbol,interval,limit=200){
-      const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-      const r=await fetch(url);const j=await r.json();return j.map(k=>({t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}));
-    }
+  simInterval = setInterval(()=>{
+    const last = state.candles[state.candles.length-1];
+    const t = last.time + 60;
+    const drift = (Math.random()-0.5)*0.8;
+    const open = last.close;
+    const close = +(open + drift + (Math.random()-0.6)*0.3).toFixed(2);
+    const high = Math.max(open,close) + Math.random()*0.6;
+    const low = Math.min(open,close) - Math.random()*0.6;
+    const volume = Math.floor(50 + Math.random()*300);
+    const candle = {time:t, open:+open.toFixed(2), high:+high.toFixed(2), low:+low.toFixed(2), close:+close.toFixed(2), volume};
+    onNewCandle(candle);
+  }, 1200);
+}
 
-    function configureEmailJS(user){if(user && user!=='default_user') emailjs.init(user);}
-    async function sendEmail(svc,tmp,to,msg){
-      if(svc==='default_service'||tmp==='default_template')return;
-      try{await emailjs.send(svc,tmp,{to_email:to,message:msg});}catch(e){console.error(e);}
-    }
+function stopSimulation(){
+  clearInterval(simInterval); simInterval = null;
+}
 
-    const ctx=document.getElementById('chart');
-    let chart=new Chart(ctx,{type:'candlestick',data:{datasets:[{label:'CAKE/USDT',data:[]}]}});
-    let intervalId=null;let lastSig=null;
-
-    async function updateChart(){
-      const interval=document.getElementById('interval').value;
-      const kl=await fetchKlines('CAKEUSDT',interval,300);
-      const times=kl.map(k=>k.t),c=kl.map(k=>k.c),h=kl.map(k=>k.h),l=kl.map(k=>k.l);
-      const ut=utBot(c,h,l,+utAtrPeriod.value,+utFactor.value);
-      const lr=lrChannel(c,+lrPeriod.value,+lrMult.value);
-
-      chart.data.datasets=[{
-        label:'CAKE/USDT',data:kl.map(k=>({x:k.t,o:k.o,h:k.h,l:k.l,c:k.c})),borderColor:'#000'
-      },{
-        label:'LR Mid',data:lr.mid.map((v,i)=>v?{x:times[i],y:v}:null),type:'line',borderColor:'#007bff',borderWidth:1,pointRadius:0
-      }];
-      chart.update();
-
-      const t=ut.trend;const i=t.length-1;
-      if(i>1&&t[i]!=null&&t[i-1]!=null){
-        if(t[i-1]<=0&&t[i]>0) handleSignal('BUY',c[i]);
-        if(t[i-1]>=0&&t[i]<0) handleSignal('SELL',c[i]);
+// -----------------------
+// WebSocket integration stub (Binance example)
+// - To use: set state.useWebsocket=true and implement parsing for your exchange
+// -----------------------
+let ws = null;
+function startWebSocket(url){
+  if(ws) ws.close();
+  ws = new WebSocket(url);
+  ws.onopen = ()=>console.log('WS OPEN');
+  ws.onmessage = (evt)=>{
+    // Example for Binance kline websocket payload parsing
+    try{
+      const msg = JSON.parse(evt.data);
+      // Binance: msg.k contains kline
+      // adapt this parsing to your exchange websocket format
+      if(msg.k){
+        const k = msg.k;
+        if(k.x){ // kline closed
+          const candle = {
+            time: Math.floor(k.t/1000),
+            open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v
+          };
+          onNewCandle(candle);
+        } else {
+          // kline updating: optionally show realtime
+        }
       }
-    }
+    }catch(e){console.warn('WS parse',e)}
+  };
+  ws.onclose = ()=>console.log('WS closed');
+}
 
-    const pos={active:false,side:null,price:0,trail:0};
-    function handleSignal(sig,price){
-      const trail=parseFloat(trailingPct.value)/100;
-      const st=document.getElementById('status'),ls=document.getElementById('lastSignal');
-      if(!pos.active){pos.active=true;pos.side=sig;pos.price=price;pos.trail=trail;}
-      else{if((pos.side==='BUY'&&sig==='SELL')||(pos.side==='SELL'&&sig==='BUY')){pos.side=sig;pos.price=price;pos.trail=trail;}}
-      ls.textContent=`${sig} @ ${price}`;st.textContent=`Signal ${sig}`;
-      const u=emailUser.value,s=emailService.value,t=emailTemplate.value,to=emailTo.value;
-      configureEmailJS(u);const msg=(sig==='BUY'?emailMsgBuy.value:emailMsgSell.value).replace('{{pair}}','CAKE/USDT').replace('{{price}}',price);sendEmail(s,t,to,msg);
-    }
+// -----------------------
+// UI wiring
+// -----------------------
+document.getElementById('toggleStream').addEventListener('click', (e)=>{
+  if(!state.running){
+    state.running = true; e.target.textContent = 'Stop';
+    // default: start simulation. If you want websocket, change state.useWebsocket=true and call startWebSocket(URL)
+    startSimulation();
+  } else {
+    state.running = false; e.target.textContent = 'Start (Sim)';
+    stopSimulation();
+  }
+});
 
-    document.getElementById('startBtn').onclick=()=>{if(intervalId)return;updateChart();intervalId=setInterval(updateChart,30*1000);status.textContent='running';}
-    document.getElementById('stopBtn').onclick=()=>{if(intervalId)clearInterval(intervalId);intervalId=null;status.textContent='stopped';}
-  </script>
+document.getElementById('applyBtn').addEventListener('click', ()=>{
+  // simply re-plot and re-compute LRC settings
+  plotCandles(state.candles);
+  const cfg = readUI();
+  plotLRC(state.candles, cfg.LRC_LEN, cfg.LRC_WIDTH);
+});
+
+// Initialize with empty candle to show chart area
+chart.timeScale().fitContent();
+
+// -----------------------
+// Notes for user (editing)
+// -----------------------
+/*
+How to use:
+- Save this file as index.html and open in Android Chrome.
+- Click "Start (Sim)" to run simulated 1m candles and see filtered signals.
+- To connect to Binance WebSocket (example):
+    const symbol = 'btcusdt'; const interval='1m';
+    const url = `wss://stream.binance.com:9443/ws/${symbol}@kline_${interval}`;
+    startWebSocket(url);
+  Then click Start.
+
+- To connect to Indodax: Indodax doesn't provide public websocket kline stream; you may need REST polling or a proxy.
+
+Customization ideas (I can implement for you):
+- Map signals to Telegram / execute orders via exchange API (requires API keys and server-side handling)
+- Replace UT Bot with your exact UT Bot indicator code if you have it
+- Add additional panels (LRC on separate pane, volume histogram, etc.)
+*/
+
+</script>
 </body>
 </html>
