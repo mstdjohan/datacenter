@@ -228,12 +228,12 @@
   }
 
   function toSeries(arr){
-    return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/1000), value: arr[i] }).filter(Boolean);
+    return bars.map((b,i)=> arr[i]==null? null: { time: Math.floor(b.t/10000), value: arr[i] }).filter(Boolean);
   }
 
   // render
   function renderAll(){
-    const cand = bars.map(b=>({ time: Math.floor(b.t/1000), open:b.open, high:b.high, low:b.low, close:b.close }));
+    const cand = bars.map(b=>({ time: Math.floor(b.t/10000), open:b.open, high:b.high, low:b.low, close:b.close }));
     candleSeries.setData(cand);
     const lrc = computeLRC_Open(bars, 100, 2, 2);
     const ut = computeUTBotSignals(bars, Number(elUtAtr.value||1), Number(elUtFactor.value||10));
@@ -242,7 +242,7 @@
     const markers = [];
     for (let i=0;i<bars.length;i++){
       if (!ut.signals[i]) continue;
-      markers.push({ time: Math.floor(bars[i].t/1000), position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar', color: ut.signals[i]==='buy' ? 'green' : 'red', shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown', text: ut.signals[i].toUpperCase() });
+      markers.push({ time: Math.floor(bars[i].t/10000), position: ut.signals[i]==='buy' ? 'belowBar' : 'aboveBar', color: ut.signals[i]==='buy' ? 'green' : 'red', shape: ut.signals[i]==='buy' ? 'arrowUp' : 'arrowDown', text: ut.signals[i].toUpperCase() });
     }
     candleSeries.setMarkers(markers);
   }
@@ -265,7 +265,7 @@
   async function startPolling(){
     if (polling) clearInterval(polling);
     const sym = elSymbol.value || "CAKEUSDT";
-    const tf = elInterval.value || "15m";
+    const tf = elInterval.value || "3m";
     try {
       bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||2600));
       renderAll();
