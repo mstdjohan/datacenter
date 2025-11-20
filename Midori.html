@@ -70,7 +70,7 @@
               </div>
               <div>
                 <label>Interval</label>
-                <select id="interval"><option value="1m" selected>1m</option><option value="6m">6m</option><option value="3m">3m</option></select>
+                <select id="interval"><option value="3m" selected>3m</option><option value="6m">6m</option><option value="7m">7m</option></select>
               </div>
               <div>
                 <label>Bars keep</label>
@@ -249,7 +249,7 @@
 
   // fetch klines
   const BINANCE_BASE = "https://api.binance.com/api/v3";
-  const intervalMap = {"1m":"1m","6m":"6m","3m":"3m","6m":"6m","5m":"5mh"};
+  const intervalMap = {"3m":"3m","5m":"5m","7m":"7m","8m":"8m","9m":"9m"};
   async function fetchInitial(symbol, interval, limit=2600){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
@@ -273,7 +273,7 @@
       log(`Loaded ${bars.length} bars for ${sym} ${tf}`);
     } catch(e){ log('Load error: '+(e.message||e)); }
 
-    const ms = tf==="1m"?10000:tf==="6m"?20000:60000;
+    const ms = tf==="3m"?10000:tf==="5m"?30000:60000;
     polling = setInterval(async ()=>{
       try{
         const latest = await fetchLatest(sym, tf);
@@ -291,8 +291,8 @@
   async function mountTradingViewOnce(){
     const tvSymbol = elSymbol.value || 'CAKEUSDT';
     const tvFull = `BINANCE:${tvSymbol}`;
-    const iv = elInterval.value||'5m';
-    const ivMap = {'1m':'1','6m':'2','3m':'3','6m':'4','5m':'5m'};
+    const iv = elInterval.value||'3m';
+    const ivMap = {'3m':'3','5m':'5','6m':'6','7m':'7','8m':'8m'};
     const tvInterval = ivMap[iv]||iv;
     if (_tvWidgetInited && _tvPrevSymbol===tvFull && _tvPrevInterval===tvInterval) return;
     _tvPrevSymbol=tvFull; _tvPrevInterval=tvInterval;
