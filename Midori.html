@@ -398,7 +398,7 @@
 
       const router = new Contract(PCS_V2_ROUTER, ROUTER_ABI, signer);
 
-      if (direction === 'buy' && isHolding && !opts.force) { log('BUY skipped — already holding'); return; }
+      if (direction === 'buy' && isHolding && !opts.force) { log('BUY skipped — not holding'); return; }
       if (direction === 'sell' && !isHolding && !opts.force) { log('SELL skipped — not holding'); return; }
 
       if (direction === 'buy') {
@@ -470,7 +470,7 @@
     if (!auto) return;
     const d = decide();
     if (!d) return;
-    if (d === 'buy' && isHolding) { log('Auto BUY skipped — holding'); return; }
+    if (d === 'buy' && isHolding) { log('Auto BUY skipped — not holding'); return; }
     if (d === 'sell' && !isHolding) { log('Auto SELL skipped — not holding'); return; }
     log('Auto Signal: '+d.toUpperCase() + ' @ ' + bars[bars.length-1].close);
     await executeTrade(d);
