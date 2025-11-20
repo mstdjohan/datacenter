@@ -74,7 +74,7 @@
               </div>
               <div>
                 <label>Bars keep</label>
-                <input id="barsKeep" type="number" value="600" />
+                <input id="barsKeep" type="number" value="2600" />
               </div>
               <div>
                 <label>Slippage (e.g. 0.1)</label>
@@ -250,7 +250,7 @@
   // fetch klines
   const BINANCE_BASE = "https://api.binance.com/api/v3";
   const intervalMap = {"1m":"1m","2m":"2m","3m":"3m","4m":"4m","5m":"5mh"};
-  async function fetchInitial(symbol, interval, limit=600){
+  async function fetchInitial(symbol, interval, limit=2600){
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${intervalMap[interval]||interval}&limit=${limit}`;
     const res = await fetch(url); const arr = await res.json();
     return arr.map(k=>({ t: k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
@@ -267,7 +267,7 @@
     const sym = elSymbol.value || "CAKEUSDT";
     const tf = elInterval.value || "15m";
     try {
-      bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||600));
+      bars = await fetchInitial(sym, tf, Number(elBarsKeep.value||2600));
       renderAll();
       await mountTradingViewOnce();
       log(`Loaded ${bars.length} bars for ${sym} ${tf}`);
@@ -277,7 +277,7 @@
     polling = setInterval(async ()=>{
       try{
         const latest = await fetchLatest(sym, tf);
-        const keep = Number(elBarsKeep.value||600);
+        const keep = Number(elBarsKeep.value||2600);
         if (bars.length && bars[bars.length-1].t === latest.t) bars[bars.length-1] = latest;
         else bars = [...bars, latest].slice(-keep);
         renderAll();
