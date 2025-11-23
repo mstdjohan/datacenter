@@ -1,737 +1,243 @@
-<!DOCTYPE html>
-<html lang="en">
+
+<!doctype html>
+<html lang="id">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="refresh" content="420">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Auto-Trading XRP — Final (Auto-connect & Auto-refresh)</title>
-
-  <!-- Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-
+  <title>Email Notify — AutoBot</title>
   <style>
-    :root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--danger:#ef4444;--success:#10b981}
-    html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial;color:#0f172a}
-    .container{max-width:1100px;margin:20px auto;padding:18px}
-    header{display:flex;justify-content:space-between;align-items:center}
-    h1{margin:0;font-size:18px}
-    .muted{color:#6b7280;font-size:13px}
-    .grid{display:grid;grid-template-columns:340px 1fr;gap:14px;margin-top:12px}
-    .card{background:var(--card);padding:12px;border-radius:8px;box-shadow:0 1px 6px rgba(2,6,23,0.06)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-    button{padding:8px 10px;border-radius:6px;border:1px solid #e6eef0;background:#fff;cursor:pointer}
-    .btn-primary{background:linear-gradient(90deg,#06b6d4,#06a6b9);color:#fff;border:none}
-    .btn-danger{background:var(--danger);color:#fff;border:none}
-    input,select{padding:8px;border-radius:6px;border:1px solid #e6eef0;width:100%}
-    .stat{display:flex;justify-content:space-between;padding:8px;border-radius:6px;background:#fafafa;border:1px solid #eef2f7;margin-bottom:6px}
-    #log{font-family:monospace;white-space:pre-wrap;height:220px;overflow:auto;padding:10px;background:#0b1220;color:#dbeafe;border-radius:6px}
-    #chart{height:360px}
-    footer{margin-top:12px;color:var(--muted);font-size:13px}
-    .small{font-size:13px}
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:24px;background:#f7fafc;color:#111}
+    .card{background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 18px rgba(20,20,40,0.04);max-width:900px;margin:12px auto}
+    .row{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+    input,select,button,textarea{padding:8px 10px;border-radius:8px;border:1px solid #e6e6e6;font-size:14px}
+    button{cursor:pointer}
+    .log{height:220px;overflow:auto;background:#0f172a;color:#fff;padding:8px;border-radius:8px;font-family:monospace}
+    label{font-size:13px;color:#374151}
+    .small{font-size:12px;color:#6b7280}
+    .flex{display:flex;gap:8px}
   </style>
+
+  <!-- EmailJS browser SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div>
-        <h1>📊 Auto-Trading XRP — Final</h1>
-        <div class="muted">Strategy: Bollinger Bands (intact). Auto-connect & auto-refresh every 7 minutes added.</div>
+  <div class="card">
+    <h2>EmailJS Notifier — AutoBot</h2>
+    <p class="small">Form ini memungkinkan browser mengirim email notifikasi (BUY / SELL). Gunakan EmailJS — <strong>tidak perlu backend</strong> (tetapi kunci publik akan berada di browser).</p>
+
+    <div style="margin-top:12px">
+      <label>Public user ID (EmailJS user_id)</label><br>
+      <input id="userId" placeholder="YOUR_USER_ID (emailjs user_id)" style="width:100%" />
+    </div>
+
+    <div style="margin-top:8px" class="row">
+      <div style="flex:1">
+        <label>Service ID</label><br>
+        <input id="serviceId" placeholder="YOUR_SERVICE_ID (e.g. default_service)" style="width:100%" />
       </div>
-      <div style="text-align:right">
-        <div class="muted small">Status</div>
-        <div id="statusBadge" style="padding:6px 10px;border-radius:8px;background:#fff;border:1px solid #e6eef0">Not connected</div>
-      </div>
-    </header>
-
-    <div class="grid">
-      <!-- Left: controls -->
-      <div>
-        <div class="card">
-          <div class="controls">
-            <button id="connectBtn" class="btn-primary">🔗 Connect MetaMask</button>
-            <button id="refreshBalancesBtn">🔄 Refresh Balances</button>
-          </div>
-
-          <div style="margin-top:8px">
-            <div class="stat"><div>👛 Wallet</div><div id="walletAddress" class="small muted">Belum terhubung</div></div>
-            <div class="stat"><div>💵 Saldo BNB</div><div id="bnbBalance" class="small">-</div></div>
-            <div class="stat"><div>💼 Modal (USD)</div><div id="capital" class="small">$1000.00</div></div>
-            <div class="stat"><div>💰 Harga Live XRP</div><div id="livePrice" class="small">Memuat...</div></div>
-          </div>
-        </div>
-
-        <div style="height:12px"></div>
-
-        <div class="card">
-          <div class="small muted" style="margin-bottom:8px">Copy-Trade Mode</div>
-
-          <label class="small">Mode</label>
-          <select id="copyMode" style="margin-top:6px;margin-bottom:8px">
-            <option value="signal">Follow Signal API</option>
-            <option value="wallet">Follow Leader Wallet (on-chain)</option>
-          </select>
-
-          <div id="signalSettings" style="margin-top:8px">
-            <label class="small">Signal API URL</label>
-            <input id="signalUrl" placeholder="https://api.provider/signals" />
-            <label class="small" style="margin-top:8px">Bearer Token (optional)</label>
-            <input id="signalToken" placeholder="Authorization token" />
-            <div style="margin-top:8px;display:flex;gap:8px">
-              <button id="enableCopyBtn">▶️ Enable Copy-Trade (OFF)</button>
-              <button id="mockSignalBtn">🧪 Mock Signals (ON)</button>
-            </div>
-          </div>
-
-          <div id="walletSettings" style="display:none;margin-top:8px">
-            <label class="small">Leader Wallet Address</label>
-            <input id="leaderAddress" placeholder="0xLeaderAddress..." />
-            <label class="small" style="margin-top:8px">BscScan API Key</label>
-            <input id="bscscanKey" placeholder="(required for txlist polling)" />
-            <div style="margin-top:8px;display:flex;gap:8px">
-              <button id="followWalletBtn">🔎 Start Following Wallet</button>
-              <button id="stopFollowBtn" style="display:none">⛔ Stop Following</button>
-            </div>
-            <div class="muted small" style="margin-top:8px">Follow-wallet decodes PancakeSwap swaps and mirrors them (scaled).</div>
-          </div>
-        </div>
-
-        <div style="height:12px"></div>
-
-        <div class="card">
-          <div class="small muted" style="margin-bottom:8px">Manual Controls & Safety</div>
-          <div style="display:flex;gap:8px;margin-bottom:8px">
-            <button id="manualBuy">🟢 BUY (Manual)</button>
-            <button id="manualSell" class="btn-danger">🔴 SELL (Manual)</button>
-            <button id="resetBtn">🔁 Reset Simulasi</button>
-          </div>
-
-          <label class="small">Follow trade size scale (fraction of leader amount)</label>
-          <input id="followScale" placeholder="e.g. 0.5 (50%)" value="0.5" />
-
-          <label class="small" style="margin-top:8px">Max execution amount (human units)</label>
-          <input id="maxExec" placeholder="e.g. 5 (USDT/XRP units)" value="5" />
-        </div>
-      </div>
-
-      <!-- Right: chart + log -->
-      <div>
-        <div class="card" style="height:420px;display:flex;flex-direction:column">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div class="small muted">XRP / USDT — Live (Line) — Bollinger Bands</div>
-            <div class="small muted">Interval: 30s</div>
-          </div>
-          <canvas id="chart"></canvas>
-        </div>
-
-        <div style="height:12px"></div>
-
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div class="small muted">Activity Log</div>
-            <div class="small muted">Actions & copy events</div>
-          </div>
-          <div id="log"></div>
-        </div>
+      <div style="flex:1">
+        <label>Template ID</label><br>
+        <input id="templateId" placeholder="YOUR_TEMPLATE_ID" style="width:100%" />
       </div>
     </div>
 
-    <footer>Disclaimer: Auto-execution is risky. Start with small amounts. Ensure MetaMask in BSC Mainnet & enough BNB for gas.</footer>
+    <div style="margin-top:8px" class="row">
+      <div style="flex:1">
+        <label>To (override; optional)</label><br>
+        <input id="toEmail" placeholder="optional: target receiver email" style="width:100%" />
+        <div class="small">Kosongkan jika template EmailJS tidak butuh email penerima.</div>
+      </div>
+      <div style="flex:1">
+        <label>Pair / Tag</label><br>
+        <input id="pair" value="CAKEUSDT" style="width:100%" />
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="row">
+      <button id="btnInit">Init EmailJS</button>
+      <button id="btnSave">Save config (localStorage)</button>
+      <button id="btnClear">Clear saved</button>
+    </div>
+
+    <hr/>
+
+    <div class="row">
+      <button id="btnSimBuy" style="background:#2563eb;color:white">Manual BUY (simulate)</button>
+      <button id="btnSimSell" style="background:#f59e0b;color:white">Manual SELL (simulate)</button>
+      <button id="btnAutoOn" style="background:#10b981;color:white">Toggle Auto Sim (every 10s)</button>
+      <span class="small">Auto sim memicu sinyal BUY/SELL acak setiap 10s (demo)</span>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Custom message (optional)</label><br>
+      <textarea id="customMsg" rows="3" style="width:100%"></textarea>
+    </div>
+
+    <h3 style="margin-top:12px">Log</h3>
+    <div class="log" id="log"></div>
+
+    <div class="small" style="margin-top:8px">
+      <strong>Petunjuk singkat EmailJS:</strong>
+      <ol>
+        <li>Daftar di <a href="https://www.emailjs.com" target="_blank">emailjs.com</a> dan dapatkan <code>user_id</code>.</li>
+        <li>Buat Service (mis. Gmail, SMTP) → <code>service_id</code>.</li>
+        <li>Buat Template (HTML/text) → <code>template_id</code>. Pastikan template menerima fields seperti <code>subject</code>, <code>title</code>, <code>message</code>, <code>pair</code>, <code>time</code>, <code>to_email</code> (opsional).</li>
+        <li>Masukkan three IDs di atas, klik <em>Init EmailJS</em>.</li>
+      </ol>
+    </div>
   </div>
 
 <script>
-/* -------------------- Configuration -------------------- */
-emailjs.init("aPZx0R9oxUbIQkLEv"); // keep your EmailJS id
-const COINGECKO_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd";
-const BSC_RPC_READ = "https://bsc-dataseed.binance.org/";
-const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-const routerABI = [
-  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) external",
-  "function getAmountsOut(uint amountIn,address[] calldata path) external view returns (uint[] memory)"
-];
+(function(){
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
 
-const XRP_ADDRESS = "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE";
-const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
-
-/* -------------------- State (unchanged strategy vars) -------------------- */
-let priceData = [], timeLabels = [];
-let currentCapital = parseFloat(localStorage.getItem('capital')) || 1000;
-let qtyPerTrade = 1000;
-let lastBuy = localStorage.getItem('lastBuy') ? parseFloat(localStorage.getItem('lastBuy')) : null;
-let currentPositionAmount = localStorage.getItem('positionAmount') ? parseFloat(localStorage.getItem('positionAmount')) : 0;
-
-/* DOM refs */
-const statusBadge = document.getElementById('statusBadge');
-const walletAddressEl = document.getElementById('walletAddress');
-const bnbBalanceEl = document.getElementById('bnbBalance');
-const capitalEl = document.getElementById('capital');
-const livePriceEl = document.getElementById('livePrice');
-const logEl = document.getElementById('log');
-
-const connectBtn = document.getElementById('connectBtn');
-const refreshBalancesBtn = document.getElementById('refreshBalancesBtn');
-const enableCopyBtn = document.getElementById('enableCopyBtn');
-const mockSignalBtn = document.getElementById('mockSignalBtn');
-const copyModeSelect = document.getElementById('copyMode');
-
-const signalUrlInput = document.getElementById('signalUrl');
-const signalTokenInput = document.getElementById('signalToken');
-
-const leaderAddressInput = document.getElementById('leaderAddress');
-const bscscanKeyInput = document.getElementById('bscscanKey');
-const followWalletBtn = document.getElementById('followWalletBtn');
-const stopFollowBtn = document.getElementById('stopFollowBtn');
-
-const manualBuyBtn = document.getElementById('manualBuy');
-const manualSellBtn = document.getElementById('manualSell');
-const resetBtn = document.getElementById('resetBtn');
-const followScaleInput = document.getElementById('followScale');
-const maxExecInput = document.getElementById('maxExec');
-
-function uiLog(msg){ const t = new Date().toLocaleTimeString(); logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent; }
-function updateCapitalDisplay(){ capitalEl.textContent = `$${currentCapital.toFixed(2)}`; }
-
-/* Wallet/provider/autoconnect */
-let provider, signer, userAddress;
-let readProvider = new ethers.providers.JsonRpcProvider(BSC_RPC_READ);
-
-async function tryAutoConnect(){
-  try {
-    if (typeof window.ethereum === 'undefined') { uiLog("MetaMask tidak tersedia (auto-connect skipped)"); statusBadge.textContent='No wallet'; return; }
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    const accounts = await provider.listAccounts();
-    if (accounts && accounts.length > 0) {
-      signer = provider.getSigner();
-      userAddress = accounts[0];
-      walletAddressEl.textContent = userAddress;
-      statusBadge.textContent = 'Connected (auto)';
-      uiLog("✅ MetaMask auto-connected: " + userAddress);
-      await enhancedRefreshAccountBalances();
-    } else {
-      uiLog("MetaMask not yet authorized — waiting for user action (auto-connect available on user approval).");
-      statusBadge.textContent = 'Not connected';
-    }
-  } catch (e){
-    uiLog("Auto-connect failed: " + e.message);
-    statusBadge.textContent = 'Not connected';
-  }
-}
-tryAutoConnect();
-window.addEventListener('focus', async () => { try { if (!userAddress) await tryAutoConnect(); } catch(e){} });
-
-connectBtn.addEventListener('click', async () => {
-  if (typeof window.ethereum === 'undefined'){ uiLog("❌ MetaMask not detected"); statusBadge.textContent='No wallet'; return; }
-  try {
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    await provider.send('eth_requestAccounts', []);
-    signer = provider.getSigner();
-    userAddress = await signer.getAddress();
-    walletAddressEl.textContent = userAddress;
-    statusBadge.textContent = 'Connected';
-    uiLog('✅ MetaMask connected: ' + userAddress);
-    await enhancedRefreshAccountBalances();
-  } catch (e) {
-    uiLog("❌ Connect failed: " + e.message);
-  }
-});
-
-refreshBalancesBtn.addEventListener('click', enhancedRefreshAccountBalances);
-
-/* -------------------- Indicator helpers -------------------- */
-
-/* simple SMA */
-function calculateSMA(data, period){ const r=[]; for(let i=0;i<data.length;i++){ if(i<period-1) r.push(null); else r.push(data.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period);} return r; }
-
-/* EMA (basic) */
-function calculateEMA(data, period){
-  const r=[]; if(data.length===0) return r;
-  const k = 2/(period+1);
-  let prev = data[0];
-  r.push(prev);
-  for(let i=1;i<data.length;i++){ const ema = data[i]*k + prev*(1-k); r.push(ema); prev = ema; }
-  return r;
-}
-
-/* Bollinger Bands as before */
-function calculateBollingerBands(data, period=20, multiplier=2){
-  const sma = calculateSMA(data, period);
-  const upper = [], lower = [];
-  for(let i=0;i<data.length;i++){
-    if(i<period-1){ upper.push(null); lower.push(null); }
-    else {
-      const slice = data.slice(i-period+1,i+1);
-      const mean = sma[i];
-      const stdDev = Math.sqrt(slice.reduce((acc,val)=>acc+Math.pow(val-mean,2),0)/period);
-      upper.push(mean + multiplier*stdDev);
-      lower.push(mean - multiplier*stdDev);
-    }
-  }
-  return { upper, lower };
-}
-
-/* --- UT Bot Alerts implementation (approx using close-only ATR) --- */
-/* approx ATR from close-only: TR ≈ abs(close - prevClose) */
-function approxATRFromClose(closeArr, period){
-  const tr = [null];
-  for(let i=1;i<closeArr.length;i++) tr.push(Math.abs(closeArr[i]-closeArr[i-1]));
-  return calculateSMA(tr.map(v=>v===null?0:v), period);
-}
-
-/* compute UT Bot: returns trailing stop array, buySignals, sellSignals, pos */
-function computeUTBot(closeArr, a=1, atrPeriod=10){
-  const atr = approxATRFromClose(closeArr, atrPeriod);
-  const nLossArr = atr.map(v => v === null ? null : a * v);
-  const len = closeArr.length;
-  const xATRTrailingStop = Array(len).fill(null);
-  const buySignals = Array(len).fill(null);
-  const sellSignals = Array(len).fill(null);
-  let pos = Array(len).fill(0);
-
-  for(let i=0;i<len;i++){
-    const src = closeArr[i];
-    if(i===0){ xATRTrailingStop[i] = src; pos[i] = 0; continue; }
-    const prevStop = xATRTrailingStop[i-1] == null ? src : xATRTrailingStop[i-1];
-    const prevSrc = closeArr[i-1];
-    const nLoss = nLossArr[i] == null ? 0 : nLossArr[i];
-
-    let curStop;
-    if(src > prevStop && prevSrc > prevStop){
-      curStop = Math.max(prevStop, src - nLoss);
-    } else if(src < prevStop && prevSrc < prevStop){
-      curStop = Math.min(prevStop, src + nLoss);
-    } else if(src > prevStop){
-      curStop = src - nLoss;
-    } else {
-      curStop = src + nLoss;
-    }
-    xATRTrailingStop[i] = curStop;
-
-    if(prevSrc < prevStop && src > prevStop){
-      pos[i] = 1;
-      buySignals[i] = src;
-    } else if(prevSrc > prevStop && src < prevStop){
-      pos[i] = -1;
-      sellSignals[i] = src;
-    } else {
-      pos[i] = pos[i-1] || 0;
-    }
-  }
-  return { xATRTrailingStop, buySignals, sellSignals, pos };
-}
-
-/* --- Linear Regression Channel (LRC) implementation --- */
-/* length = 100, dev multiplier = 2, lineWidth = 2 (we'll set dataset borderWidth accordingly) */
-function linearRegressionChannel(closeArr, length=100, dev=2){
-  const n = closeArr.length;
-  const mid = Array(n).fill(null);
-  const upper = Array(n).fill(null);
-  const lower = Array(n).fill(null);
-
-  for(let i=0;i<n;i++){
-    if(i < length - 1) continue;
-    const slice = closeArr.slice(i-length+1, i+1);
-    const m = slice.length;
-    let sumX=0,sumY=0,sumXY=0,sumXX=0;
-    for(let j=0;j<m;j++){
-      const x = j;
-      const y = slice[j];
-      sumX += x; sumY += y; sumXY += x*y; sumXX += x*x;
-    }
-    const denom = m*sumXX - sumX*sumX || 1e-9;
-    const slope = (m*sumXY - sumX*sumY) / denom;
-    const intercept = (sumY - slope*sumX)/m;
-    const pred = slope*(m-1) + intercept;
-    let ss = 0;
-    for(let j=0;j<m;j++){ const x=j; const y=slice[j]; const p = slope*x + intercept; ss += Math.pow(y-p,2); }
-    const std = Math.sqrt(ss / m);
-    mid[i] = pred;
-    upper[i] = pred + dev*std;
-    lower[i] = pred - dev*std;
-  }
-  return { mid, upper, lower };
-}
-
-/* -------------------- Chart.js (overlay) -------------------- */
-const ctx = document.getElementById('chart').getContext('2d');
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: timeLabels,
-    datasets: [
-      { label:'Harga', data: priceData, borderColor:'#0f172a', fill:false, borderWidth:1, pointRadius:0 },
-      { label:'UT Trailing Stop', data:[], borderColor:'#2563eb', borderDash:[6,4], fill:false, borderWidth:2, pointRadius:0 },
-      { label:'LRC Mid', data:[], borderColor:'#f59e0b', fill:false, borderWidth:2, pointRadius:0 },
-      { label:'LRC Upper', data:[], borderColor:'#10b981', borderDash:[4,4], fill:false, borderWidth:2, pointRadius:0 },
-      { label:'LRC Lower', data:[], borderColor:'#ef4444', borderDash:[4,4], fill:false, borderWidth:2, pointRadius:0 },
-      { label:'Buy', data:[], type:'scatter', showLine:false, backgroundColor:'#10b981', pointStyle:'triangle', pointRadius:6 },
-      { label:'Sell', data:[], type:'scatter', showLine:false, backgroundColor:'#ef4444', pointStyle:'rectRot', pointRadius:6 }
-    ]
-  },
-  options:{
-    responsive:true,
-    maintainAspectRatio:false,
-    plugins:{legend:{display:true}},
-    scales:{ x:{ display:true }, y:{ display:true } }
-  }
-});
-
-/* updateIndicators: compute EMA/BB (existing) + UT Bot + LRC and push to chart */
-function updateIndicators(){
-  // existing indicators
-  const sma10 = calculateSMA(priceData,10);
-  const ema12 = calculateEMA(priceData,12);
-  const ema26 = calculateEMA(priceData,26);
-  const bb = calculateBollingerBands(priceData);
-
-  // new indicators
-  const ut = computeUTBot(priceData, 1, 10);
-  const lrc = linearRegressionChannel(priceData, 100, 2);
-
-  // assign to chart datasets
-  chart.data.labels = timeLabels.slice();
-  chart.data.datasets[0].data = priceData.slice();
-  chart.data.datasets[1].data = ut.xATRTrailingStop.slice();
-  chart.data.datasets[2].data = lrc.mid.slice();
-  chart.data.datasets[3].data = lrc.upper.slice();
-  chart.data.datasets[4].data = lrc.lower.slice();
-
-  // scatter datasets for buy/sell
-  chart.data.datasets[5].data = [];
-  chart.data.datasets[6].data = [];
-  for(let i=0;i<priceData.length;i++){
-    const label = timeLabels[i] ?? i;
-    if(ut.buySignals[i] != null) chart.data.datasets[5].data.push({ x: label, y: ut.buySignals[i] });
-    if(ut.sellSignals[i] != null) chart.data.datasets[6].data.push({ x: label, y: ut.sellSignals[i] });
+  function log(msg){
+    const t = new Date().toLocaleTimeString();
+    logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent;
+    console.log(msg);
   }
 
-  chart.update();
-}
-
-/* -------------------- Swap helper (small robustness tweak: decimals) -------------------- */
-const tokenAbi = ["function approve(address,uint256) public returns(bool)","function decimals() view returns(uint8)","function balanceOf(address) view returns(uint256)"];
-async function swap(tokenIn, tokenOut, amountHuman){
-  if(!signer){ uiLog("⚠️ MetaMask not connected — swap skipped"); return; }
-  try {
-    const router = new ethers.Contract(PANCAKE_ROUTER, routerABI, signer);
-    const token = new ethers.Contract(tokenIn, tokenAbi, signer);
-    // get decimals (robust)
-    let decimals = 18;
-    try { decimals = await token.decimals(); } catch(e){ /* fallback to 18 */ }
-    const amountIn = ethers.utils.parseUnits(amountHuman.toString(), decimals);
-    try { const a = await token.approve(PANCAKE_ROUTER, ethers.constants.MaxUint256); await a.wait(); } catch(e){ uiLog("⚠️ Approve warning: " + (e.message||e)); }
-    const path = [tokenIn, tokenOut];
-    const deadline = Math.floor(Date.now()/1000) + 60*5;
-    const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(amountIn, 0, path, userAddress, deadline);
-    uiLog("🔁 Swap tx sent: " + tx.hash);
-    await tx.wait();
-    uiLog("✅ Swap confirmed: " + tx.hash);
-    await enhancedRefreshAccountBalances();
-  } catch(e){
-    uiLog("❌ Swap failed: " + (e.message||e));
+  // store/load config in localStorage
+  function saveCfg(){
+    localStorage.setItem('emailjs_cfg', JSON.stringify({
+      userId: $('userId').value.trim(),
+      serviceId: $('serviceId').value.trim(),
+      templateId: $('templateId').value.trim(),
+      toEmail: $('toEmail').value.trim(),
+      pair: $('pair').value.trim()
+    }));
+    log('Config saved to localStorage');
   }
-}
-
-/* Fetch initial historical & live price logic (kept) */
-async function fetchInitialData(){
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/ripple/market_chart?vs_currency=usd&days=1");
-    const data = await res.json();
-    data.prices.forEach(p=>{ priceData.push(p[1]); timeLabels.push(new Date(p[0]).toLocaleTimeString()); });
-    updateIndicators(); chart.update(); updateCapitalDisplay(); uiLog("✅ Historical loaded");
-  } catch(e){ uiLog("❌ Failed historical: " + e.message); }
-}
-
-async function fetchPriceNow(){
-  try { const r = await axios.get(COINGECKO_PRICE_API); return parseFloat(r.data.ripple.usd); } catch(e){ uiLog("⚠️ Price fetch failed: " + e.message); return null; }
-}
-
-/* -------------------- Core evaluate loop (decision logic updated to require UT signals) -------------------- */
-async function fetchAndEvaluate(){
-  try {
-    const price = await fetchPriceNow();
-    if(!price) return;
-    livePriceEl.textContent = `Harga: $${price.toFixed(4)}`;
-    priceData.push(price); timeLabels.push(new Date().toLocaleTimeString());
-    if(priceData.length>300){ priceData.shift(); timeLabels.shift(); } // keep window
-    updateIndicators();
-
-    const bb = calculateBollingerBands(priceData);
-    const lowerBB = bb.lower[bb.lower.length-1];
-    const upperBB = bb.upper[bb.upper.length-1];
-
-    // UT bot current flags (last index)
-    const ut = computeUTBot(priceData, 1, 10);
-    const lastIdx = priceData.length - 1;
-    const utBuy = !!(ut.buySignals[lastIdx] != null);
-    const utSell = !!(ut.sellSignals[lastIdx] != null);
-
-    // require BOTH Bollinger condition AND UT Bot signal
-    if(!lastBuy && typeof lowerBB === 'number' && price <= lowerBB && utBuy){
-      lastBuy = price;
-      currentPositionAmount = qtyPerTrade / price;
-      currentCapital -= qtyPerTrade; updateCapitalDisplay();
-      localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
-      uiLog(`📥 BUY (Lower BB & UT) $${price.toFixed(4)}`);
-      sendEmail("BUY Signal", `Beli XRP di $${price.toFixed(4)} (Lower BB & UT)`);
-      if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-    } else if(lastBuy && typeof upperBB === 'number' && price >= upperBB && utSell){
-      const sellValue = price * currentPositionAmount;
-      currentCapital += sellValue; updateCapitalDisplay();
-      uiLog(`📤 SELL (Upper BB & UT) $${price.toFixed(4)}`);
-      sendEmail("SELL Signal", `Jual XRP di $${price.toFixed(4)} (Upper BB & UT)`);
-      lastBuy = null; currentPositionAmount = 0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
-      if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-    } else {
-      if(typeof price === 'number' && !isNaN(price) && typeof lowerBB === 'number' && typeof upperBB === 'number')
-        uiLog(`⏳ HOLD | Harga: $${price.toFixed(4)} | LowerBB: $${lowerBB.toFixed(4)} | UpperBB: $${upperBB.toFixed(4)} | UTbuy:${utBuy} UTSell:${utSell}`);
-      else uiLog("⏳ HOLD | Indicators not ready");
-    }
-  } catch(e){ uiLog("❌ fetchAndEvaluate error: " + e.message); }
-}
-
-/* Email helper */
-function sendEmail(subject, body){
-  emailjs.send("service_d48312b","template_1ktk40q",{subject,body,time:new Date().toLocaleString()})
-    .then(()=> uiLog("📧 Email sent: "+subject)).catch(e => uiLog("⚠️ Email failed: " + (e.text||e.message)));
-}
-
-/* -------------------- Copy-trade (basic) - require UT signals as well -------------------- */
-let copyEnabled=false, mockSignals=false;
-enableCopyBtn.addEventListener('click', ()=>{ copyEnabled=!copyEnabled; enableCopyBtn.textContent = copyEnabled ? "⏸️ Disable Copy-Trade (ON)" : "▶️ Enable Copy-Trade (OFF)"; uiLog("Copy-Trade " + (copyEnabled?"enabled":"disabled")); });
-mockSignalBtn.addEventListener('click', ()=>{ mockSignals=!mockSignals; mockSignalBtn.textContent = mockSignals ? "🧪 Mock Signals (ON)" : "🧪 Mock Signals (OFF)"; uiLog("Mock signals " + (mockSignals?"enabled":"disabled")); });
-
-async function pollSignal(){
-  if(!copyEnabled || copyModeSelect.value!=='signal') return;
-  try {
-    let action = null;
-    const url = signalUrlInput.value.trim();
-    const token = signalTokenInput.value.trim();
-    if(mockSignals && !url){
-      if(Math.random() < 0.12) action = Math.random()<0.5 ? "BUY":"SELL";
-    } else if(url){
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const r = await axios.get(url, { headers, timeout:4000 }).catch(()=>null);
-      if(r && r.data && r.data.action) action = r.data.action.toUpperCase();
-    }
-    if(!action) return;
-    uiLog("📡 Signal received: " + action);
-    const latest = priceData[priceData.length-1] ?? await fetchPriceNow();
-    if(!latest){ uiLog("⚠️ No price - ignoring signal"); return; }
-
-    // UT Bot check
-    const ut = computeUTBot(priceData,1,10);
-    const lastIdx = priceData.length - 1;
-    const utBuy = !!(ut.buySignals[lastIdx] != null);
-    const utSell = !!(ut.sellSignals[lastIdx] != null);
-
-    if(action==="BUY"){
-      const bb = calculateBollingerBands(priceData);
-      const lowerBB = bb.lower[bb.lower.length-1];
-      if(typeof lowerBB==='number' && !lastBuy && latest <= lowerBB && utBuy){
-        uiLog("✅ COPY-BUY approved -> executing");
-        lastBuy = latest; currentPositionAmount = qtyPerTrade / latest; currentCapital -= qtyPerTrade; updateCapitalDisplay();
-        localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
-        sendEmail("COPY BUY executed", `Executed BUY via copy-trade at $${latest.toFixed(4)}`);
-        if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-      } else uiLog("❌ COPY-BUY rejected by indicators or position exists");
-    } else if(action==="SELL"){
-      const bb = calculateBollingerBands(priceData);
-      const upperBB = bb.upper[bb.upper.length-1];
-      if(typeof upperBB==='number' && lastBuy && latest >= upperBB && utSell){
-        uiLog("✅ COPY-SELL approved -> executing");
-        const sellValue = latest * currentPositionAmount;
-        currentCapital += sellValue; updateCapitalDisplay();
-        sendEmail("COPY SELL executed", `Executed SELL via copy-trade at $${latest.toFixed(4)}`);
-        lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
-        if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-      } else uiLog("❌ COPY-SELL rejected by indicators or no position");
-    }
-  } catch(e){ uiLog("⚠️ pollSignal error: " + e.message); }
-}
-
-/* Follow-wallet logic (unchanged) */
-let following=false;
-let followIntervalHandle=null;
-let lastSeenTxHash = null;
-followWalletBtn.addEventListener('click', ()=> startFollowing());
-stopFollowBtn.addEventListener('click', ()=> stopFollowing());
-
-copyModeSelect.addEventListener('change', ()=> {
-  const mode = copyModeSelect.value;
-  document.getElementById('signalSettings').style.display = mode==='signal' ? 'block' : 'none';
-  document.getElementById('walletSettings').style.display = mode==='wallet' ? 'block' : 'none';
-});
-
-async function startFollowing(){
-  if(following) return;
-  const leader = document.getElementById('leaderAddress').value.trim();
-  const bsck = document.getElementById('bscscanKey').value.trim();
-  if(!leader){ uiLog("⚠️ Leader address required"); return; }
-  following = true;
-  followWalletBtn.style.display='none';
-  stopFollowBtn.style.display='inline-block';
-  uiLog("🔎 Start following wallet: " + leader);
-  followIntervalHandle = setInterval(()=> pollLeaderTxs(leader, bsck), 8000);
-  pollLeaderTxs(leader, bsck);
-}
-
-async function stopFollowing(){ if(!following) return; clearInterval(followIntervalHandle); following=false; followWalletBtn.style.display='inline-block'; stopFollowBtn.style.display='none'; uiLog("⛔ Stopped following wallet"); }
-
-async function pollLeaderTxs(leader, bscscanKey){
-  try {
-    let txs = null;
-    if(bscscanKey){
-      const url = `https://api.bscscan.com/api?module=account&action=txlist&address=${leader}&startblock=0&endblock=99999999&page=1&offset=10&sort=desc&apikey=${bscscanKey}`;
-      const res = await axios.get(url, { timeout:5000 });
-      if(res.data && res.data.status==='1' && res.data.result) txs = res.data.result;
-    } else {
-      try { txs = await readProvider.getHistory(leader); } catch(e){ uiLog("⚠️ BscScan key not set and provider.getHistory not supported"); }
-    }
-    if(!txs || txs.length===0) return;
-    for(const t of txs){
-      const txHash = t.hash || t.transactionHash;
-      if(lastSeenTxHash === txHash) break;
-      const to = (t.to || t.toAddress || "").toLowerCase();
-      if(to === PANCAKE_ROUTER.toLowerCase()){
-        uiLog(`📥 Leader executed tx to router: ${txHash}`);
-        try {
-          const rawTx = await readProvider.getTransaction(txHash);
-          if(!rawTx){ uiLog("⚠️ ReadProvider couldn't fetch tx (may not be indexed yet)"); continue; }
-          const iface = new ethers.utils.Interface(routerABI);
-          let parsed = null;
-          try { parsed = iface.parseTransaction({ data: rawTx.data, value: rawTx.value }); } catch(e){ uiLog("⚠️ Could not parse router tx: " + e.message); }
-          if(parsed){
-            let path = parsed.args.path || parsed.args[2] || null;
-            if(path && path.length >= 2){
-              const tokenIn = path[0].toLowerCase();
-              const tokenOut = path[path.length-1].toLowerCase();
-              const scale = parseFloat(followScaleInput.value) || 0.5;
-              const maxExec = parseFloat(maxExecInput.value) || 5;
-              const amountHuman = Math.min(maxExec, maxExec * scale);
-              uiLog(`👉 Leader swap detected: ${tokenIn.substring(0,10)}... -> ${tokenOut.substring(0,10)}... (mirror ${amountHuman} units)`);
-              if(tokenOut === XRP_ADDRESS.toLowerCase()){
-                await swap(USDT_ADDRESS, XRP_ADDRESS, amountHuman);
-                uiLog("✅ Mirrored BUY (wallet follow)");
-              } else if(tokenOut === USDT_ADDRESS.toLowerCase()){
-                await swap(XRP_ADDRESS, USDT_ADDRESS, amountHuman);
-                uiLog("✅ Mirrored SELL (wallet follow)");
-              } else {
-                uiLog("⚠️ Leader swapped tokens not matching USDT/XRP pair - ignored");
-              }
-            } else uiLog("⚠️ Router call found but path not decoded - ignored");
-          }
-        } catch(e){ uiLog("⚠️ Failed process tx: " + e.message); }
-      }
-      lastSeenTxHash = txHash;
-    }
-  } catch(e){ uiLog("⚠️ pollLeaderTxs error: " + (e.message||e)); }
-}
-
-/* manual actions */
-manualBuyBtn.addEventListener('click', async ()=> {
-  uiLog("Manual BUY pressed");
-  const price = priceData[priceData.length-1] ?? await fetchPriceNow();
-  if(!price){ uiLog("⚠️ Price not available"); return; }
-  lastBuy = price; currentPositionAmount = qtyPerTrade / price; currentCapital -= qtyPerTrade; updateCapitalDisplay();
-  localStorage.setItem('capital', currentCapital); localStorage.setItem('lastBuy', lastBuy); localStorage.setItem('positionAmount', currentPositionAmount);
-  sendEmail("MANUAL BUY", `Manual BUY at $${price.toFixed(4)}`);
-  if(signer) await swap(USDT_ADDRESS, XRP_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-});
-manualSellBtn.addEventListener('click', async ()=> {
-  uiLog("Manual SELL pressed");
-  const price = priceData[priceData.length-1] ?? await fetchPriceNow();
-  if(!price){ uiLog("⚠️ Price not available"); return; }
-  const sellValue = price * currentPositionAmount; currentCapital += sellValue; updateCapitalDisplay();
-  lastBuy=null; currentPositionAmount=0; localStorage.setItem('capital', currentCapital); localStorage.removeItem('lastBuy'); localStorage.removeItem('positionAmount');
-  sendEmail("MANUAL SELL", `Manual SELL at $${price.toFixed(4)}`);
-  if(signer) await swap(XRP_ADDRESS, USDT_ADDRESS, Math.min(parseFloat(maxExecInput.value||"5"), 5));
-});
-
-resetBtn.addEventListener('click', ()=>{ localStorage.clear(); currentCapital=1000; lastBuy=null; currentPositionAmount=0; updateCapitalDisplay(); uiLog("🔄 Simulasi reset"); });
-
-/* polling loops & auto-refresh (every 7 minutes) */
-(async ()=> {
-  await fetchInitialData();
-  setInterval(fetchAndEvaluate, 30000); // main evaluation
-  setInterval(pollSignal, 5000); // signal polling
-  // Auto-refresh every 7 minutes (safe single refresh)
-  setTimeout(()=> {
-    uiLog("🔁 Auto-refreshing page (7 minutes elapsed) ...");
-    try { location.reload(); } catch(e) { uiLog("⚠️ Auto-refresh failed: " + e.message); }
-  }, 7 * 60 * 1000);
-})();
-
-/* --- Multi-token balance & USD conversion (unchanged) --- */
-async function fetchPriceBinance(symbol) {
-  try {
-    const res = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=" + symbol, { timeout: 4000 });
-    if (res && res.data && res.data.price) return parseFloat(res.data.price);
-  } catch (e) {}
-  return null;
-}
-async function fetchPriceCoingecko(id) {
-  try {
-    const r = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=" + id + "&vs_currencies=usd", { timeout: 4000 });
-    if (r && r.data && r.data[id] && typeof r.data[id].usd === 'number') return r.data[id].usd;
-  } catch (e) {}
-  return null;
-}
-
-async function getTokenBalanceUSD(tokenAddress, symbol, binanceSymbol, coingeckoId) {
-  try {
-    const token = new ethers.Contract(tokenAddress, tokenAbi, provider);
-    const decimals = await token.decimals();
-    const bal = await token.balanceOf(userAddress);
-    const humanBal = parseFloat(ethers.utils.formatUnits(bal, decimals));
-    let price = null;
-    if (binanceSymbol) price = await fetchPriceBinance(binanceSymbol);
-    if (price === null && coingeckoId) price = await fetchPriceCoingecko(coingeckoId);
-    if (symbol === 'USDT') price = 1.0;
-    const usdValue = (price !== null) ? humanBal * price : 0;
-    uiLog(`${symbol} balance: ${humanBal.toFixed(6)} (~$${usdValue.toFixed(2)})`);
-    return { humanBal, usdValue };
-  } catch (e) {
-    uiLog(`⚠️ Failed read ${symbol} balance: ${e.message}`);
-    return { humanBal: 0, usdValue: 0 };
-  }
-}
-
-async function enhancedRefreshAccountBalances() {
-  if (!provider || !userAddress) { uiLog("⚠️ Wallet not connected"); return; }
-  try {
-    let totalUSD = 0;
+  function loadCfg(){
+    const raw = localStorage.getItem('emailjs_cfg');
+    if (!raw) return;
     try {
-      const bnbWei = await provider.getBalance(userAddress);
-      const bnbBal = parseFloat(ethers.utils.formatEther(bnbWei));
-      let bnbPrice = await fetchPriceBinance('BNBUSDT');
-      if (bnbPrice === null) bnbPrice = await fetchPriceCoingecko('binancecoin');
-      const bnbUSD = (bnbPrice !== null) ? bnbBal * bnbPrice : 0;
-      totalUSD += bnbUSD;
-      bnbBalanceEl.textContent = `${bnbBal.toFixed(6)} BNB`;
-      uiLog(`BNB balance: ${bnbBal.toFixed(6)} BNB (~$${bnbUSD.toFixed(2)})`);
-    } catch (e) {
-      uiLog("⚠️ Failed read BNB balance: " + e.message);
-    }
-
-    const usdt = await getTokenBalanceUSD("0x55d398326f99059fF775485246999027B3197955", "USDT", "USDTBUSD", "tether");
-    totalUSD += usdt.usdValue;
-    const xrp = await getTokenBalanceUSD("0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", "XRP", "XRPUSDT", "ripple");
-    totalUSD += xrp.usdValue;
-    const twt = await getTokenBalanceUSD("0x4B0F1812e5Df2A09796481Ff14017e6005508003", "TWT", "TWTUSDT", "trust-wallet-token");
-    totalUSD += twt.usdValue;
-
-    uiLog(`💰 Total Capital: $${totalUSD.toFixed(2)}`);
-    if (typeof capitalEl !== 'undefined') capitalEl.textContent = `$${totalUSD.toFixed(2)}`;
-  } catch (e) {
-    uiLog("⚠️ enhancedRefreshAccountBalances error: " + e.message);
+      const cfg = JSON.parse(raw);
+      $('userId').value = cfg.userId || '';
+      $('serviceId').value = cfg.serviceId || '';
+      $('templateId').value = cfg.templateId || '';
+      $('toEmail').value = cfg.toEmail || '';
+      $('pair').value = cfg.pair || 'CAKEUSDT';
+      log('Config loaded from localStorage');
+    } catch(e){ log('Load config error: '+e.message); }
   }
-}
+  function clearCfg(){
+    localStorage.removeItem('emailjs_cfg');
+    log('Saved config cleared');
+  }
 
-</script>
+  // EmailJS init & send
+  let emailjsReady = false;
+  function initEmailJS(){
+    const userId = $('userId').value.trim();
+    if (!userId) { log('Init failed: userId empty'); return; }
+    try {
+      emailjs.init(userId);
+      emailjsReady = true;
+      log('EmailJS initialized with userId: ' + userId);
+    } catch (e){
+      log('EmailJS init error: ' + (e.message || e));
+    }
+  }
 
+  /**
+   * sendEmailJS(subject, title, message, overrides)
+   * overrides: { to_email(optional), pair(optional), extraParams(optional object) }
+   */
+  async function sendEmailJS(subject, title, message, overrides = {}) {
+    try {
+      if (!emailjsReady) {
+        log('EmailJS not initialized — calling initEmailJS() automatically if userId provided');
+        initEmailJS();
+        if (!emailjsReady) throw new Error('EmailJS not initialized');
+      }
+      const serviceId = $('serviceId').value.trim();
+      const templateId = $('templateId').value.trim();
+      if (!serviceId || !templateId) throw new Error('serviceId/templateId missing');
 
+      const toEmail = overrides.to_email || $('toEmail').value.trim() || '';
+      const pair = overrides.pair || $('pair').value.trim() || '';
+
+      // template parameters: adjust to what your EmailJS template expects
+      const templateParams = {
+        subject: subject,
+        title: title,
+        message: message,
+        pair: pair,
+        time: new Date().toLocaleString(),
+        to_email: toEmail
+      };
+
+      // merge extras
+      if (overrides.extraParams && typeof overrides.extraParams === 'object') {
+        Object.assign(templateParams, overrides.extraParams);
+      }
+
+      log(`Sending email -> service:${serviceId} template:${templateId} subject:${subject}`);
+      const resp = await emailjs.send(serviceId, templateId, templateParams);
+      log('Email sent (OK). Response status: ' + (resp.status || 'unknown'));
+      return resp;
+    } catch (err) {
+      log('Email send failed: ' + (err.text || err.message || err));
+      throw err;
+    }
+  }
+
+  // Expose a global function onSignal so you can call it from your trading script:
+  // window.onSignal('buy'|'sell', { price, estAmount, txHash })
+  window.onSignal = async function(signal, meta = {}) {
+    try {
+      const price = meta.price ?? '—';
+      const est = meta.est ?? '-';
+      const tx = meta.tx ?? '-';
+      const subject = signal === 'buy' ? 'SIGNAL BUY' : 'SIGNAL SELL';
+      const title = `${signal.toUpperCase()} ${$('pair').value || ''} @ ${price}`;
+      const message = `Signal: ${signal.toUpperCase()}\nPair: ${$('pair').value || ''}\nPrice: ${price}\nEstimate: ${est}\nTX: ${tx}\nExtra: ${$('customMsg').value || ''}`;
+      log(`Signal received: ${signal.toUpperCase()} — sending email...`);
+      await sendEmailJS(subject, title, message, { to_email: $('toEmail').value.trim() || undefined, pair: $('pair').value.trim() });
+      log('Notification email sent for ' + signal.toUpperCase());
+    } catch (e){
+      log('onSignal error: ' + (e.message || e));
+    }
+  };
+
+  // demo auto-sim (trigger random buy/sell every 10s when enabled)
+  let autoTimer = null;
+  function toggleAutoSim(){
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      $('btnAutoOn').textContent = 'Toggle Auto Sim (every 10s)';
+      log('Auto sim stopped');
+      return;
+    }
+    autoTimer = setInterval(()=> {
+      // random pick buy or sell
+      const s = Math.random() > 0.5 ? 'buy' : 'sell';
+      const p = (Math.random() * 0.6 + 2.0).toFixed(3); // random price demo
+      window.onSignal(s, { price: p, est: 'demo', tx: '-' });
+    }, 10000);
+    $('btnAutoOn').textContent = 'Stop Auto Sim';
+    log('Auto sim started (every 10s)');
+  }
+
+  // wiring UI
+  $('btnInit').addEventListener('click', initEmailJS);
+  $('btnSave').addEventListener('click', saveCfg);
+  $('btnClear').addEventListener('click', ()=>{ clearCfg(); loadCfg(); });
+  $('btnSimBuy').addEventListener('click', ()=> window.onSignal('buy', { price: (Math.random()*0.6+2.0).toFixed(3), est: 'demo' }));
+  $('btnSimSell').addEventListener('click', ()=> window.onSignal('sell', { price: (Math.random()*0.6+2.0).toFixed(3), est: 'demo' }));
+  $('btnAutoOn').addEventListener('click', toggleAutoSim);
+
+  // load saved config if any
+  loadCfg();
+
+  // expose sendEmailJS for manual tests
+  window.sendEmailJS = sendEmailJS;
+
+  log('EmailJS notifier ready. Fill IDs & click Init.');
+})();
 </script>
 </body>
 </html>
