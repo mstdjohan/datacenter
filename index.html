@@ -1,168 +1,62 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Promo NIDI & SLO Jawa Timur</title>
+    document.getElementById("market").innerHTML =
+      `<span class="blue">${data.market}</span>`;
 
-<style>
-body{
-  margin:0;
-  font-family: Arial, Helvetica, sans-serif;
-  background:#f5f7fa;
-  color:#222;
+  }catch(e){
+    document.getElementById("signal").innerHTML = "ERROR";
+  }
 }
-header{
-  background:#0d6efd;
-  color:#fff;
-  padding:20px;
-  text-align:center;
-}
-header h1{
-  margin:0;
-  font-size:22px;
-}
-header p{
-  margin:6px 0;
-  font-size:14px;
-}
-.hotline{
-  margin-top:10px;
-  background:#ffc107;
-  color:#000;
-  padding:8px 12px;
-  border-radius:8px;
-  display:inline-block;
-  font-weight:bold;
-}
-.hotline a{
-  color:#000;
-  text-decoration:none;
-}
-.container{
-  padding:15px;
-  max-width:1100px;
-  margin:auto;
-}
-.badge{
-  background:#dc3545;
-  color:#fff;
-  padding:6px 10px;
-  display:inline-block;
-  border-radius:6px;
-  font-weight:bold;
-  margin-bottom:12px;
-}
-.table-wrapper{
-  overflow-x:auto;
-  background:#fff;
-  border-radius:10px;
-  box-shadow:0 4px 10px rgba(0,0,0,.08);
-}
-table{
-  border-collapse:collapse;
-  width:100%;
-  min-width:650px;
-}
-th,td{
-  padding:10px;
-  border-bottom:1px solid #ddd;
-  text-align:center;
-  font-size:14px;
-}
-th{
-  background:#0d6efd;
-  color:#fff;
-}
-tr:hover{
-  background:#f1f5ff;
-}
-.highlight{
-  color:#d63384;
-  font-weight:bold;
-}
-.cta{
-  background:#198754;
-  color:#fff;
-  text-align:center;
-  padding:18px;
-  border-radius:12px;
-  margin-top:25px;
-}
-.cta a{
-  color:#fff;
-  text-decoration:none;
-  font-weight:bold;
-  font-size:16px;
-}
-footer{
-  text-align:center;
-  font-size:13px;
-  color:#555;
-  padding:20px;
-}
-</style>
-</head>
 
-<body>
+// ================= STATS =================
+async function loadStats(){
+  try{
+    let res = await fetch("/stats");
+    let data = await res.json();
 
-<header>
-  <h1>Promo NIDI & SLO Jawa Timur</h1>
-  <p>NIDI Diskon 50% • Legal • Proses Cepat</p>
+    document.getElementById("stats").innerHTML =
+      `TRADES: ${data.trades}<br>
+       WINS: ${data.wins}<br>
+       LOSSES: ${data.losses}<br>
+       WINRATE: ${data.winrate}%<br>
+       PROFIT: ${data.profit}`;
+  }catch(e){
+    document.getElementById("stats").innerHTML = "ERROR";
+  }
+}
 
-  <!-- HOTLINE PROMO -->
-  <div class="hotline">
-    📞 Hotline Promo:
-    <a href="https://wa.me/6281351531040?text=Halo%20Admin,%20saya%20ingin%20promo%20NIDI%20dan%20SLO%20Jawa%20Timur" target="_blank">
-      0813-5153-1040
-    </a>
-  </div>
-</header>
+// ================= BOT CONTROL =================
+function startBot(){
+  fetch("/start_bot")
+    .then(res=>res.json())
+    .then(()=>{
+      document.getElementById("botStatus").innerHTML = "ON";
+      document.getElementById("botStatus").className = "green";
+    });
+}
 
-<div class="container">
+function stopBot(){
+  fetch("/stop_bot")
+    .then(res=>res.json())
+    .then(()=>{
+      document.getElementById("botStatus").innerHTML = "OFF";
+      document.getElementById("botStatus").className = "red";
+    });
+}
 
-  <div class="badge">🔥 PROMO KHUSUS JAWA TIMUR</div>
+// ================= AUTO REFRESH =================
+setInterval(()=>{
+  loadBalance();
+  loadPrice();
+  loadSignal();
+  loadStats();
+}, 3000);
 
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>Daya (VA)</th>
-          <th>NIDI (Diskon 50%)</th>
-          <th>SLO</th>
-          <th>Total Biaya</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td>450</td><td>Rp55.000</td><td>Rp40.000</td><td class="highlight">Rp95.000</td></tr>
-        <tr><td>900</td><td>Rp70.000</td><td>Rp60.000</td><td class="highlight">Rp130.000</td></tr>
-        <tr><td>1300</td><td>Rp72.500</td><td>Rp95.000</td><td class="highlight">Rp167.500</td></tr>
-        <tr><td>2200</td><td>Rp75.000</td><td>Rp110.000</td><td class="highlight">Rp185.000</td></tr>
-        <tr><td>3500</td><td>Rp82.500</td><td>Rp105.000</td><td class="highlight">Rp187.500</td></tr>
-        <tr><td>4400</td><td>Rp84.000</td><td>Rp132.000</td><td class="highlight">Rp216.000</td></tr>
-        <tr><td>5500</td><td>Rp90.000</td><td>Rp165.000</td><td class="highlight">Rp255.000</td></tr>
-        <tr><td>6600</td><td>Rp105.000</td><td>Rp198.000</td><td class="highlight">Rp303.000</td></tr>
-        <tr><td>7700</td><td>Rp120.000</td><td>Rp231.000</td><td class="highlight">Rp351.000</td></tr>
-        <tr><td>10600</td><td>Rp155.000</td><td>Rp265.000</td><td class="highlight">Rp420.000</td></tr>
-        <tr><td>13200</td><td>Rp180.000</td><td>Rp330.000</td><td class="highlight">Rp510.000</td></tr>
-        <tr><td>16500</td><td>Rp220.000</td><td>Rp412.500</td><td class="highlight">Rp632.500</td></tr>
-      </tbody>
-    </table>
-  </div>
+// INIT
+loadBalance();
+loadPrice();
+loadSignal();
+loadStats();
 
-  <!-- CTA BAWAH -->
-  <div class="cta">
-    <p>💬 Konsultasi & Pemesanan</p>
-    <a href="https://wa.me/6281351531040?text=Halo%20Admin,%20saya%20ingin%20pesan%20NIDI%20dan%20SLO%20Jawa%20Timur" target="_blank">
-      Klik WhatsApp Sekarang
-    </a>
-  </div>
-
-</div>
-
-<footer>
-  © 2026 • Promo NIDI & SLO Jawa Timur • Harga dapat berubah sewaktu-waktu
-</footer>
+</script>
 
 </body>
 </html>
